@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestNewIngitdbGithubClient(t *testing.T) {
+func TestNewClient(t *testing.T) {
 	client := NewClient("owner/repo", "token")
 
 	if client.owner != "owner" {
