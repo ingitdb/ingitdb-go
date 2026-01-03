@@ -26,6 +26,9 @@ func TestReadDefinition(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			currentDir, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("failed to get current dir: %s", err)
+			}
 			dbDirPath := filepath.Join(currentDir, tt.dir)
 			def, err := ReadDefinition(dbDirPath, Validate())
 			if err == nil && tt.err != "" {
