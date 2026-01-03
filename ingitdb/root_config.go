@@ -37,7 +37,13 @@ func (rc *RootConfig) Validate() error {
 	return nil
 }
 
-func ReadRootConfigFromFile(dirPath string) (rootConfig *RootConfig, err error) {
+func ReadRootConfigFromFile(dirPath string) (rootConfig RootConfig, err error) {
+	defer func() {
+		r := recover()
+		if r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
 	if dirPath == "" {
 		dirPath = "."
 	}
@@ -45,11 +51,17 @@ func ReadRootConfigFromFile(dirPath string) (rootConfig *RootConfig, err error) 
 
 	var file *os.File
 	if file, err = os.OpenFile(filePath, os.O_RDONLY, 0666); err != nil {
-		return nil, fmt.Errorf("failed to open root config file: %w", err)
+		err = fmt.Errorf("failed to open root config file: %w", err)
+		return
 	}
 
-	if err = yaml.NewDecoder(file).Decode(RootConfig{}); err != nil {
-		return nil, fmt.Errorf("failed to parse root config: %w", err)
+	decoder := yaml.NewDecoder(file)
+	decoder.KnownFields(true)
+
+	if err = decoder.Decode(&rootConfig); err != nil {
+		err = fmt.Errorf("failed to parse root config file: %w\nNote: Expected keys in .ingitdb.yaml include 'rootCollections'", err)
+		return
 	}
-	return nil, nil
+
+	return
 }
