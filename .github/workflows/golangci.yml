@@ -9,8 +9,8 @@ on:
       - '**/*.go'
       - 'src/**'
       - '.github/workflows/*.yml'
-    tags:
-      - 'v[0-9]+\.[0-9]+\.[0-9]+' # Push events to matching v*, i.e. v20.15.10
+#    tags:
+#      - 'v[0-9]+\.[0-9]+\.[0-9]+' # Push events to matching v*, i.e. v20.15.10
   pull_request:
     branches:
       - '**'
