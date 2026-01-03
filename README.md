@@ -1,2 +1,5 @@
 # ingitdb-go
-Go client for IngitDB
+
+Go code for [inGitDB](https://github.com/ingitdb).
+
+<img src="https://github.com/ingitdb/.github/raw/main/inGitDB-full.png" alt="inGitDB Logo" />
