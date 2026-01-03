@@ -38,4 +38,4 @@ jobs:
         run: go build .
 
       - name: Run validation
-        run: ./ingitdb test-ingitdb
+        run: go run . test-ingitdb
