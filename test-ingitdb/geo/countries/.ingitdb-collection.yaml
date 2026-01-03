@@ -1,0 +1,21 @@
+titles:
+  en: Countries
+  ru: Страны
+  es: Países
+  fr: Pays
+  de: Länder
+record_format: json
+columns:
+  names:
+    type: map[string]string
+    required: true
+    valueTitle: Name
+  population:
+    type: int
+    title: Population
+  area:
+    type: int
+    title: Area (km²)
+  capital:
+    type: string
+    required: true

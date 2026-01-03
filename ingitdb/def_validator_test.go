@@ -1,12 +1,45 @@
 package ingitdb
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
-func TestValidate(t *testing.T) {
-	t.Run("fail_if_no_root_config_file", func(t *testing.T) {
-		_, err := ReadDefinition(".")
-		if err == nil {
-			t.Fatal("expected error, got none")
-		}
-	})
+func TestReadDefinition(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		dir  string
+		err  string
+	}{
+		{
+			name: "missing_root_config_file",
+			dir:  ".",
+			err:  "failed to read root config file .ingitdb.yaml",
+		},
+		{
+			name: "test-ingitdb",
+			dir:  "../test-ingitdb",
+			err:  "",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			currentDir, err := os.Getwd()
+			dbDirPath := filepath.Join(currentDir, tt.dir)
+			def, err := ReadDefinition(dbDirPath, Validate())
+			if err == nil && tt.err != "" {
+				t.Fatal("got no error, expected: " + tt.err)
+			}
+			if tt.err == "" && err != nil {
+				t.Fatal("expected no error, got: " + err.Error())
+			}
+			if tt.err != "" && err != nil && !strings.Contains(err.Error(), tt.err) {
+				t.Fatalf("expected error to contain '%s', got '%s'", tt.err, err)
+			}
+			if tt.err == "" && def == nil {
+				t.Fatalf("expected definition to be non-nil")
+			}
+		})
+	}
 }

@@ -7,8 +7,8 @@ const collectionDefFileName = ".ingitdb-collection.yaml"
 type CollectionDef struct {
 	ID           string                `json:"-"`
 	Titles       map[string]string     `yaml:"titles,omitempty"`
-	RecordFormat string                `yaml:"record_format,omitempty"`
-	RecordsDir   string                `yaml:"records_dir,omitempty"`
+	DataFormat   string                `yaml:"data_format,omitempty"`
+	DataDir      string                `yaml:"data_dir,omitempty"`
 	Columns      map[string]*ColumnDef `yaml:"columns"`
 	ColumnsOrder []string              `yaml:"columns_order,omitempty"`
 }
@@ -20,6 +20,16 @@ func (v *CollectionDef) Validate() error {
 	for id, col := range v.Columns {
 		if err := col.Validate(); err != nil {
 			return fmt.Errorf("invalid column '%s': %w", id, err)
+		}
+	}
+	for i, colName := range v.ColumnsOrder {
+		if _, ok := v.Columns[colName]; !ok {
+			return fmt.Errorf("columns_order[%d] references unspecified column: %s", i, colName)
+		}
+		for j, prevCol := range v.ColumnsOrder[:i] {
+			if prevCol == colName {
+				return fmt.Errorf("duplicate value in columns_order at indexes %d and %d: %s", j, i, colName)
+			}
 		}
 	}
 	return nil

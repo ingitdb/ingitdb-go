@@ -1,0 +1,28 @@
+titles:
+  en: Tasks
+  ru: Задачи
+recordsDir: $records
+columns:
+  title:
+    type: string
+    titles:
+      en: Task
+      ru: Задача
+      es: Tarea
+      fr: Tâche
+      de: Aufgabe
+    required: true
+    max_length: 100
+  status:
+    type: string
+    required: true
+    titles:
+      en: Status
+      ru: Статус
+      es: Estado
+      fr: Statut
+      de: Status
+    fk: statuses
+columnsOrder:
+  - title
+  - status

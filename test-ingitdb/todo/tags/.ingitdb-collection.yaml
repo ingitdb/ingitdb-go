@@ -1,0 +1,9 @@
+titles:
+  en: Tags
+  ru: Таги
+record_format: json
+records_dir: $records
+columns:
+  titles:
+    type: map[i18n]string
+    required: true
