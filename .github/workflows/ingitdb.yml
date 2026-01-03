@@ -37,5 +37,5 @@ jobs:
       - name: Go Build
         run: go build .
 
-      - name: Run validation
+      - name: inGitDB validation
         run: go run . test-ingitdb
