@@ -1,0 +1,52 @@
+version: 2
+
+project_name: ingitdb
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: ingitdb-unix
+    main: .
+    binary: ingitdb
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+  - id: ingitdb-windows
+    main: .
+    binary: ingitdb
+    env: [CGO_ENABLED=0]
+    goos: [windows]
+    goarch: [amd64]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - id: tarball
+    formats: [ tar.gz ]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    ids: [ingitdb-unix]
+    files:
+      - README.md
+      - LICENSE*
+
+  - id: zip
+    formats: [ zip ]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    ids: [ingitdb-windows]
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: ingitdb
+    name: ingitdb-go
