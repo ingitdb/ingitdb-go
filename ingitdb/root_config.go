@@ -3,6 +3,7 @@ package ingitdb
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -37,7 +38,7 @@ func (rc *RootConfig) Validate() error {
 	return nil
 }
 
-func ReadRootConfigFromFile(dirPath string) (rootConfig RootConfig, err error) {
+func readRootConfigFromFile(dirPath string, o ReadOptions) (rootConfig RootConfig, err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -63,5 +64,11 @@ func ReadRootConfigFromFile(dirPath string) (rootConfig RootConfig, err error) {
 		return
 	}
 
+	if o.validate {
+		if err = rootConfig.Validate(); err != nil {
+			return rootConfig, fmt.Errorf("content of root config is not valid: %w", err)
+		}
+		log.Println(".ingitdb.yaml is valid")
+	}
 	return
 }

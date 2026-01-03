@@ -14,7 +14,7 @@ func main() {
 	dirPath := expandHome(os.Args[1])
 	log.Println("inGitDB db path: ", dirPath)
 
-	err := ingitdb.Validate(dirPath)
+	_, err := ingitdb.ReadDefinition(dirPath, ingitdb.Validate())
 	if err != nil {
 		log.Fatal(fmt.Errorf("inGitDB database validation failed: %w", err))
 	}

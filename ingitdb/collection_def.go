@@ -7,14 +7,14 @@ const collectionDefFileName = ".ingitdb-collection.yaml"
 type CollectionDef struct {
 	ID           string                `json:"-"`
 	Titles       map[string]string     `yaml:"titles,omitempty"`
-	RecordFormat string                `yaml:"recordFormat,omitempty"`
+	RecordFormat string                `yaml:"record_format,omitempty"`
 	RecordsDir   string                `yaml:"records_dir,omitempty"`
 	Columns      map[string]*ColumnDef `yaml:"columns"`
 	ColumnsOrder []string              `yaml:"columns_order,omitempty"`
 }
 
 func (v *CollectionDef) Validate() error {
-	if v.Columns == nil || len(v.Columns) == 0 {
+	if len(v.Columns) == 0 {
 		return fmt.Errorf("missing 'columns' in collection definition")
 	}
 	for id, col := range v.Columns {

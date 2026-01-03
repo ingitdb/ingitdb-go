@@ -11,79 +11,65 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func Validate(rootPath string) error {
-	rootConfig, err := validateRootConfig(rootPath)
-	if err != nil {
-		return fmt.Errorf("failed to validate root config file %s: %v", RootConfigFileName, err)
-	}
-	return validateRootCollections(rootPath, rootConfig)
+type ReadOptions struct {
+	validate bool
 }
 
-func validateRootConfig(dir string) (rootConfig RootConfig, err error) {
-	rootConfig, err = ReadRootConfigFromFile(dir)
-	if err != nil {
-		return rootConfig, fmt.Errorf("failed to read root config file %s: %v", RootConfigFileName, err)
+type ReadOption func(*ReadOptions)
+
+func Validate() func(*ReadOptions) {
+	return func(o *ReadOptions) {
+		o.validate = true
 	}
-	if err = rootConfig.Validate(); err != nil {
-		return rootConfig, fmt.Errorf("content of root config is not valid: %w", err)
+}
+
+func readOptions(o ...ReadOption) (opts ReadOptions) {
+	for _, opt := range o {
+		opt(&opts)
 	}
-	log.Println("/.ingitdb.yaml is valid")
 	return
 }
 
-func validateRootCollections(rootPath string, rootConfig RootConfig) (err error) {
-	var def Definition
+func ReadDefinition(rootPath string, o ...ReadOption) (def *Definition, err error) {
+	opts := readOptions(o...)
+	var rootConfig RootConfig
+	rootConfig, err = readRootConfigFromFile(rootPath, opts)
+	if err != nil {
+		err = fmt.Errorf("failed to read root config file %s: %v", RootConfigFileName, err)
+		return
+	}
+	return readRootCollections(rootPath, rootConfig, opts)
+}
+
+func readRootCollections(rootPath string, rootConfig RootConfig, o ReadOptions) (def *Definition, err error) {
+	def = new(Definition)
 	def.Collections = make(map[string]*CollectionDef)
 	for id, colPath := range rootConfig.RootCollections {
 		if strings.HasSuffix(colPath, "*") {
-			if err = validateCollectionDefs(rootPath, colPath, id, &def); err != nil {
-				return fmt.Errorf("failed to validate root collection def ID=%s: %w", id, err)
+			_, err = readCollectionDefs(def, rootPath, colPath, id, o)
+			if err != nil {
+				err = fmt.Errorf("failed to validate root collections def (%s @ %s): %w", id, colPath, err)
+				return
 			}
-			log.Printf("Definition of root collection '%s' is valid - %s", id, colPath)
+			//log.Printf("Definition of root collections is valid (%s @ %s)", id, colPath)
 		} else {
 			var colDef *CollectionDef
 			// For single collection, colPath is the colPath to the directory containing the collection directory
 			// or the colPath is the directory itself?
 			// In readCollectionDef: filepath.Join(colPath, id, collectionDefFileName)
 			// So if id="countries" and colPath="geo", it looks for geo/countries/.ingitdb-collection.yaml
-			if colDef, err = validateCollectionDef(rootPath, colPath, id); err != nil {
-				return fmt.Errorf("failed to validate root collection def ID=%s: %w", id, err)
+			if colDef, err = readCollectionDef(rootPath, colPath, id, o); err != nil {
+				err = fmt.Errorf("failed to validate root collection def ID=%s: %w", id, err)
+				return
 			}
 			def.Collections[id] = colDef
-			log.Printf("Definition of root collections '%s' is valid - %s", id, colPath)
+			//log.Printf("Definition of root collections '%s' is valid - %s", id, colPath)
 		}
 	}
 	return
 }
 
-func validateCollectionDef(rootPath, relPath, id string) (colDef *CollectionDef, err error) {
-	if colDef, err = readCollectionDef(rootPath, relPath, id); err != nil {
-		err = fmt.Errorf("failed to read definition of collection '%s': %w", id, err)
-		return
-	}
-	if err = colDef.Validate(); err != nil {
-		err = fmt.Errorf("not valid definition of collection '%s': %w", id, err)
-		return
-	}
-	return
-}
-
-func validateCollectionDefs(rootPath, path, id string, def *Definition) error {
-	colDefs, err := readCollectionDefs(rootPath, path)
-	if err != nil {
-		return fmt.Errorf("failed to read collection definitions for '%s' at %s: %w", id, path, err)
-	}
-	for _, colDef := range colDefs {
-		if err = colDef.Validate(); err != nil {
-			return fmt.Errorf("failed to validate collection definition for '%s' at %s: %w", colDef.ID, path, err)
-		}
-		def.Collections[colDef.ID] = colDef
-		log.Println(fmt.Sprintf("Definition of collections '%s' is valid", colDef.ID))
-	}
-	return nil
-}
-
-func readCollectionDef(rootPath, relPath, id string) (colDef *CollectionDef, err error) {
+func readCollectionDef(rootPath, relPath, id string, o ReadOptions) (colDef *CollectionDef, err error) {
 	colDefFilePath := filepath.Join(rootPath, relPath, collectionDefFileName)
 	var fileContent []byte
 	fileContent, err = os.ReadFile(colDefFilePath)
@@ -98,10 +84,18 @@ func readCollectionDef(rootPath, relPath, id string) (colDef *CollectionDef, err
 		return nil, fmt.Errorf("failed to parse YAML file %s: %w", colDefFilePath, err)
 	}
 	colDef.ID = id
+
+	if o.validate {
+		if err = colDef.Validate(); err != nil {
+			err = fmt.Errorf("not valid definition of collection '%s': %w", id, err)
+			return
+		}
+		log.Printf("Definition of collection '%s' is valid", colDef.ID)
+	}
 	return
 }
 
-func readCollectionDefs(rootPath, relPath string) (colDefs []*CollectionDef, err error) {
+func readCollectionDefs(def *Definition, rootPath, relPath, idPrefix string, o ReadOptions) (colDefs []*CollectionDef, err error) {
 	relPath = strings.TrimSuffix(relPath, "*")
 	dirPath := filepath.Join(rootPath, relPath)
 	var entries []os.DirEntry
@@ -114,15 +108,23 @@ func readCollectionDefs(rootPath, relPath string) (colDefs []*CollectionDef, err
 			continue
 		}
 		var colDef *CollectionDef
-		colID := entry.Name()
-		colRelPath := filepath.Join(relPath, colID)
-		if colDef, err = readCollectionDef(rootPath, colRelPath, colID); err != nil {
+		localID := entry.Name()
+		var globalID string
+		if strings.HasSuffix(idPrefix, ".") {
+			globalID = idPrefix + entry.Name()
+		} else {
+			globalID = idPrefix + "." + entry.Name()
+		}
+		colRelPath := filepath.Join(relPath, localID)
+		if colDef, err = readCollectionDef(rootPath, colRelPath, globalID, o); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
+			err = fmt.Errorf("failed to read collection def '%s': %w", localID, err)
 			return
 		}
 		colDefs = append(colDefs, colDef)
+		def.Collections[globalID] = colDef
 	}
 	return
 }
