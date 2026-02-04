@@ -10,7 +10,7 @@ import (
 var _ dal.ReadTransaction = (*readonlyTx)(nil)
 
 type readonlyTx struct {
-	db database
+	db localDB
 }
 
 func (r readonlyTx) Options() dal.TransactionOptions {
