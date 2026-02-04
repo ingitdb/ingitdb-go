@@ -7,7 +7,7 @@ const CollectionDefFileName = ".ingitdb-collection.yaml"
 type CollectionDef struct {
 	ID           string                `json:"-"`
 	Titles       map[string]string     `yaml:"titles,omitempty"`
-	DataFormat   string                `yaml:"data_format,omitempty"`
+	RecordFile   *RecordFileDef        `yaml:"record_file"`
 	DataDir      string                `yaml:"data_dir,omitempty"`
 	Columns      map[string]*ColumnDef `yaml:"columns"`
 	ColumnsOrder []string              `yaml:"columns_order,omitempty"`
@@ -32,29 +32,11 @@ func (v *CollectionDef) Validate() error {
 			}
 		}
 	}
-	return nil
-}
-
-type ColumnDef struct {
-	Type       string            `yaml:"type"`
-	Title      string            `yaml:"title,omitempty"`
-	Titles     map[string]string `yaml:"titles,omitempty"`
-	ValueTitle string            `yaml:"valueTitle,omitempty"`
-	Required   bool              `yaml:"required,omitempty"`
-	Length     int               `yaml:"length,omitempty"`
-	MinLength  int               `yaml:"min_length,omitempty"`
-	MaxLength  int               `yaml:"max_length,omitempty"`
-	ForeignKey string            `yaml:"foreign_key,omitempty"`
-}
-
-func (v *ColumnDef) Validate() error {
-	if v.Type == "" {
-		return fmt.Errorf("missing 'type' in column definition")
+	if v.RecordFile == nil {
+		return fmt.Errorf("missing 'record_file' in collection definition")
+	}
+	if err := v.RecordFile.Validate(); err != nil {
+		return fmt.Errorf("invalid record_file definition: %w", err)
 	}
 	return nil
-}
-
-type ColumnDefWithID struct {
-	ID string `yaml:"id"`
-	ColumnDef
 }

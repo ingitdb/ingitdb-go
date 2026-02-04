@@ -1,7 +1,10 @@
 titles:
   en: Tasks
   ru: Задачи
-recordsDir: $records
+record_file:
+  format: json
+  name: "{key}.json"
+data_dir: $records
 columns:
   title:
     type: string
@@ -22,7 +25,7 @@ columns:
       es: Estado
       fr: Statut
       de: Status
-    fk: statuses
-columnsOrder:
+    foreign_key: statuses
+columns_order:
   - title
   - status

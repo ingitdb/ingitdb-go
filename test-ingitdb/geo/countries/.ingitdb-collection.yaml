@@ -4,10 +4,12 @@ titles:
   es: Países
   fr: Pays
   de: Länder
-record_format: json
+record_file:
+  format: json
+  name: "{key}.json"
 columns:
   names:
-    type: map[string]string
+    type: map[locale]string
     required: true
     valueTitle: Name
   population:
