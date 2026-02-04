@@ -1,4 +1,4 @@
-package ingitdb
+package validator
 
 import (
 	"errors"
@@ -8,42 +8,25 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ingitdb/ingitdb-go/ingitdb"
+	"github.com/ingitdb/ingitdb-go/ingitdb/config"
 	"gopkg.in/yaml.v3"
 )
 
-type ReadOptions struct {
-	validate bool
-}
-
-type ReadOption func(*ReadOptions)
-
-func Validate() func(*ReadOptions) {
-	return func(o *ReadOptions) {
-		o.validate = true
-	}
-}
-
-func readOptions(o ...ReadOption) (opts ReadOptions) {
-	for _, opt := range o {
-		opt(&opts)
-	}
-	return
-}
-
-func ReadDefinition(rootPath string, o ...ReadOption) (def *Definition, err error) {
-	opts := readOptions(o...)
-	var rootConfig RootConfig
-	rootConfig, err = readRootConfigFromFile(rootPath, opts)
+func ReadDefinition(rootPath string, o ...ingitdb.ReadOption) (def *ingitdb.Definition, err error) {
+	opts := ingitdb.NewReadOptions(o...)
+	var rootConfig config.RootConfig
+	rootConfig, err = config.ReadRootConfigFromFile(rootPath, opts)
 	if err != nil {
-		err = fmt.Errorf("failed to read root config file %s: %v", RootConfigFileName, err)
+		err = fmt.Errorf("failed to read root config file %s: %v", config.RootConfigFileName, err)
 		return
 	}
 	return readRootCollections(rootPath, rootConfig, opts)
 }
 
-func readRootCollections(rootPath string, rootConfig RootConfig, o ReadOptions) (def *Definition, err error) {
-	def = new(Definition)
-	def.Collections = make(map[string]*CollectionDef)
+func readRootCollections(rootPath string, rootConfig config.RootConfig, o ingitdb.ReadOptions) (def *ingitdb.Definition, err error) {
+	def = new(ingitdb.Definition)
+	def.Collections = make(map[string]*ingitdb.CollectionDef)
 	for id, colPath := range rootConfig.RootCollections {
 		if strings.HasSuffix(colPath, "*") {
 			_, err = readCollectionDefs(def, rootPath, colPath, id, o)
@@ -53,7 +36,7 @@ func readRootCollections(rootPath string, rootConfig RootConfig, o ReadOptions) 
 			}
 			//log.Printf("Definition of root collections is valid (%s @ %s)", id, colPath)
 		} else {
-			var colDef *CollectionDef
+			var colDef *ingitdb.CollectionDef
 			// For single collection, colPath is the colPath to the directory containing the collection directory
 			// or the colPath is the directory itself?
 			// In readCollectionDef: filepath.Join(colPath, id, collectionDefFileName)
@@ -69,15 +52,15 @@ func readRootCollections(rootPath string, rootConfig RootConfig, o ReadOptions) 
 	return
 }
 
-func readCollectionDef(rootPath, relPath, id string, o ReadOptions) (colDef *CollectionDef, err error) {
-	colDefFilePath := filepath.Join(rootPath, relPath, collectionDefFileName)
+func readCollectionDef(rootPath, relPath, id string, o ingitdb.ReadOptions) (colDef *ingitdb.CollectionDef, err error) {
+	colDefFilePath := filepath.Join(rootPath, relPath, ingitdb.CollectionDefFileName)
 	var fileContent []byte
 	fileContent, err = os.ReadFile(colDefFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", colDefFilePath, err)
 	}
 	//log.Println(string(fileContent))
-	colDef = new(CollectionDef)
+	colDef = new(ingitdb.CollectionDef)
 
 	err = yaml.Unmarshal(fileContent, colDef)
 	if err != nil {
@@ -85,7 +68,7 @@ func readCollectionDef(rootPath, relPath, id string, o ReadOptions) (colDef *Col
 	}
 	colDef.ID = id
 
-	if o.validate {
+	if o.IsValidationRequired() {
 		if err = colDef.Validate(); err != nil {
 			err = fmt.Errorf("not valid definition of collection '%s': %w", id, err)
 			return
@@ -95,7 +78,7 @@ func readCollectionDef(rootPath, relPath, id string, o ReadOptions) (colDef *Col
 	return
 }
 
-func readCollectionDefs(def *Definition, rootPath, relPath, idPrefix string, o ReadOptions) (colDefs []*CollectionDef, err error) {
+func readCollectionDefs(def *ingitdb.Definition, rootPath, relPath, idPrefix string, o ingitdb.ReadOptions) (colDefs []*ingitdb.CollectionDef, err error) {
 	relPath = strings.TrimSuffix(relPath, "*")
 	dirPath := filepath.Join(rootPath, relPath)
 	var entries []os.DirEntry
@@ -107,7 +90,7 @@ func readCollectionDefs(def *Definition, rootPath, relPath, idPrefix string, o R
 		if !entry.IsDir() {
 			continue
 		}
-		var colDef *CollectionDef
+		var colDef *ingitdb.CollectionDef
 		localID := entry.Name()
 		var globalID string
 		if strings.HasSuffix(idPrefix, ".") {

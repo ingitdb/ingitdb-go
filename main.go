@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ingitdb/ingitdb-go/ingitdb"
+	"github.com/ingitdb/ingitdb-go/ingitdb/validator"
 )
 
 var (
@@ -26,7 +27,7 @@ func main() {
 	dirPath := expandHome(os.Args[1])
 	log.Println("inGitDB db path: ", dirPath)
 
-	_, err := ingitdb.ReadDefinition(dirPath, ingitdb.Validate())
+	_, err := validator.ReadDefinition(dirPath, ingitdb.Validate())
 	if err != nil {
 		log.Fatal(fmt.Errorf("inGitDB database validation failed: %w", err))
 	}

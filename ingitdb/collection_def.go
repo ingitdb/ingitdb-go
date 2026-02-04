@@ -2,7 +2,7 @@ package ingitdb
 
 import "fmt"
 
-const collectionDefFileName = ".ingitdb-collection.yaml"
+const CollectionDefFileName = ".ingitdb-collection.yaml"
 
 type CollectionDef struct {
 	ID           string                `json:"-"`

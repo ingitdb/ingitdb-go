@@ -1,4 +1,4 @@
-package ingitdb
+package config
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ingitdb/ingitdb-go/ingitdb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,7 +39,7 @@ func (rc *RootConfig) Validate() error {
 	return nil
 }
 
-func readRootConfigFromFile(dirPath string, o ReadOptions) (rootConfig RootConfig, err error) {
+func ReadRootConfigFromFile(dirPath string, o ingitdb.ReadOptions) (rootConfig RootConfig, err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -64,7 +65,7 @@ func readRootConfigFromFile(dirPath string, o ReadOptions) (rootConfig RootConfi
 		return
 	}
 
-	if o.validate {
+	if o.IsValidationRequired() {
 		if err = rootConfig.Validate(); err != nil {
 			return rootConfig, fmt.Errorf("content of root config is not valid: %w", err)
 		}

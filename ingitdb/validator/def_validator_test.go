@@ -1,10 +1,12 @@
-package ingitdb
+package validator
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ingitdb/ingitdb-go/ingitdb"
 )
 
 func TestReadDefinition(t *testing.T) {
@@ -20,7 +22,7 @@ func TestReadDefinition(t *testing.T) {
 		},
 		{
 			name: "test-ingitdb",
-			dir:  "../test-ingitdb",
+			dir:  "../../test-ingitdb",
 			err:  "",
 		},
 	} {
@@ -30,7 +32,7 @@ func TestReadDefinition(t *testing.T) {
 				t.Fatalf("failed to get current dir: %s", err)
 			}
 			dbDirPath := filepath.Join(currentDir, tt.dir)
-			def, err := ReadDefinition(dbDirPath, Validate())
+			def, err := ReadDefinition(dbDirPath, ingitdb.Validate())
 			if err == nil && tt.err != "" {
 				t.Fatal("got no error, expected: " + tt.err)
 			}
