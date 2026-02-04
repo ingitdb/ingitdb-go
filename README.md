@@ -11,3 +11,11 @@ Go code for [inGitDB](https://github.com/ingitdb).
 [![Version](https://img.shields.io/github/v/tag/ingitdb/ingitdb-go?filter=v*.*.*&logo=Go)](https://github.com/ingitdb/ingitdb-go/tags)
 
 <img src="https://github.com/ingitdb/.github/raw/main/inGitDB-full4.png" alt="inGitDB Logo" />
+
+## Dependencies
+
+- [DALgo](https://github.com/dal-go/dalgo) – Database Abstraction Layer for Go
+
+## License
+
+This project is free, open source and licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
