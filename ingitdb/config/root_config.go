@@ -40,6 +40,10 @@ func (rc *RootConfig) Validate() error {
 }
 
 func ReadRootConfigFromFile(dirPath string, o ingitdb.ReadOptions) (rootConfig RootConfig, err error) {
+	return readRootConfigFromFile(dirPath, o, os.OpenFile)
+}
+
+func readRootConfigFromFile(dirPath string, o ingitdb.ReadOptions, openFile func(string, int, os.FileMode) (*os.File, error)) (rootConfig RootConfig, err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
@@ -52,7 +56,7 @@ func ReadRootConfigFromFile(dirPath string, o ingitdb.ReadOptions) (rootConfig R
 	filePath := filepath.Join(dirPath, RootConfigFileName)
 
 	var file *os.File
-	if file, err = os.OpenFile(filePath, os.O_RDONLY, 0666); err != nil {
+	if file, err = openFile(filePath, os.O_RDONLY, 0666); err != nil {
 		err = fmt.Errorf("failed to open root config file: %w", err)
 		return
 	}

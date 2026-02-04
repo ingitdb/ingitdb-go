@@ -83,11 +83,20 @@ func TestReadRootConfigFromFile(t *testing.T) {
 		name          string
 		setup         func(dir string) error
 		options       ingitdb.ReadOptions
+		dirPath       string
+		useDirPath    bool
 		expectedError string
 	}{
 		{
 			name:          "missing_file",
 			options:       ingitdb.NewReadOptions(),
+			expectedError: "failed to open root config file",
+		},
+		{
+			name:          "empty_dir_path",
+			options:       ingitdb.NewReadOptions(),
+			dirPath:       "",
+			useDirPath:    true,
 			expectedError: "failed to open root config file",
 		},
 		{
@@ -136,7 +145,12 @@ func TestReadRootConfigFromFile(t *testing.T) {
 				}
 			}
 
-			_, err := ReadRootConfigFromFile(dir, tt.options)
+			dirPath := dir
+			if tt.useDirPath {
+				dirPath = tt.dirPath
+			}
+
+			_, err := ReadRootConfigFromFile(dirPath, tt.options)
 			if tt.expectedError == "" && err != nil {
 				errMsg := err.Error()
 				t.Fatalf("expected no error, got %s", errMsg)
@@ -151,5 +165,22 @@ func TestReadRootConfigFromFile(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReadRootConfigFromFile_PanicRecovery(t *testing.T) {
+	t.Parallel()
+
+	openFile := func(string, int, os.FileMode) (*os.File, error) {
+		panic("boom")
+	}
+
+	_, err := readRootConfigFromFile("irrelevant", ingitdb.NewReadOptions(), openFile)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "panic: boom") {
+		t.Fatalf("expected panic error, got %s", errMsg)
 	}
 }

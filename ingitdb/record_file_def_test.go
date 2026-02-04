@@ -61,7 +61,8 @@ func TestRecordFileDefGetRecordFileName(t *testing.T) {
 	key := dal.NewKeyWithID("tasks", "task-1")
 	keyString := key.String()
 	data := map[string]any{
-		"": "val",
+		"":    "val",
+		"foo": "bar",
 	}
 	record := dal.NewRecordWithData(key, data)
 	record.SetError(nil)

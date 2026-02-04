@@ -15,29 +15,44 @@ var (
 	version = "dev"
 	commit  = "none"
 	date    = "unknown"
+	exit    = os.Exit
 )
 
 func main() {
+	fatal := func(err error) {
+		log.Print(err)
+		exit(1)
+	}
+	run(os.Args, os.UserHomeDir, validator.ReadDefinition, fatal, log.Println)
+}
 
-	if os.Args[1] == "--version" {
+func run(
+	args []string,
+	homeDir func() (string, error),
+	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
+	fatal func(error),
+	logf func(...any),
+) {
+	if args[1] == "--version" {
 		fmt.Printf("ingitdb %s (%s) @ %s\n", version, commit, date)
 		return
 	}
 
-	dirPath := expandHome(os.Args[1])
-	log.Println("inGitDB db path: ", dirPath)
+	dirPath := expandHome(args[1], homeDir, fatal)
+	logf("inGitDB db path: ", dirPath)
 
-	_, err := validator.ReadDefinition(dirPath, ingitdb.Validate())
+	_, err := readDefinition(dirPath, ingitdb.Validate())
 	if err != nil {
-		log.Fatal(fmt.Errorf("inGitDB database validation failed: %w", err))
+		fatal(fmt.Errorf("inGitDB database validation failed: %w", err))
 	}
 }
 
-func expandHome(path string) string {
+func expandHome(path string, homeDir func() (string, error), fatal func(error)) string {
 	if strings.HasPrefix(path, "~") {
-		home, err := os.UserHomeDir()
+		home, err := homeDir()
 		if err != nil {
-			log.Fatal(fmt.Errorf("failed to expand home directory: %w", err))
+			fatal(fmt.Errorf("failed to expand home directory: %w", err))
+			return ""
 		}
 		return filepath.Join(home, path[1:])
 	}
