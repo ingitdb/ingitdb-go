@@ -103,8 +103,9 @@ func TestCollectionDefValidate_Success(t *testing.T) {
 		},
 		ColumnsOrder: []string{"name"},
 		RecordFile: &RecordFileDef{
-			Format: "JSON",
-			Name:   "{key}.json",
+			Format:     "JSON",
+			RecordType: "map[string]any",
+			Name:       "{key}.json",
 		},
 	}
 

@@ -17,18 +17,27 @@ func TestRecordFileDefValidate(t *testing.T) {
 	}{
 		{
 			name: "missing_format",
-			def:  RecordFileDef{Name: "file.json"},
+			def:  RecordFileDef{Name: "file.json", RecordType: "map[string]any"},
 			err:  "record file format cannot be empty",
 		},
 		{
 			name: "missing_name",
-			def:  RecordFileDef{Format: "JSON"},
+			def:  RecordFileDef{Format: "JSON", RecordType: "map[string]any"},
 			err:  "record file name cannot be empty",
 		},
 		{
+			name: "missing_record_type",
+			def:  RecordFileDef{Name: "file.json", Format: "JSON"},
+			err:  "invalid record type",
+		},
+		{
 			name: "valid",
-			def:  RecordFileDef{Format: "JSON", Name: "file.json"},
-			err:  "",
+			def: RecordFileDef{
+				Name:       "file.json",
+				Format:     "JSON",
+				RecordType: "map[string]any",
+			},
+			err: "",
 		},
 	}
 

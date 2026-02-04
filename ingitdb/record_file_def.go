@@ -7,9 +7,23 @@ import (
 	"github.com/dal-go/dalgo/dal"
 )
 
+type RecordType string
+
+const (
+	SingleRecord  RecordType = "map[string]any"
+	ListOfRecords RecordType = "[]map[string]any"
+	MapOfRecords  RecordType = "map[string]map[string]any"
+)
+
 type RecordFileDef struct {
-	Format RecordFormat `yaml:"format"`
 	Name   string       `yaml:"name"`
+	Format RecordFormat `yaml:"format"`
+
+	// RecordType can have next values:
+	// "map[string]any" - each record in a separate file
+	// "[]map[string]any" - list of records
+	// "map[string]map[string]any" - dictionary of records
+	RecordType RecordType `yaml:"type"`
 }
 
 func (rfd RecordFileDef) Validate() error {
@@ -18,6 +32,12 @@ func (rfd RecordFileDef) Validate() error {
 	}
 	if rfd.Name == "" {
 		return fmt.Errorf("record file name cannot be empty")
+	}
+	switch rfd.RecordType {
+	case SingleRecord, ListOfRecords, MapOfRecords:
+		// OK
+	default:
+		return fmt.Errorf("invalid record type %q", rfd.RecordType)
 	}
 	return nil
 }

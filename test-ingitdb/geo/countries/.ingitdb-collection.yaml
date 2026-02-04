@@ -5,8 +5,9 @@ titles:
   fr: Pays
   de: Länder
 record_file:
-  format: json
   name: "{key}.json"
+  format: json
+  type: "map[string]map[string]any"
 columns:
   names:
     type: map[locale]string

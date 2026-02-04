@@ -1,9 +1,10 @@
 titles:
   en: Tags
-  ru: Таги
+  ru: Тэги
 record_file:
-  format: yaml
   name: "statuses.yaml"
+  type: "[]map[string]any"
+  format: yaml
 columns:
   titles:
     type: map[i18n]string
