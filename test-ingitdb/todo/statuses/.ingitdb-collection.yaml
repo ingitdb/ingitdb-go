@@ -7,5 +7,5 @@ record_file:
   format: yaml
 columns:
   titles:
-    type: map[i18n]string
+    type: "map[locale]string"
     required: true

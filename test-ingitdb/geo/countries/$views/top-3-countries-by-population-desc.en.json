@@ -16,7 +16,8 @@
     "rows": [
         {
             "id": "us",
-            "title": "United States"
+            "title": "United States",
+
         },
         {
             "id": "ru",

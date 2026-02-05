@@ -1,9 +1,9 @@
 package ingitdb
 
-import "fmt"
+import "errors"
 
 type ColumnDef struct {
-	Type       string            `yaml:"type"`
+	Type       ColumnType        `yaml:"type"`
 	Title      string            `yaml:"title,omitempty"`
 	Titles     map[string]string `yaml:"titles,omitempty"`
 	ValueTitle string            `yaml:"valueTitle,omitempty"`
@@ -15,8 +15,11 @@ type ColumnDef struct {
 }
 
 func (v *ColumnDef) Validate() error {
-	if v.Type == "" {
-		return fmt.Errorf("missing 'type' in column definition")
+	if err := ValidateColumnType(v.Type); err != nil {
+		if errors.Is(err, errMissingRequiredField) {
+			return errors.New("missing 'type' in column definition")
+		}
+		return err
 	}
 	return nil
 }

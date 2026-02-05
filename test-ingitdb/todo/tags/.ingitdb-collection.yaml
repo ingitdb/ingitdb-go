@@ -8,5 +8,5 @@ record_file:
 data_dir: $records
 columns:
   titles:
-    type: map[i18n]string
+    type: "map[locale]string"
     required: true

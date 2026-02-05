@@ -12,8 +12,9 @@ func TestCollectionDefValidate_Errors(t *testing.T) {
 		"name": {Type: "string"},
 	}
 	recordFile := &RecordFileDef{
-		Format: "JSON",
-		Name:   "{key}.json",
+		Format:     "JSON",
+		Name:       "{key}.json",
+		RecordType: SingleRecord,
 	}
 
 	tests := []struct {
@@ -84,7 +85,7 @@ func TestCollectionDefValidate_Errors(t *testing.T) {
 
 			err := tt.def.Validate()
 			if err == nil {
-				t.Fatal("expected error, got nil")
+				t.Fatalf("got nil instead of expected error: %s", tt.err)
 			}
 			errMsg := err.Error()
 			if !strings.Contains(errMsg, tt.err) {
