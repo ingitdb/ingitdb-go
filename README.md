@@ -12,6 +12,14 @@ Go code for [inGitDB](https://github.com/ingitdb).
 
 <img src="https://github.com/ingitdb/.github/raw/main/inGitDB-full4.png" alt="inGitDB Logo" />
 
+## [CLI](docs/CLI.md)
+
+We have documentation on how to use `ingitdb` CLI.
+
+## Features & Roadmap
+
+We have a [list of features](docs/FEATURES.md) we are working on or have planned to implement.
+
 ## Dependencies
 
 - [DALgo](https://github.com/dal-go/dalgo) – Database Abstraction Layer for Go
