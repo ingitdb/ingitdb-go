@@ -11,6 +11,7 @@ type CollectionDef struct {
 	DataDir      string                `yaml:"data_dir,omitempty"`
 	Columns      map[string]*ColumnDef `yaml:"columns"`
 	ColumnsOrder []string              `yaml:"columns_order,omitempty"`
+	DefaultView  string                `yaml:"default_view,omitempty"`
 }
 
 func (v *CollectionDef) Validate() error {
