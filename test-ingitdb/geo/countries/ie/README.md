@@ -5,7 +5,7 @@
 ## Provinces
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Connacht](provinces/connacht.json) | 590,062 | 17,788 |
 | [Leinster](provinces/leinster.json) | 2,858,501 | 19,801 |
 | [Munster](provinces/munster.json) | 1,373,346 | 24,675 |
@@ -14,7 +14,7 @@
 ## Counties
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Clare](counties/clare) | 118,817 | 3,450 |
 | [Cork](counties/cork) | 542,868 | 7,500 |
 | [Dublin](counties/dublin) | 1,347,359 | 921 |

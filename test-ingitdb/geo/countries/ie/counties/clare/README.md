@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Ennis](settlements/ennis.json) | 25,276 | 4.9 |
 | [Shannon](settlements/shannon.json) | 10,256 | 5.4 |
 | [Kilrush](settlements/kilrush.json) | 2,720 | 3.2 |

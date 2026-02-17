@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [London](settlements/london.json) | 8,982,000 | 1,572.0 |
 | [Islington](settlements/islington.json) | 319,143 | 14.86 |
 | [Southwark](settlements/southwark.json) | 317,256 | - |

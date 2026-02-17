@@ -3,7 +3,7 @@
 [ [En](README.md) | [Ru](README.ru.md) | [Es](README.es.md) | [Fr](README.fr.md) | [De](README.de.md) | [Zh](README.zh.md) ]
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Clare](clare) | 118,817 | 3,450 |
 | [Cork](cork) | 542,868 | 7,500 |
 | [Dublin](dublin) | 1,347,359 | 921 |

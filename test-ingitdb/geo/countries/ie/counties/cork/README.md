@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Cork](settlements/cork.json) | 210,853 | 37.3 |
 | [Carrigaline](settlements/carrigaline.json) | 18,239 | 9.4 |
 | [Ballincollig](settlements/ballincollig.json) | 18,172 | - |
