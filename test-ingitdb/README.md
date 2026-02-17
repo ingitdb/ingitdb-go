@@ -12,9 +12,6 @@ It is also used in tests to validate functionality and ensure compatibility with
     - tasks
     - tags
     - statuses
-- geo
-    - countries
-        - cities
 
 
             

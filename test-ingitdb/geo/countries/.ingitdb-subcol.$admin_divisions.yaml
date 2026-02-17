@@ -1,5 +1,0 @@
-inherits: .ingitdb-subcol.$admin_divisions_base.yaml
-
-subCollections:
-  - name: settlements
-    def: .ingitdb-subcol.counties.settlements.yaml
