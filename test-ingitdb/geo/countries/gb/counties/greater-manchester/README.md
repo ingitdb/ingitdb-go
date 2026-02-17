@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Manchester](settlements/manchester.json) | 547,627 | 115.65 |
 | [Bolton](settlements/bolton.json) | 194,189 | - |
 | [Rochdale](settlements/rochdale.json) | 107,926 | - |

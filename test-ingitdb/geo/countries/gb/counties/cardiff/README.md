@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Cardiff](settlements/cardiff.json) | 362,756 | 140.0 |
 | [Penarth](settlements/penarth.json) | 23,000 | - |
 | [Grangetown](settlements/grangetown.json) | 19,385 | 4.3 |

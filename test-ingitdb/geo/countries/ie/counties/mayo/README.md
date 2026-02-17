@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Castlebar](settlements/castlebar.json) | 12,068 | 8.5 |
 | [Ballina](settlements/ballina.json) | 10,556 | - |
 | [Westport](settlements/westport.json) | 6,771 | - |

@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Edinburgh](settlements/edinburgh.json) | 524,930 | 264.0 |
 | [Leith](settlements/leith.json) | 50,000 | - |
 | [Portobello](settlements/portobello.json) | 26,000 | - |

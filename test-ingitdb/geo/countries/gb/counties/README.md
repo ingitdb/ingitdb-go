@@ -3,7 +3,7 @@
 [ [En](README.md) | [Ru](README.ru.md) | [Es](README.es.md) | [Fr](README.fr.md) | [De](README.de.md) | [Zh](README.zh.md) ]
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Cardiff](cardiff) | 362,756 | 140 |
 | [City of Edinburgh](edinburgh) | 524,930 | 264 |
 | [Greater London](london) | 8,982,000 | 1,572 |

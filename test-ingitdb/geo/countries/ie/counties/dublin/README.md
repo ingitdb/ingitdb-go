@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Dublin](settlements/dublin.json) | 1,173,179 | 114.99 |
 | [Tallaght](settlements/tallaght.json) | 76,119 | 27.0 |
 | [Blanchardstown](settlements/blanchardstown.json) | 65,000 | - |

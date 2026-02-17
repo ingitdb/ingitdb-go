@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Tralee](settlements/tralee.json) | 23,693 | 11.6 |
 | [Killarney](settlements/killarney.json) | 15,893 | 9.15 |
 | [Listowel](settlements/listowel.json) | 4,854 | 5.09 |

@@ -3,7 +3,7 @@
 ## Settlements
 
 | Name | Population | Area (km²) |
-|------|------------|------------|
+|------|----------:|----------:|
 | [Galway](settlements/galway.json) | 79,934 | 50.0 |
 | [Tuam](settlements/tuam.json) | 9,647 | - |
 | [Ballinasloe](settlements/ballinasloe.json) | 6,662 | - |
