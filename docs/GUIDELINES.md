@@ -2,6 +2,8 @@
 
 This document provides project-specific information for developers and AI agents working on inGitDB.
 
+Refer to [documentation](.) to learn about architecture, features, componets, etc. of the `ingitdb` CLI.
+
 ## 1. Build and Configuration
 
 - **Go Version**: Ensure you are using Go version specififedin `go.mod` (_or later_).

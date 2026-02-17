@@ -11,5 +11,5 @@ inGitDB schema & config types.
 
 ## Configuration types
 
-- package [config](./config)
+- package [config](config)
     - type [RootConfig](config/root_config.go)

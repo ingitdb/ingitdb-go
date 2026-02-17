@@ -50,6 +50,69 @@ func TestRootConfigValidate(t *testing.T) {
 			},
 			err: "duplicate path",
 		},
+		{
+			name: "valid_languages",
+			rc: &RootConfig{
+				RootCollections: map[string]string{"foo": "bar"},
+				Languages: []Language{
+					{Required: "en"},
+					{Required: "fr"},
+					{Optional: "es"},
+				},
+			},
+			err: "",
+		},
+		{
+			name: "invalid_languages_both_set",
+			rc: &RootConfig{
+				RootCollections: map[string]string{"foo": "bar"},
+				Languages: []Language{
+					{Required: "en", Optional: "es"},
+				},
+			},
+			err: "cannot have both required and optional fields",
+		},
+		{
+			name: "invalid_languages_neither_set",
+			rc: &RootConfig{
+				RootCollections: map[string]string{"foo": "bar"},
+				Languages: []Language{
+					{},
+				},
+			},
+			err: "must have either required or optional field",
+		},
+		{
+			name: "invalid_languages_order",
+			rc: &RootConfig{
+				RootCollections: map[string]string{"foo": "bar"},
+				Languages: []Language{
+					{Optional: "en"},
+					{Required: "fr"},
+				},
+			},
+			err: "must be before optional languages",
+		},
+		{
+			name: "invalid_languages_code_short",
+			rc: &RootConfig{
+				RootCollections: map[string]string{"foo": "bar"},
+				Languages: []Language{
+					{Required: "a"},
+				},
+			},
+			err: "too short",
+		},
+		{
+			name: "invalid_languages_code_chars",
+			rc: &RootConfig{
+				RootCollections: map[string]string{"foo": "bar"},
+				Languages: []Language{
+					{Required: "en$US"},
+				},
+			},
+			err: "contains invalid characters",
+		},
 	}
 
 	for _, tt := range tests {
@@ -86,6 +149,7 @@ func TestReadRootConfigFromFile(t *testing.T) {
 		dirPath       string
 		useDirPath    bool
 		expectedError string
+		verify        func(t *testing.T, rc RootConfig)
 	}{
 		{
 			name:          "missing_file",
@@ -129,6 +193,31 @@ func TestReadRootConfigFromFile(t *testing.T) {
 			options:       ingitdb.NewReadOptions(ingitdb.Validate()),
 			expectedError: "",
 		},
+		{
+			name: "valid_languages_yaml",
+			setup: func(dir string) error {
+				filePath := filepath.Join(dir, RootConfigFileName)
+				content := []byte(`
+languages:
+  - required: en
+  - optional: fr
+`)
+				return os.WriteFile(filePath, content, 0666)
+			},
+			options:       ingitdb.NewReadOptions(ingitdb.Validate()),
+			expectedError: "",
+			verify: func(t *testing.T, rc RootConfig) {
+				if len(rc.Languages) != 2 {
+					t.Fatalf("expected 2 languages, got %d", len(rc.Languages))
+				}
+				if rc.Languages[0].Required != "en" {
+					t.Errorf("expected first language required=en, got %s", rc.Languages[0].Required)
+				}
+				if rc.Languages[1].Optional != "fr" {
+					t.Errorf("expected second language optional=fr, got %s", rc.Languages[1].Optional)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -150,7 +239,7 @@ func TestReadRootConfigFromFile(t *testing.T) {
 				dirPath = tt.dirPath
 			}
 
-			_, err := ReadRootConfigFromFile(dirPath, tt.options)
+			rc, err := ReadRootConfigFromFile(dirPath, tt.options)
 			if tt.expectedError == "" && err != nil {
 				errMsg := err.Error()
 				t.Fatalf("expected no error, got %s", errMsg)
@@ -163,6 +252,9 @@ func TestReadRootConfigFromFile(t *testing.T) {
 				if !strings.Contains(errMsg, tt.expectedError) {
 					t.Fatalf("expected error to contain %q, got %q", tt.expectedError, errMsg)
 				}
+			}
+			if tt.verify != nil {
+				tt.verify(t, rc)
 			}
 		})
 	}

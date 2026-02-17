@@ -18,7 +18,7 @@ We have documentation on how to use `ingitdb` CLI.
 
 ## Features & Roadmap
 
-We have a [list of features](docs/FEATURES.md) we are working on or have planned to implement.
+We have a [list of features](docs/features/README.md) we are working on or have planned to implement.
 
 ## Dependencies
 
