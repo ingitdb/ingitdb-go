@@ -6,10 +6,10 @@
 
 | Name | Population | Area (km²) |
 |------|------------|------------|
-| [Connacht](provinces) | 590,062 | 17,788 |
-| [Leinster](provinces) | 2,858,501 | 19,801 |
-| [Munster](provinces) | 1,373,346 | 24,675 |
-| [Ulster](provinces) | 2,105,666 | 21,882 |
+| [Connacht](provinces/connacht.json) | 590,062 | 17,788 |
+| [Leinster](provinces/leinster.json) | 2,858,501 | 19,801 |
+| [Munster](provinces/munster.json) | 1,373,346 | 24,675 |
+| [Ulster](provinces/ulster.json) | 2,105,666 | 21,882 |
 
 ## Counties
 

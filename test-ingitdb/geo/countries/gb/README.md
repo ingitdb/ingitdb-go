@@ -6,10 +6,10 @@
 
 | Name | Population | Area (km²) |
 |------|------------|------------|
-| [England](regions) | 56,550,138 | 130,279 |
-| [Northern Ireland](regions) | 1,895,510 | 14,130 |
-| [Scotland](regions) | 5,466,000 | 77,933 |
-| [Wales](regions) | 3,169,586 | 20,779 |
+| [England](regions/england.json) | 56,550,138 | 130,279 |
+| [Northern Ireland](regions/northern-ireland.json) | 1,895,510 | 14,130 |
+| [Scotland](regions/scotland.json) | 5,466,000 | 77,933 |
+| [Wales](regions/wales.json) | 3,169,586 | 20,779 |
 
 ## Counties
 
