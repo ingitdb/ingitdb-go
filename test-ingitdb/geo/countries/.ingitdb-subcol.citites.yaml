@@ -11,17 +11,30 @@ record_file:
   format: json
   type: "map[string]any"
 
+min_records_count: 1
+max_records_count: 100000
+
 columns:
   names:
     type: map[locale]string
     required: true
-    valueTitle: Name
+    titles:
+      en: Name
+      ru: Имя
+  
+  state:
+    type: string
+    required: false
+    titles:
+      en: State
+      ru: Штат
+    foreign_key: "../states"
+    
   population:
     type: int
     title: Population
+    
   area:
     type: int
     title: Area (km²)
 
-min_records_count: 1
-max_records_count: 100000
