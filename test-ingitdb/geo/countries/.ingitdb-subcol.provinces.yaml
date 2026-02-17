@@ -1,0 +1,8 @@
+inherits: .ingitdb-subcol.$administrative_divisions.yaml
+
+columns:
+  counties:
+    type: "[]string"
+    titles:
+      en: Counties
+      ru: Каунти

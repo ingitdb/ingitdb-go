@@ -1,3 +1,5 @@
+inherits: .ingitdb-subcol.counties.yaml
+
 titles:
   en: States
   ru: Штаты
@@ -11,6 +13,9 @@ record_file:
   format: json
   type: "map[string]any"
 
+min_records_count: 1
+max_records_count: 100
+
 columns:
   names:
     type: map[locale]string
@@ -19,9 +24,13 @@ columns:
   population:
     type: int
     title: Population
+    min_value: 0
+    max_value: 99 000 000
   area:
     type: int
     title: Area (km²)
+    min_value: 0
 
-min_records_count: 1
-max_records_count: 100
+subCollections:
+  - name: settlements
+    def: .ingitdb-subcol.counties.settlements.yaml

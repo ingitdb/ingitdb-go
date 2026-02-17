@@ -1,0 +1,21 @@
+inherits: .ingitdb-subcol.counties.yaml
+
+
+record_file:
+  format: json
+  type: "map[string]any"
+  name: "counties/{$id}/{$id}.json"
+
+columns:
+  names:
+    type: map[locale]string
+    required: true
+    titles:
+      en: Country
+      ru: Каунти
+  province:
+    type: string
+    titles:
+      en: Province
+      ru: Провинция
+    foreign_key: "../provinces"
