@@ -8,6 +8,8 @@ rootCollections:
 #
 # Examples:
 #  - required: en
+#  - required: es-ES
+#  - required: es-MX
 #  - optional: ru
 #
 # The required languages should be before the optional ones.
