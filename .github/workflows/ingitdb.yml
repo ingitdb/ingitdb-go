@@ -20,7 +20,7 @@ on:
 
 jobs:
 
-  ingitdb_validator:
+  Validator:
     runs-on: ubuntu-latest
     steps:
 
@@ -38,4 +38,4 @@ jobs:
       - run: chmod +x ingitdb
 
       - name: inGitDB validation
-        run: ingitdb .
+        run: ./ingitdb .
