@@ -4,15 +4,19 @@
 
 ## Regions
 
-- [England](regions/england.json)
-- [Northern Ireland](regions/northern-ireland.json)
-- [Scotland](regions/scotland.json)
-- [Wales](regions/wales.json)
+| Name | Population | Area (km²) |
+|------|------------|------------|
+| [England](regions) | 56,550,138 | 130,279 |
+| [Northern Ireland](regions) | 1,895,510 | 14,130 |
+| [Scotland](regions) | 5,466,000 | 77,933 |
+| [Wales](regions) | 3,169,586 | 20,779 |
 
 ## Counties
 
-- [Cardiff](counties/cardiff.json)
-- [City of Edinburgh](counties/edinburgh.json)
-- [Greater London](counties/london.json)
-- [Greater Manchester](counties/greater-manchester.json)
-- [West Midlands](counties/west-midlands.json)
+| Name | Population | Area (km²) |
+|------|------------|------------|
+| [Cardiff](counties/cardiff) | 362,756 | 140 |
+| [City of Edinburgh](counties/edinburgh) | 524,930 | 264 |
+| [Greater London](counties/london) | 8,982,000 | 1,572 |
+| [Greater Manchester](counties/greater-manchester) | 2,812,569 | 1,276 |
+| [West Midlands](counties/west-midlands) | 2,916,458 | 902 |
