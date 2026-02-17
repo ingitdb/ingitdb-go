@@ -29,7 +29,7 @@ The codebase has two main packages:
 
 - **`pkg/ingitdb/`** — Core schema definitions (`Definition`, `CollectionDef`, `ColumnDef`, views) and the `validator/` sub-package that reads and validates a database directory against its schema.
 - **`pkg/dalgo2ingitdb/`** — DALgo (Database Abstraction Layer) integration, implementing `dal.DB`, read-only and read-write transactions for CRUD access.
-- **`cmd/ingitdb/`** — CLI entry point. Currently supports `--version` and validating a db path. The `run()` function is dependency-injected for testability (accepts `homeDir`, `readDefinition`, `fatal`, `logf` as parameters).
+- **`cmd/ingitdb/`** — CLI entry point using `github.com/urfave/cli/v3` for subcommand and flag parsing. The `run()` function is dependency-injected for testability (accepts `homeDir`, `readDefinition`, `fatal`, `logf` as parameters).
 - **`cmd/watcher/`** — Obsolete file watcher, to be folded into `ingitdb watch`.
 
 Test data lives in `test-ingitdb/` and `.ingitdb.yaml` at the repo root points to it.

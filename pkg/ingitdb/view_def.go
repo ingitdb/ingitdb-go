@@ -1,12 +1,11 @@
 package ingitdb
 
 type ViewDef struct {
-	ID      string         `yaml:"-"`
-	Titles  map[int]string `yaml:"titles"`
-	OrderBy string         `yaml:"order_by"`
-	Formats []string       `yaml:"formats"`
-	Select  []string       `yaml:"select"`
-	// How many records to get
-	Top      int    `yaml:"top,omitempty"`
-	FileName string `yaml:"file_name"`
+	ID      string            `yaml:"-"`
+	Titles  map[string]string `yaml:"titles,omitempty"`
+	OrderBy string            `yaml:"order_by,omitempty"`
+	Formats []string          `yaml:"formats,omitempty"`
+	Columns []string          `yaml:"columns,omitempty"`
+	// How many records to include; 0 means all
+	Top int `yaml:"top,omitempty"`
 }
