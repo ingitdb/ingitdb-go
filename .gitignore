@@ -29,3 +29,6 @@ go.work.sum
 .idea
 # Added by goreleaser init:
 dist/
+
+# Local Claude Code settings
+.claude/settings.local.json
