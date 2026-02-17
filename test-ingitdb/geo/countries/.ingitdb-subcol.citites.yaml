@@ -22,3 +22,6 @@ columns:
   area:
     type: int
     title: Area (km²)
+
+min_records_count: 1
+max_records_count: 100000
