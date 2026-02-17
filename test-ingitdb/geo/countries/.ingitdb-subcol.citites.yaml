@@ -28,7 +28,7 @@ columns:
     titles:
       en: State
       ru: Штат
-    foreign_key: "../states"
+    foreign_key: ".."
     
   population:
     type: int
