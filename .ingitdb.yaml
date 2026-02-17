@@ -1,7 +1,7 @@
 # You can link a specific collection or a directory with collections
 rootCollections:
-  countries: geo/countries
-  todo: todo/*
+  countries: test-ingitdb/geo/countries
+  todo: test-ingitdb/todo/*
 
 # `languages` list supported languages should preferably use `ISO 639-1`
 #  or alternatively `IERF BCP 47` (`RFC 5646` / `RFC 4647`).

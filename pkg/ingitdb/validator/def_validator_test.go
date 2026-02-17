@@ -21,8 +21,8 @@ func TestReadDefinition(t *testing.T) {
 			err:  "failed to read root config file .ingitdb.yaml",
 		},
 		{
-			name: "test-ingitdb",
-			dir:  "../../test-ingitdb",
+			name: "repo_root",
+			dir:  "../../../",
 			err:  "",
 		},
 	} {
