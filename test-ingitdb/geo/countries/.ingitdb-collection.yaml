@@ -4,10 +4,12 @@ titles:
   es: Países
   fr: Pays
   de: Länder
+
 record_file:
   name: "{$id}/{$id}.json"
   format: json
   type: "map[string]any"
+
 columns:
   names:
     type: map[locale]string
@@ -22,3 +24,9 @@ columns:
   capital:
     type: string
     required: true
+
+subCollections:
+  - name: cities
+    def: .ingitdb-subcol.citites.yaml  
+  - name: states
+    def: .ingitdb-subcol.states.yaml
