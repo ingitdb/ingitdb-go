@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ingitdb/ingitdb-go/ingitdb"
-	"github.com/ingitdb/ingitdb-go/ingitdb/validator"
+	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-go/pkg/ingitdb/validator"
 )
 
 var (

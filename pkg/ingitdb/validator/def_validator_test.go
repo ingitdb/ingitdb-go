@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ingitdb/ingitdb-go/ingitdb"
+	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
 )
 
 func TestReadDefinition(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ingitdb/ingitdb-go/ingitdb"
+	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
 )
 
 func TestRun_Version(t *testing.T) {
