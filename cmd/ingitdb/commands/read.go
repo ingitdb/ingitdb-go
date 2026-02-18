@@ -7,8 +7,8 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
-// Delete returns the delete command group.
-func Delete(
+// Read returns the read command group.
+func Read(
 	homeDir func() (string, error),
 	getWd func() (string, error),
 	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
@@ -16,14 +16,12 @@ func Delete(
 	logf func(...any),
 ) *cli.Command {
 	return &cli.Command{
-		Name:    "delete",
-		Aliases: []string{"d"},
-		Usage:   "Delete database objects (collection, view, or records)",
+		Name:    "read",
+		Aliases: []string{"r"},
+		Usage:   "Read database objects",
 		Commands: []*cli.Command{
-			deleteCollection(),
-			deleteView(),
-			deleteRecords(),
-			deleteRecord(homeDir, getWd, readDefinition, newDB, logf),
+			readRecord(homeDir, getWd, readDefinition, newDB, logf),
+			readCollection(homeDir, getWd, readDefinition, logf),
 		},
 	}
 }

@@ -106,3 +106,16 @@ func expandHome(path string, homeDir func() (string, error)) (string, error) {
 	}
 	return path, nil
 }
+
+// resolveDBPath returns the database directory path from the --path flag or the working directory.
+func resolveDBPath(cmd *cli.Command, homeDir func() (string, error), getWd func() (string, error)) (string, error) {
+	dirPath := cmd.String("path")
+	if dirPath == "" {
+		wd, err := getWd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get working directory: %w", err)
+		}
+		dirPath = wd
+	}
+	return expandHome(dirPath, homeDir)
+}

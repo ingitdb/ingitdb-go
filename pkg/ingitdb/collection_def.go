@@ -6,6 +6,7 @@ const CollectionDefFileName = ".ingitdb-collection.yaml"
 
 type CollectionDef struct {
 	ID           string                `json:"-"`
+	DirPath      string                `yaml:"-" json:"-"`
 	Titles       map[string]string     `yaml:"titles,omitempty"`
 	RecordFile   *RecordFileDef        `yaml:"record_file"`
 	DataDir      string                `yaml:"data_dir,omitempty"`

@@ -1,0 +1,79 @@
+package commands
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/dal-go/dalgo/dal"
+
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+)
+
+func TestReadCollection_Success(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	defContent := []byte("titles:\n  en: Test Items\nrecord_file:\n  name: \"{key}.yaml\"\n  type: \"map[string]any\"\n  format: yaml\ncolumns:\n  name:\n    type: string\n")
+	if err := os.WriteFile(filepath.Join(dir, ingitdb.CollectionDefFileName), defContent, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	def := testDef(dir)
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2ingitdb.NewLocalDBWithDef(root, d)
+	}
+	logf := func(...any) {}
+
+	cmd := Read(homeDir, getWd, readDef, newDB, logf)
+	if err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=test/items"); err != nil {
+		t.Fatalf("ReadCollection: %v", err)
+	}
+}
+
+func TestReadCollection_CollectionNotFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := testDef(dir)
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2ingitdb.NewLocalDBWithDef(root, d)
+	}
+	logf := func(...any) {}
+
+	cmd := Read(homeDir, getWd, readDef, newDB, logf)
+	err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=no/such/collection")
+	if err == nil {
+		t.Fatal("expected error for unknown collection")
+	}
+}
+
+func TestReadCollection_DefinitionError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return nil, errors.New("boom")
+	}
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2ingitdb.NewLocalDBWithDef(root, d)
+	}
+	logf := func(...any) {}
+
+	cmd := Read(homeDir, getWd, readDef, newDB, logf)
+	err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=test/items")
+	if err == nil {
+		t.Fatal("expected error when readDefinition fails")
+	}
+}

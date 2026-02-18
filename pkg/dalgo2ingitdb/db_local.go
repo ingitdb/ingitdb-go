@@ -5,6 +5,7 @@ import (
 
 	"github.com/dal-go/dalgo/dal"
 	"github.com/dal-go/dalgo/recordset"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
 var _ dal.DB = (*localDB)(nil)
@@ -16,8 +17,18 @@ func NewLocalDB(rootDirPath string) (dal.DB, error) {
 	}, nil
 }
 
+// NewLocalDBWithDef creates a localDB with a preloaded schema definition.
+// The definition enables CRUD operations that require collection metadata.
+func NewLocalDBWithDef(rootDirPath string, def *ingitdb.Definition) (dal.DB, error) {
+	return &localDB{
+		rootDirPath: rootDirPath,
+		def:         def,
+	}, nil
+}
+
 type localDB struct {
 	rootDirPath string
+	def         *ingitdb.Definition
 }
 
 func (db localDB) ID() string {

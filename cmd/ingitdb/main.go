@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/dal-go/dalgo/dal"
 	"github.com/urfave/cli/v3"
 
 	"github.com/ingitdb/ingitdb-cli/cmd/ingitdb/commands"
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/validator"
 )
@@ -39,6 +41,9 @@ func run(
 	fatal func(error),
 	logf func(...any),
 ) {
+	newDB := func(rootDirPath string, def *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2ingitdb.NewLocalDBWithDef(rootDirPath, def)
+	}
 	app := &cli.Command{
 		Name:      "ingitdb",
 		Usage:     "Git-backed database CLI",
@@ -52,10 +57,13 @@ func run(
 			commands.Setup(),
 			commands.Resolve(),
 			commands.Watch(),
-			commands.Serve(),
+			commands.Serve(homeDir, getWd, readDefinition, newDB, logf),
 			commands.List(),
 			commands.Find(),
-			commands.Delete(),
+			commands.Create(homeDir, getWd, readDefinition, newDB, logf),
+			commands.Read(homeDir, getWd, readDefinition, newDB, logf),
+			commands.Update(homeDir, getWd, readDefinition, newDB, logf),
+			commands.Delete(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Truncate(),
 			commands.Migrate(),
 			commands.Import(),
