@@ -1,7 +1,7 @@
 titles:
   en: Countries
 record_file:
-  name: "{key}.yaml"
+  name: "{key}/{key}.yaml"
   type: "map[string]any"
   format: yaml
 columns:

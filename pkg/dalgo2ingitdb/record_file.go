@@ -45,9 +45,9 @@ func CollectionForKey(def *ingitdb.Definition, id string) (*ingitdb.CollectionDe
 	return bestColDef, bestKey, nil
 }
 
-// resolveRecordPath replaces {key} in the record file name template and joins with the collection dir.
+// resolveRecordPath replaces all {key} occurrences in the record file name template and joins with the collection dir.
 func resolveRecordPath(colDef *ingitdb.CollectionDef, recordKey string) string {
-	name := strings.Replace(colDef.RecordFile.Name, "{key}", recordKey, 1)
+	name := strings.ReplaceAll(colDef.RecordFile.Name, "{key}", recordKey)
 	return filepath.Join(colDef.DirPath, name)
 }
 

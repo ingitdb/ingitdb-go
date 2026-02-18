@@ -137,6 +137,51 @@ func TestInsert_SingleRecord(t *testing.T) {
 	}
 }
 
+func TestInsert_SingleRecord_KeySubdirPattern(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	colDef := &ingitdb.CollectionDef{
+		ID:      "test.items",
+		DirPath: dir,
+		RecordFile: &ingitdb.RecordFileDef{
+			Name:       "{key}/{key}.yaml",
+			Format:     "yaml",
+			RecordType: ingitdb.SingleRecord,
+		},
+		Columns: map[string]*ingitdb.ColumnDef{
+			"name": {Type: ingitdb.ColumnTypeString},
+		},
+	}
+	def := &ingitdb.Definition{
+		Collections: map[string]*ingitdb.CollectionDef{"test.items": colDef},
+	}
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.items", "de")
+	data := map[string]any{"name": "Germany"}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Insert(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+
+	content, readErr := os.ReadFile(filepath.Join(dir, "de", "de.yaml"))
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	var got map[string]any
+	if err = yaml.Unmarshal(content, &got); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	if got["name"] != "Germany" {
+		t.Fatalf("expected name=Germany, got %v", got["name"])
+	}
+}
+
 func TestInsert_SingleRecord_AlreadyExists(t *testing.T) {
 	t.Parallel()
 

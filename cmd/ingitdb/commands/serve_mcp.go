@@ -41,10 +41,26 @@ func serveMCP(
 	logf func(...any),
 ) error {
 	_ = logf
+	tr := stdio.NewStdioServerTransport()
+	server := mcp.NewServer(tr, mcp.WithName("ingitdb"), mcp.WithVersion("1.0"))
+	if err := registerMCPTools(server, dirPath, readDefinition, newDB); err != nil {
+		return err
+	}
+	if err := server.Serve(); err != nil {
+		return fmt.Errorf("MCP server failed to start: %w", err)
+	}
+	<-ctx.Done()
+	return nil
+}
 
-	transport := stdio.NewStdioServerTransport()
-	server := mcp.NewServer(transport, mcp.WithName("ingitdb"), mcp.WithVersion("1.0"))
-
+// registerMCPTools registers the four CRUD tools on server. Extracted so tests
+// can supply a custom transport without going through serveMCP.
+func registerMCPTools(
+	server *mcp.Server,
+	dirPath string,
+	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
+	newDB func(string, *ingitdb.Definition) (dal.DB, error),
+) error {
 	if err := server.RegisterTool(
 		"create_record",
 		"Create a new record in a collection",
@@ -188,9 +204,5 @@ func serveMCP(
 		return fmt.Errorf("failed to register delete_record: %w", err)
 	}
 
-	if err := server.Serve(); err != nil {
-		return fmt.Errorf("MCP server failed to start: %w", err)
-	}
-	<-ctx.Done()
 	return nil
 }
