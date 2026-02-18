@@ -39,6 +39,15 @@ func TestRecordFileDefValidate(t *testing.T) {
 			},
 			err: "",
 		},
+		{
+			name: "valid_map_of_id_records",
+			def: RecordFileDef{
+				Name:       "records.json",
+				Format:     "json",
+				RecordType: "map[id]map[field]any",
+			},
+			err: "",
+		},
 	}
 
 	for _, tt := range tests {

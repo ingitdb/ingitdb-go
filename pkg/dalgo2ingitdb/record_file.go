@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,4 +117,110 @@ func deleteRecordFile(path string) error {
 		return dal.ErrRecordNotFound
 	}
 	return err
+}
+
+// readMapOfIDRecordsFile reads a file whose top-level keys are record IDs and whose
+// values are field maps (map[id]map[field]any layout).
+// Returns (nil, false, nil) if the file does not exist.
+func readMapOfIDRecordsFile(path string, format ingitdb.RecordFormat) (map[string]map[string]any, bool, error) {
+	raw, found, err := readRecordFromFile(path, format)
+	if err != nil || !found {
+		return nil, found, err
+	}
+	result := make(map[string]map[string]any, len(raw))
+	for id, val := range raw {
+		fields, ok := val.(map[string]any)
+		if !ok {
+			return nil, false, fmt.Errorf("record %q in %s is not a map", id, path)
+		}
+		result[id] = fields
+	}
+	return result, true, nil
+}
+
+// writeMapOfIDRecordsFile writes a map[id]map[field]any dataset back to a file.
+func writeMapOfIDRecordsFile(path string, format ingitdb.RecordFormat, data map[string]map[string]any) error {
+	raw := make(map[string]any, len(data))
+	for id, fields := range data {
+		raw[id] = fields
+	}
+	return writeRecordToFile(path, format, raw)
+}
+
+// applyLocaleToRead transforms record data from file representation to application representation.
+// For each column that has a Locale value set (e.g. column "title" with locale "en"),
+// the paired map column (e.g. "titles") is inspected: the locale entry is extracted and
+// exposed as the shortcut column ("title"), and that locale key is removed from the pair map
+// to avoid duplication. The caller receives e.g. {"title": "Work", "titles": {"ru": "Работа"}}.
+func applyLocaleToRead(data map[string]any, cols map[string]*ingitdb.ColumnDef) map[string]any {
+	if len(cols) == 0 {
+		return data
+	}
+	result := maps.Clone(data)
+	for colName, colDef := range cols {
+		if colDef.Locale == "" {
+			continue
+		}
+		pairField := colName + "s"
+		pairVal, ok := result[pairField]
+		if !ok {
+			continue
+		}
+		pairMap, ok := pairVal.(map[string]any)
+		if !ok {
+			continue
+		}
+		localeVal, exists := pairMap[colDef.Locale]
+		if !exists {
+			continue
+		}
+		result[colName] = localeVal
+		newPairMap := maps.Clone(pairMap)
+		delete(newPairMap, colDef.Locale)
+		result[pairField] = newPairMap
+	}
+	return result
+}
+
+// applyLocaleToWrite normalises record data before writing to file.
+// For each column that has a Locale value set (e.g. column "title" with locale "en"):
+//   - The shortcut column ("title") is stored as-is in the file.
+//   - If the paired map column ("titles") contains an entry for the primary locale key ("en"),
+//     that entry is promoted to the shortcut column and removed from the map, so the value is
+//     never duplicated across both fields.
+//   - If the paired map becomes empty after removing the primary locale entry, it is dropped
+//     from the result to avoid writing a redundant empty map.
+func applyLocaleToWrite(data map[string]any, cols map[string]*ingitdb.ColumnDef) map[string]any {
+	if len(cols) == 0 {
+		return data
+	}
+	result := maps.Clone(data)
+	for colName, colDef := range cols {
+		if colDef.Locale == "" {
+			continue
+		}
+		pairField := colName + "s"
+		pairVal, hasPair := result[pairField]
+		if !hasPair {
+			continue
+		}
+		pairMap, ok := pairVal.(map[string]any)
+		if !ok {
+			continue
+		}
+		// If the primary locale entry is in the pair map, promote it to the shortcut column.
+		if localeVal, exists := pairMap[colDef.Locale]; exists {
+			result[colName] = localeVal
+			newPairMap := maps.Clone(pairMap)
+			delete(newPairMap, colDef.Locale)
+			pairMap = newPairMap
+		}
+		// Drop the pair map if it is now empty.
+		if len(pairMap) == 0 {
+			delete(result, pairField)
+		} else {
+			result[pairField] = pairMap
+		}
+	}
+	return result
 }

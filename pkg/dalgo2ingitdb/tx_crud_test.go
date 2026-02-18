@@ -2,6 +2,7 @@ package dalgo2ingitdb
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -271,5 +272,538 @@ func TestDelete_SingleRecord_NotFound(t *testing.T) {
 	})
 	if !errors.Is(err, dal.ErrRecordNotFound) {
 		t.Fatalf("expected ErrRecordNotFound, got %v", err)
+	}
+}
+
+// makeMapOfIDDef builds a Definition with one MapOfIDRecords JSON collection.
+func makeMapOfIDDef(t *testing.T, dirPath string) *ingitdb.Definition {
+	t.Helper()
+	colDef := &ingitdb.CollectionDef{
+		ID:      "test.tags",
+		DirPath: dirPath,
+		RecordFile: &ingitdb.RecordFileDef{
+			Name:       "tags.json",
+			Format:     "json",
+			RecordType: ingitdb.MapOfIDRecords,
+		},
+		Columns: map[string]*ingitdb.ColumnDef{
+			"title":  {Type: ingitdb.ColumnTypeString, Locale: "en"},
+			"titles": {Type: ingitdb.ColumnTypeL10N, Required: true},
+		},
+	}
+	def := &ingitdb.Definition{
+		Collections: map[string]*ingitdb.CollectionDef{
+			"test.tags": colDef,
+		},
+	}
+	return def
+}
+
+// writeJSONMapOfIDFixture writes a map[string]map[string]any as a JSON file.
+func writeJSONMapOfIDFixture(t *testing.T, path string, data map[string]map[string]any) {
+	t.Helper()
+	content, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		t.Fatalf("json.MarshalIndent: %v", err)
+	}
+	if err = os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+}
+
+func TestGet_MapOfIDRecords_Found(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	writeJSONMapOfIDFixture(t, filepath.Join(dir, "tags.json"), map[string]map[string]any{
+		"work": {"titles": map[string]any{"en": "Work", "ru": "Работа"}},
+		"home": {"titles": map[string]any{"en": "Home", "ru": "Дом"}},
+	})
+
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "work")
+	data := map[string]any{}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadonlyTransaction(ctx, func(ctx context.Context, tx dal.ReadTransaction) error {
+		return tx.Get(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !record.Exists() {
+		t.Fatal("expected record to exist")
+	}
+	if data["title"] != "Work" {
+		t.Fatalf("expected title=Work (from locale shortcut), got %v", data["title"])
+	}
+	titles, ok := data["titles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected titles to be a map, got %T", data["titles"])
+	}
+	if _, hasEN := titles["en"]; hasEN {
+		t.Fatal("expected 'en' to be removed from titles after locale read transform")
+	}
+	if titles["ru"] != "Работа" {
+		t.Fatalf("expected titles.ru=Работа, got %v", titles["ru"])
+	}
+}
+
+func TestGet_MapOfIDRecords_KeyNotFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	writeJSONMapOfIDFixture(t, filepath.Join(dir, "tags.json"), map[string]map[string]any{
+		"work": {"titles": map[string]any{"en": "Work"}},
+	})
+
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "missing")
+	data := map[string]any{}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadonlyTransaction(ctx, func(ctx context.Context, tx dal.ReadTransaction) error {
+		return tx.Get(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if record.Exists() {
+		t.Fatal("expected record to not exist")
+	}
+}
+
+func TestGet_MapOfIDRecords_FileNotFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "work")
+	data := map[string]any{}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadonlyTransaction(ctx, func(ctx context.Context, tx dal.ReadTransaction) error {
+		return tx.Get(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if record.Exists() {
+		t.Fatal("expected record to not exist when file is missing")
+	}
+}
+
+func TestInsert_MapOfIDRecords(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "work")
+	data := map[string]any{
+		"title":  "Work",
+		"titles": map[string]any{"ru": "Работа"},
+	}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Insert(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+
+	raw, readErr := os.ReadFile(filepath.Join(dir, "tags.json"))
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	var got map[string]map[string]any
+	if err = json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	work, ok := got["work"]
+	if !ok {
+		t.Fatal("expected 'work' key in tags.json")
+	}
+	if work["title"] != "Work" {
+		t.Fatalf("expected title=Work stored directly in file, got %v", work["title"])
+	}
+	titles, ok := work["titles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'titles' to be a map, got %T", work["titles"])
+	}
+	if _, hasEN := titles["en"]; hasEN {
+		t.Fatal("expected 'en' NOT stored in titles (it belongs in the shortcut column)")
+	}
+	if titles["ru"] != "Работа" {
+		t.Fatalf("expected titles.ru=Работа preserved, got %v", titles["ru"])
+	}
+}
+
+func TestInsert_MapOfIDRecords_TitleOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "solo")
+	data := map[string]any{"title": "Solo"}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Insert(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+
+	raw, readErr := os.ReadFile(filepath.Join(dir, "tags.json"))
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	var got map[string]map[string]any
+	if err = json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	solo, ok := got["solo"]
+	if !ok {
+		t.Fatal("expected 'solo' key in tags.json")
+	}
+	if solo["title"] != "Solo" {
+		t.Fatalf("expected title=Solo stored directly, got %v", solo["title"])
+	}
+	if _, hasTitles := solo["titles"]; hasTitles {
+		t.Fatal("expected no 'titles' key when no other locales are provided")
+	}
+}
+
+func TestInsert_MapOfIDRecords_PrimaryLocaleInTitlesNormalized(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "norm")
+	// User supplies primary locale inside titles map — should be promoted to title.
+	data := map[string]any{
+		"titles": map[string]any{"en": "Norm", "ru": "Норм"},
+	}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Insert(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+
+	raw, readErr := os.ReadFile(filepath.Join(dir, "tags.json"))
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	var got map[string]map[string]any
+	if err = json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	norm, ok := got["norm"]
+	if !ok {
+		t.Fatal("expected 'norm' key in tags.json")
+	}
+	if norm["title"] != "Norm" {
+		t.Fatalf("expected title=Norm promoted from titles.en, got %v", norm["title"])
+	}
+	titles, ok := norm["titles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'titles' to be a map, got %T", norm["titles"])
+	}
+	if _, hasEN := titles["en"]; hasEN {
+		t.Fatal("expected 'en' removed from titles after promotion")
+	}
+	if titles["ru"] != "Норм" {
+		t.Fatalf("expected titles.ru=Норм, got %v", titles["ru"])
+	}
+}
+
+func TestInsert_MapOfIDRecords_AlreadyExists(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	writeJSONMapOfIDFixture(t, filepath.Join(dir, "tags.json"), map[string]map[string]any{
+		"work": {"titles": map[string]any{"en": "Work"}},
+	})
+
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "work")
+	data := map[string]any{"title": "Work Again"}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Insert(ctx, record)
+	})
+	if err == nil {
+		t.Fatal("expected error for duplicate key, got nil")
+	}
+}
+
+func TestSet_MapOfIDRecords(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	writeJSONMapOfIDFixture(t, filepath.Join(dir, "tags.json"), map[string]map[string]any{
+		"work": {"titles": map[string]any{"en": "Work", "ru": "Работа"}},
+	})
+
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "home")
+	data := map[string]any{
+		"title":  "Home",
+		"titles": map[string]any{"ru": "Дом"},
+	}
+	record := dal.NewRecordWithData(key, data)
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Set(ctx, record)
+	})
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	raw, readErr := os.ReadFile(filepath.Join(dir, "tags.json"))
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	var got map[string]map[string]any
+	if err = json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if _, ok := got["work"]; !ok {
+		t.Fatal("expected existing 'work' key to be preserved")
+	}
+	home, ok := got["home"]
+	if !ok {
+		t.Fatal("expected 'home' key to be added")
+	}
+	if home["title"] != "Home" {
+		t.Fatalf("expected title=Home stored directly, got %v", home["title"])
+	}
+	titles, ok := home["titles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected 'titles' to be a map, got %T", home["titles"])
+	}
+	if _, hasEN := titles["en"]; hasEN {
+		t.Fatal("expected 'en' NOT in titles (value belongs in shortcut column)")
+	}
+	if titles["ru"] != "Дом" {
+		t.Fatalf("expected titles.ru=Дом, got %v", titles["ru"])
+	}
+}
+
+func TestDelete_MapOfIDRecords(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	writeJSONMapOfIDFixture(t, filepath.Join(dir, "tags.json"), map[string]map[string]any{
+		"work": {"titles": map[string]any{"en": "Work"}},
+		"home": {"titles": map[string]any{"en": "Home"}},
+	})
+
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "work")
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Delete(ctx, key)
+	})
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	raw, readErr := os.ReadFile(filepath.Join(dir, "tags.json"))
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	var got map[string]map[string]any
+	if err = json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if _, ok := got["work"]; ok {
+		t.Fatal("expected 'work' key to be deleted")
+	}
+	if _, ok := got["home"]; !ok {
+		t.Fatal("expected 'home' key to be preserved")
+	}
+}
+
+func TestDelete_MapOfIDRecords_KeyNotFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	writeJSONMapOfIDFixture(t, filepath.Join(dir, "tags.json"), map[string]map[string]any{
+		"work": {"titles": map[string]any{"en": "Work"}},
+	})
+
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "ghost")
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Delete(ctx, key)
+	})
+	if !errors.Is(err, dal.ErrRecordNotFound) {
+		t.Fatalf("expected ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestDelete_MapOfIDRecords_FileNotFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := makeMapOfIDDef(t, dir)
+	db := openTestDB(t, dir, def)
+	ctx := context.Background()
+	key := dal.NewKeyWithID("test.tags", "work")
+
+	err := db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+		return tx.Delete(ctx, key)
+	})
+	if !errors.Is(err, dal.ErrRecordNotFound) {
+		t.Fatalf("expected ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestApplyLocaleToRead(t *testing.T) {
+	t.Parallel()
+
+	cols := map[string]*ingitdb.ColumnDef{
+		"title":  {Type: ingitdb.ColumnTypeString, Locale: "en"},
+		"titles": {Type: ingitdb.ColumnTypeL10N},
+	}
+	data := map[string]any{
+		"titles": map[string]any{"en": "Work", "ru": "Работа"},
+	}
+	result := applyLocaleToRead(data, cols)
+
+	if result["title"] != "Work" {
+		t.Fatalf("expected title=Work, got %v", result["title"])
+	}
+	titles, ok := result["titles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected titles to be a map, got %T", result["titles"])
+	}
+	if _, hasEN := titles["en"]; hasEN {
+		t.Fatal("expected 'en' removed from titles")
+	}
+	if titles["ru"] != "Работа" {
+		t.Fatalf("expected titles.ru=Работа, got %v", titles["ru"])
+	}
+}
+
+func TestApplyLocaleToWrite_ShortcutKept(t *testing.T) {
+	t.Parallel()
+
+	cols := map[string]*ingitdb.ColumnDef{
+		"title":  {Type: ingitdb.ColumnTypeString, Locale: "en"},
+		"titles": {Type: ingitdb.ColumnTypeL10N},
+	}
+	data := map[string]any{
+		"title":  "Work",
+		"titles": map[string]any{"ru": "Работа"},
+	}
+	result := applyLocaleToWrite(data, cols)
+
+	if result["title"] != "Work" {
+		t.Fatalf("expected title=Work kept in result, got %v", result["title"])
+	}
+	titles, ok := result["titles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected titles to be a map, got %T", result["titles"])
+	}
+	if _, hasEN := titles["en"]; hasEN {
+		t.Fatal("expected 'en' NOT in titles (value already in shortcut column)")
+	}
+	if titles["ru"] != "Работа" {
+		t.Fatalf("expected titles.ru=Работа preserved, got %v", titles["ru"])
+	}
+}
+
+func TestApplyLocaleToWrite_PrimaryLocalePromoted(t *testing.T) {
+	t.Parallel()
+
+	cols := map[string]*ingitdb.ColumnDef{
+		"title":  {Type: ingitdb.ColumnTypeString, Locale: "en"},
+		"titles": {Type: ingitdb.ColumnTypeL10N},
+	}
+	// Primary locale supplied inside the pair map — should be promoted to shortcut column.
+	data := map[string]any{
+		"titles": map[string]any{"en": "Work", "ru": "Работа"},
+	}
+	result := applyLocaleToWrite(data, cols)
+
+	if result["title"] != "Work" {
+		t.Fatalf("expected title=Work promoted from titles.en, got %v", result["title"])
+	}
+	titles, ok := result["titles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected titles to be a map, got %T", result["titles"])
+	}
+	if _, hasEN := titles["en"]; hasEN {
+		t.Fatal("expected 'en' removed from titles after promotion")
+	}
+	if titles["ru"] != "Работа" {
+		t.Fatalf("expected titles.ru=Работа preserved, got %v", titles["ru"])
+	}
+}
+
+func TestApplyLocaleToWrite_TitleOnlyNoTitles(t *testing.T) {
+	t.Parallel()
+
+	cols := map[string]*ingitdb.ColumnDef{
+		"title":  {Type: ingitdb.ColumnTypeString, Locale: "en"},
+		"titles": {Type: ingitdb.ColumnTypeL10N},
+	}
+	data := map[string]any{"title": "Solo"}
+	result := applyLocaleToWrite(data, cols)
+
+	if result["title"] != "Solo" {
+		t.Fatalf("expected title=Solo kept, got %v", result["title"])
+	}
+	if _, hasTitles := result["titles"]; hasTitles {
+		t.Fatal("expected no 'titles' key when none was provided")
+	}
+}
+
+func TestApplyLocaleToWrite_PrimaryLocaleOnlyInTitles(t *testing.T) {
+	t.Parallel()
+
+	cols := map[string]*ingitdb.ColumnDef{
+		"title":  {Type: ingitdb.ColumnTypeString, Locale: "en"},
+		"titles": {Type: ingitdb.ColumnTypeL10N},
+	}
+	// Only primary locale in titles — after promotion titles should be dropped.
+	data := map[string]any{
+		"titles": map[string]any{"en": "Solo"},
+	}
+	result := applyLocaleToWrite(data, cols)
+
+	if result["title"] != "Solo" {
+		t.Fatalf("expected title=Solo promoted, got %v", result["title"])
+	}
+	if _, hasTitles := result["titles"]; hasTitles {
+		t.Fatal("expected empty 'titles' map to be dropped")
 	}
 }

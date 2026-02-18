@@ -1,38 +1,44 @@
 {
-  "work": {
-    "titles": {
-      "en": "Work",
-      "ru": "Работа",
-      "es": "Trabajo",
-      "fr": "Travail",
-      "de": "Arbeit"
-    }
+  "abc123": {
+    "title": "Buy milk"
+  },
+  "def345": {
+    "title": "Buy eggs"
   },
   "home": {
     "titles": {
+      "de": "Zuhause",
       "en": "Home",
-      "ru": "Дом",
       "es": "Casa",
       "fr": "Maison",
-      "de": "Zuhause"
+      "ru": "Дом"
     }
   },
   "personal": {
     "titles": {
+      "de": "Persönlich",
       "en": "Personal",
-      "ru": "Личное",
       "es": "Personal",
       "fr": "Personnel",
-      "de": "Persönlich"
+      "ru": "Личное"
     }
   },
   "private": {
     "titles": {
+      "de": "Privat",
       "en": "Private",
-      "ru": "Личное",
       "es": "Privado",
       "fr": "Privé",
-      "de": "Privat"
+      "ru": "Личное"
+    }
+  },
+  "work": {
+    "titles": {
+      "de": "Arbeit",
+      "en": "Work",
+      "es": "Trabajo",
+      "fr": "Travail",
+      "ru": "Работа"
     }
   }
 }

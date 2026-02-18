@@ -10,9 +10,10 @@ import (
 type RecordType string
 
 const (
-	SingleRecord  RecordType = "map[string]any"
-	ListOfRecords RecordType = "[]map[string]any"
-	MapOfRecords  RecordType = "map[string]map[string]any"
+	SingleRecord   RecordType = "map[string]any"
+	ListOfRecords  RecordType = "[]map[string]any"
+	MapOfRecords   RecordType = "map[string]map[string]any"
+	MapOfIDRecords RecordType = "map[id]map[field]any"
 )
 
 type RecordFileDef struct {
@@ -23,6 +24,7 @@ type RecordFileDef struct {
 	// "map[string]any" - each record in a separate file
 	// "[]map[string]any" - list of records
 	// "map[string]map[string]any" - dictionary of records
+	// "map[id]map[field]any" - all records in one file; top-level keys are record IDs, second level is field names
 	RecordType RecordType `yaml:"type"`
 }
 
@@ -34,7 +36,7 @@ func (rfd RecordFileDef) Validate() error {
 		return fmt.Errorf("record file name cannot be empty")
 	}
 	switch rfd.RecordType {
-	case SingleRecord, ListOfRecords, MapOfRecords:
+	case SingleRecord, ListOfRecords, MapOfRecords, MapOfIDRecords:
 		// OK
 	default:
 		return fmt.Errorf("invalid record type %q", rfd.RecordType)

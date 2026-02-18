@@ -32,22 +32,41 @@ func (r readonlyTx) Get(ctx context.Context, record dal.Record) error {
 	if !ok {
 		return fmt.Errorf("collection %q not found in definition", collectionID)
 	}
-	if colDef.RecordFile.RecordType != ingitdb.SingleRecord {
-		return fmt.Errorf("not yet implemented for record type %q", colDef.RecordFile.RecordType)
-	}
 	recordKey := fmt.Sprintf("%v", key.ID)
 	path := resolveRecordPath(colDef, recordKey)
-	data, found, err := readRecordFromFile(path, colDef.RecordFile.Format)
-	if err != nil {
-		return err
+	switch colDef.RecordFile.RecordType {
+	case ingitdb.SingleRecord:
+		data, found, err := readRecordFromFile(path, colDef.RecordFile.Format)
+		if err != nil {
+			return err
+		}
+		if !found {
+			record.SetError(dal.ErrRecordNotFound)
+			return nil
+		}
+		record.SetError(nil)
+		target := record.Data().(map[string]any)
+		maps.Copy(target, data)
+	case ingitdb.MapOfIDRecords:
+		allRecords, found, err := readMapOfIDRecordsFile(path, colDef.RecordFile.Format)
+		if err != nil {
+			return err
+		}
+		if !found {
+			record.SetError(dal.ErrRecordNotFound)
+			return nil
+		}
+		recordData, exists := allRecords[recordKey]
+		if !exists {
+			record.SetError(dal.ErrRecordNotFound)
+			return nil
+		}
+		record.SetError(nil)
+		target := record.Data().(map[string]any)
+		maps.Copy(target, applyLocaleToRead(recordData, colDef.Columns))
+	default:
+		return fmt.Errorf("not yet implemented for record type %q", colDef.RecordFile.RecordType)
 	}
-	if !found {
-		record.SetError(dal.ErrRecordNotFound)
-		return nil
-	}
-	record.SetError(nil)
-	target := record.Data().(map[string]any)
-	maps.Copy(target, data)
 	return nil
 }
 

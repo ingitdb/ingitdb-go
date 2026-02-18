@@ -31,7 +31,20 @@ func (r readwriteTx) Set(ctx context.Context, record dal.Record) error {
 	record.SetError(nil)
 	path := resolveRecordPath(colDef, recordKey)
 	data := record.Data().(map[string]any)
-	return writeRecordToFile(path, colDef.RecordFile.Format, data)
+	switch colDef.RecordFile.RecordType {
+	case ingitdb.MapOfIDRecords:
+		allRecords, _, err := readMapOfIDRecordsFile(path, colDef.RecordFile.Format)
+		if err != nil {
+			return err
+		}
+		if allRecords == nil {
+			allRecords = make(map[string]map[string]any)
+		}
+		allRecords[recordKey] = applyLocaleToWrite(data, colDef.Columns)
+		return writeMapOfIDRecordsFile(path, colDef.RecordFile.Format, allRecords)
+	default:
+		return writeRecordToFile(path, colDef.RecordFile.Format, data)
+	}
 }
 
 func (r readwriteTx) SetMulti(ctx context.Context, records []dal.Record) error {
@@ -46,7 +59,23 @@ func (r readwriteTx) Delete(ctx context.Context, key *dal.Key) error {
 		return err
 	}
 	path := resolveRecordPath(colDef, recordKey)
-	return deleteRecordFile(path)
+	switch colDef.RecordFile.RecordType {
+	case ingitdb.MapOfIDRecords:
+		allRecords, found, err := readMapOfIDRecordsFile(path, colDef.RecordFile.Format)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return dal.ErrRecordNotFound
+		}
+		if _, exists := allRecords[recordKey]; !exists {
+			return dal.ErrRecordNotFound
+		}
+		delete(allRecords, recordKey)
+		return writeMapOfIDRecordsFile(path, colDef.RecordFile.Format, allRecords)
+	default:
+		return deleteRecordFile(path)
+	}
 }
 
 func (r readwriteTx) DeleteMulti(ctx context.Context, keys []*dal.Key) error {
@@ -75,20 +104,35 @@ func (r readwriteTx) Insert(ctx context.Context, record dal.Record, opts ...dal.
 	if err != nil {
 		return err
 	}
-	if colDef.RecordFile.RecordType != ingitdb.SingleRecord {
-		return fmt.Errorf("not yet implemented for record type %q", colDef.RecordFile.RecordType)
-	}
 	path := resolveRecordPath(colDef, recordKey)
-	_, statErr := os.Stat(path)
-	if statErr == nil {
-		return fmt.Errorf("record already exists: %s", path)
+	switch colDef.RecordFile.RecordType {
+	case ingitdb.MapOfIDRecords:
+		allRecords, _, err := readMapOfIDRecordsFile(path, colDef.RecordFile.Format)
+		if err != nil {
+			return err
+		}
+		if allRecords == nil {
+			allRecords = make(map[string]map[string]any)
+		}
+		if _, exists := allRecords[recordKey]; exists {
+			return fmt.Errorf("record already exists: %s in %s", recordKey, path)
+		}
+		record.SetError(nil)
+		data := record.Data().(map[string]any)
+		allRecords[recordKey] = applyLocaleToWrite(data, colDef.Columns)
+		return writeMapOfIDRecordsFile(path, colDef.RecordFile.Format, allRecords)
+	default:
+		_, statErr := os.Stat(path)
+		if statErr == nil {
+			return fmt.Errorf("record already exists: %s", path)
+		}
+		if !errors.Is(statErr, os.ErrNotExist) {
+			return fmt.Errorf("failed to check file %s: %w", path, statErr)
+		}
+		record.SetError(nil)
+		data := record.Data().(map[string]any)
+		return writeRecordToFile(path, colDef.RecordFile.Format, data)
 	}
-	if !errors.Is(statErr, os.ErrNotExist) {
-		return fmt.Errorf("failed to check file %s: %w", path, statErr)
-	}
-	record.SetError(nil)
-	data := record.Data().(map[string]any)
-	return writeRecordToFile(path, colDef.RecordFile.Format, data)
 }
 
 func (r readwriteTx) resolveCollection(key *dal.Key) (*ingitdb.CollectionDef, string, error) {
