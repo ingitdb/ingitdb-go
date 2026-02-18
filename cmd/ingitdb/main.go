@@ -45,9 +45,9 @@ func run(
 		ErrWriter: os.Stderr,
 		Commands: []*cli.Command{
 			commands.Version(version, commit, date),
-			commands.Validate(homeDir, getWd, readDefinition, logf),
+			commands.Validate(homeDir, getWd, readDefinition, nil, nil, logf),
 			commands.Query(),
-			commands.Materialize(),
+			commands.Materialize(homeDir, getWd, readDefinition, nil, logf),
 			commands.Pull(),
 			commands.Setup(),
 			commands.Resolve(),

@@ -13,6 +13,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// definitionReader wraps ReadDefinition to satisfy ingitdb.CollectionsReader.
+type definitionReader struct{}
+
+// NewCollectionsReader returns an ingitdb.CollectionsReader backed by ReadDefinition.
+func NewCollectionsReader() ingitdb.CollectionsReader { return definitionReader{} }
+
+func (definitionReader) ReadDefinition(dbPath string, opts ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+	return ReadDefinition(dbPath, opts...)
+}
+
 func ReadDefinition(rootPath string, o ...ingitdb.ReadOption) (def *ingitdb.Definition, err error) {
 	opts := ingitdb.NewReadOptions(o...)
 	var rootConfig config.RootConfig
