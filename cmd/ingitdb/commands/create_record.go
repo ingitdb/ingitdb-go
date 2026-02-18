@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"maps"
 
 	"github.com/dal-go/dalgo/dal"
 	"github.com/urfave/cli/v3"
@@ -13,23 +12,7 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
-// Update returns the update command group.
-func Update(
-	homeDir func() (string, error),
-	getWd func() (string, error),
-	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
-	newDB func(string, *ingitdb.Definition) (dal.DB, error),
-	logf func(...any),
-) *cli.Command {
-	return &cli.Command{
-		Name:     "update",
-		Aliases:  []string{"u"},
-		Usage:    "Update database objects",
-		Commands: []*cli.Command{updateRecord(homeDir, getWd, readDefinition, newDB, logf)},
-	}
-}
-
-func updateRecord(
+func createRecord(
 	homeDir func() (string, error),
 	getWd func() (string, error),
 	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
@@ -38,7 +21,7 @@ func updateRecord(
 ) *cli.Command {
 	return &cli.Command{
 		Name:  "record",
-		Usage: "Update fields of an existing record",
+		Usage: "Create a new record in a collection",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "path",
@@ -50,8 +33,8 @@ func updateRecord(
 				Required: true,
 			},
 			&cli.StringFlag{
-				Name:     "set",
-				Usage:    "fields to update as YAML or JSON (e.g. '{title: \"Ireland, Republic of\"}')",
+				Name:     "data",
+				Usage:    "record data as YAML or JSON (e.g. '{title: \"Ireland\"}')",
 				Required: true,
 			},
 		},
@@ -60,7 +43,7 @@ func updateRecord(
 			if err != nil {
 				return err
 			}
-			_ = logf
+			logf("inGitDB db path: ", dirPath)
 
 			def, err := readDefinition(dirPath)
 			if err != nil {
@@ -73,10 +56,10 @@ func updateRecord(
 				return fmt.Errorf("invalid --id: %w", err)
 			}
 
-			setStr := cmd.String("set")
-			var patch map[string]any
-			if err = yaml.Unmarshal([]byte(setStr), &patch); err != nil {
-				return fmt.Errorf("failed to parse --set: %w", err)
+			dataStr := cmd.String("data")
+			var data map[string]any
+			if err = yaml.Unmarshal([]byte(dataStr), &data); err != nil {
+				return fmt.Errorf("failed to parse --data: %w", err)
 			}
 
 			db, err := newDB(dirPath, def)
@@ -85,18 +68,10 @@ func updateRecord(
 			}
 
 			key := dal.NewKeyWithID(colDef.ID, recordKey)
+			record := dal.NewRecordWithData(key, data)
 
 			return db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
-				data := map[string]any{}
-				record := dal.NewRecordWithData(key, data)
-				if getErr := tx.Get(ctx, record); getErr != nil {
-					return getErr
-				}
-				if !record.Exists() {
-					return fmt.Errorf("record not found: %s", id)
-				}
-				maps.Copy(data, patch)
-				return tx.Set(ctx, record)
+				return tx.Insert(ctx, record)
 			})
 		},
 	}

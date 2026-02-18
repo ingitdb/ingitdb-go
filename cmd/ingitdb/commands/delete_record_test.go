@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,16 +13,17 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
-func TestReadRecord_Success(t *testing.T) {
+func TestDeleteRecord_Success(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	def := testDef(dir)
-	content, err := yaml.Marshal(map[string]any{"name": "Test"})
+	content, err := yaml.Marshal(map[string]any{"name": "Bye"})
 	if err != nil {
 		t.Fatalf("yaml.Marshal: %v", err)
 	}
-	if err = os.WriteFile(filepath.Join(dir, "r1.yaml"), content, 0o644); err != nil {
+	path := filepath.Join(dir, "bye.yaml")
+	if err = os.WriteFile(path, content, 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -33,14 +35,16 @@ func TestReadRecord_Success(t *testing.T) {
 	}
 	logf := func(...any) {}
 
-	cmd := Read(homeDir, getWd, readDef, newDB, logf)
-	runErr := runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/r1")
-	if runErr != nil {
-		t.Fatalf("ReadRecord: %v", runErr)
+	cmd := Delete(homeDir, getWd, readDef, newDB, logf)
+	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/bye"); err != nil {
+		t.Fatalf("delete record: %v", err)
+	}
+	if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatal("expected file to be deleted")
 	}
 }
 
-func TestReadRecord_NotFound(t *testing.T) {
+func TestDeleteRecord_NotFound(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -54,7 +58,7 @@ func TestReadRecord_NotFound(t *testing.T) {
 	}
 	logf := func(...any) {}
 
-	cmd := Read(homeDir, getWd, readDef, newDB, logf)
+	cmd := Delete(homeDir, getWd, readDef, newDB, logf)
 	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/ghost")
 	if err == nil {
 		t.Fatal("expected error for not-found record")

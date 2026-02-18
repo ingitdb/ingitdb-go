@@ -1,39 +1,27 @@
 package commands
 
 import (
-	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/dal-go/dalgo/dal"
-	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
-func newTestApp(cmds ...*cli.Command) *cli.Command {
-	return &cli.Command{Commands: cmds}
-}
-
-func testContext() context.Context {
-	return context.Background()
-}
-
-func TestDeleteRecord_Success(t *testing.T) {
+func TestUpdate_Success(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	def := testDef(dir)
-	content, err := yaml.Marshal(map[string]any{"name": "Bye"})
+	initial, err := yaml.Marshal(map[string]any{"name": "Old"})
 	if err != nil {
 		t.Fatalf("yaml.Marshal: %v", err)
 	}
-	path := filepath.Join(dir, "bye.yaml")
-	if err = os.WriteFile(path, content, 0o644); err != nil {
+	if err = os.WriteFile(filepath.Join(dir, "item.yaml"), initial, 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -45,18 +33,25 @@ func TestDeleteRecord_Success(t *testing.T) {
 	}
 	logf := func(...any) {}
 
-	delCmd := Delete(homeDir, getWd, readDef, newDB, logf)
-	app := newTestApp(delCmd)
-	runErr := app.Run(testContext(), []string{"app", "delete", "record", "--path=" + dir, "--id=test/items/bye"})
-	if runErr != nil {
-		t.Fatalf("delete record: %v", runErr)
+	cmd := Update(homeDir, getWd, readDef, newDB, logf)
+	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/item", "--set={name: New}"); err != nil {
+		t.Fatalf("Update: %v", err)
 	}
-	if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatal("expected file to be deleted")
+
+	content, readErr := os.ReadFile(filepath.Join(dir, "item.yaml"))
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	var got map[string]any
+	if err = yaml.Unmarshal(content, &got); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+	if got["name"] != "New" {
+		t.Fatalf("expected name=New, got %v", got["name"])
 	}
 }
 
-func TestDeleteRecord_NotFound(t *testing.T) {
+func TestUpdate_NotFound(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -70,9 +65,8 @@ func TestDeleteRecord_NotFound(t *testing.T) {
 	}
 	logf := func(...any) {}
 
-	delCmd := Delete(homeDir, getWd, readDef, newDB, logf)
-	app := newTestApp(delCmd)
-	err := app.Run(testContext(), []string{"app", "delete", "record", "--path=" + dir, "--id=test/items/ghost"})
+	cmd := Update(homeDir, getWd, readDef, newDB, logf)
+	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/ghost", "--set={name: X}")
 	if err == nil {
 		t.Fatal("expected error for not-found record")
 	}
