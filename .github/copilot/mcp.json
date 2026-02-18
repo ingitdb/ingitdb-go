@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ingitdb": {
+      "type": "local",
+      "command": "go",
+      "args": ["run", "./cmd/ingitdb", "serve", "--mcp", "--path", "."],
+      "tools": ["*"]
+    }
+  }
+}
