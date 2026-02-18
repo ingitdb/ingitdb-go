@@ -10,7 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/ingitdb/ingitdb-cli/cmd/ingitdb/commands"
-	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2fsingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/validator"
 )
@@ -42,7 +42,7 @@ func run(
 	logf func(...any),
 ) {
 	newDB := func(rootDirPath string, def *ingitdb.Definition) (dal.DB, error) {
-		return dalgo2ingitdb.NewLocalDBWithDef(rootDirPath, def)
+		return dalgo2fsingitdb.NewLocalDBWithDef(rootDirPath, def)
 	}
 	app := &cli.Command{
 		Name:      "ingitdb",
@@ -58,7 +58,7 @@ func run(
 			commands.Resolve(),
 			commands.Watch(),
 			commands.Serve(homeDir, getWd, readDefinition, newDB, logf),
-			commands.List(),
+			commands.List(homeDir, getWd, readDefinition),
 			commands.Find(),
 			commands.Create(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Read(homeDir, getWd, readDefinition, newDB, logf),

@@ -1,4 +1,4 @@
-package dalgo2ingitdb
+package dalgo2fsingitdb
 
 import (
 	"context"

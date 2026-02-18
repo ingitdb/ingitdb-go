@@ -14,16 +14,20 @@ import (
 
 var _ dal.DB = (*githubDB)(nil)
 
-// NewGitHubDB creates a read-only GitHub repository adapter.
+// NewGitHubDB creates a GitHub repository adapter.
 // Note: Definition is required for most operations, so prefer NewGitHubDBWithDef.
 func NewGitHubDB(cfg Config) (dal.DB, error) {
 	reader, err := NewGitHubFileReader(cfg)
 	if err != nil {
 		return nil, err
 	}
+	concrete, ok := reader.(*githubFileReader)
+	if !ok {
+		return nil, fmt.Errorf("internal error: expected *githubFileReader")
+	}
 	db := &githubDB{
 		cfg:        cfg,
-		fileReader: reader,
+		fileReader: concrete,
 	}
 	return db, nil
 }
@@ -36,10 +40,14 @@ func NewGitHubDBWithDef(cfg Config, def *ingitdb.Definition) (dal.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	concrete, ok := reader.(*githubFileReader)
+	if !ok {
+		return nil, fmt.Errorf("internal error: expected *githubFileReader")
+	}
 	db := &githubDB{
 		cfg:        cfg,
 		def:        def,
-		fileReader: reader,
+		fileReader: concrete,
 	}
 	return db, nil
 }
@@ -47,7 +55,7 @@ func NewGitHubDBWithDef(cfg Config, def *ingitdb.Definition) (dal.DB, error) {
 type githubDB struct {
 	cfg        Config
 	def        *ingitdb.Definition
-	fileReader FileReader
+	fileReader *githubFileReader
 }
 
 func (db *githubDB) ID() string {
@@ -69,8 +77,9 @@ func (db *githubDB) RunReadonlyTransaction(ctx context.Context, f dal.ROTxWorker
 }
 
 func (db *githubDB) RunReadwriteTransaction(ctx context.Context, f dal.RWTxWorker, options ...dal.TransactionOption) error {
-	_, _, _ = ctx, f, options
-	return fmt.Errorf("read-write transactions are not supported by %s", DatabaseID)
+	_ = options
+	tx := readwriteTx{readonlyTx: readonlyTx{db: db}}
+	return f(ctx, tx)
 }
 
 func (db *githubDB) Get(ctx context.Context, record dal.Record) error {

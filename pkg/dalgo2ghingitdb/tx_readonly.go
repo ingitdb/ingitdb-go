@@ -7,6 +7,7 @@ import (
 
 	"github.com/dal-go/dalgo/dal"
 	"github.com/dal-go/dalgo/recordset"
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
@@ -91,9 +92,9 @@ func (r readonlyTx) readSingleRecord(ctx context.Context, recordPath string, col
 	if !found {
 		return nil, false, nil
 	}
-	data, err := parseRecordContent(content, colDef.RecordFile.Format)
-	if err != nil {
-		return nil, false, err
+	data, parseErr := dalgo2ingitdb.ParseRecordContent(content, colDef.RecordFile.Format)
+	if parseErr != nil {
+		return nil, false, parseErr
 	}
 	return data, true, nil
 }
@@ -106,14 +107,30 @@ func (r readonlyTx) readRecordFromMap(ctx context.Context, recordPath, recordKey
 	if !found {
 		return nil, false, nil
 	}
-	allRecords, err := parseMapOfIDRecordsContent(content, colDef.RecordFile.Format)
-	if err != nil {
-		return nil, false, err
+	allRecords, parseErr := dalgo2ingitdb.ParseMapOfIDRecordsContent(content, colDef.RecordFile.Format)
+	if parseErr != nil {
+		return nil, false, parseErr
 	}
 	recordData, exists := allRecords[recordKey]
 	if !exists {
 		return nil, false, nil
 	}
-	localizedData := applyLocaleToRead(recordData, colDef.Columns)
+	localizedData := dalgo2ingitdb.ApplyLocaleToRead(recordData, colDef.Columns)
 	return localizedData, true, nil
+}
+
+func (r readonlyTx) resolveCollection(key *dal.Key) (*ingitdb.CollectionDef, string, error) {
+	if r.db.def == nil {
+		return nil, "", fmt.Errorf("definition is required")
+	}
+	collectionID := key.Collection()
+	colDef, ok := r.db.def.Collections[collectionID]
+	if !ok {
+		return nil, "", fmt.Errorf("collection %q not found in definition", collectionID)
+	}
+	if colDef.RecordFile == nil {
+		return nil, "", fmt.Errorf("collection %q has no record file", collectionID)
+	}
+	recordKey := fmt.Sprintf("%v", key.ID)
+	return colDef, recordKey, nil
 }

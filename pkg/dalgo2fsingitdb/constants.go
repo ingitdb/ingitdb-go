@@ -1,3 +1,3 @@
-package dalgo2ingitdb
+package dalgo2fsingitdb
 
 const DatabaseID = "ingitdb"

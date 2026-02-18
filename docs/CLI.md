@@ -55,6 +55,110 @@ ingitdb validate --from-commit=abc1234 --to-commit=def5678
 
 ---
 
+### `read record` — read a single record
+
+```
+ingitdb read record --id=ID [--path=PATH] [--format=yaml|json]
+ingitdb read record --id=ID --github=OWNER/REPO[@REF] [--token=TOKEN] [--format=yaml|json]
+```
+
+Reads a single record by ID and writes it to stdout.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--id=ID` | yes | Record ID as `collection/path/key` (e.g. `countries/ie`). |
+| `--path=PATH` | no | Path to the local database directory. Defaults to the current working directory. |
+| `--github=OWNER/REPO[@REF]` | no | GitHub repository as `owner/repo` or `owner/repo@ref`. Mutually exclusive with `--path`. |
+| `--token=TOKEN` | no | GitHub personal access token. Falls back to `GITHUB_TOKEN` env var. |
+| `--format=FORMAT` | no | Output format: `yaml` (default) or `json`. |
+
+**Examples:**
+
+```shell
+# Read from the current directory
+ingitdb read record --id=countries/ie
+
+# Read from a specific local path
+ingitdb read record --path=/var/db/myapp --id=countries/ie
+
+# Read from a public GitHub repository
+ingitdb read record --github=ingitdb/ingitdb-cli --id=todo.tags/active
+
+# Read from a specific branch on GitHub, output as JSON
+ingitdb read record --github=ingitdb/ingitdb-cli@main --id=todo.tags/active --format=json
+
+# Read from a private GitHub repository
+export GITHUB_TOKEN=ghp_...
+ingitdb read record --github=myorg/private-db --id=users/alice
+```
+
+See [GitHub Direct Access](features/github-direct-access.md) for more detail.
+
+---
+
+### `create record` — create a new record
+
+```
+ingitdb create record --id=ID --data=YAML [--path=PATH]
+ingitdb create record --id=ID --data=YAML --github=OWNER/REPO[@REF] [--token=TOKEN]
+```
+
+Creates a new record. Fails if a record with the same key already exists in the collection.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--id=ID` | yes | Record ID as `collection/path/key`. |
+| `--data=YAML` | yes | Record fields as YAML or JSON (e.g. `'{name: Ireland}'`). |
+| `--path=PATH` | no | Path to the local database directory. Defaults to the current working directory. |
+| `--github=OWNER/REPO[@REF]` | no | GitHub repository. Mutually exclusive with `--path`. |
+| `--token=TOKEN` | no | GitHub personal access token. Falls back to `GITHUB_TOKEN`. Required for GitHub writes. |
+
+**Examples:**
+
+```shell
+# Create a record locally
+ingitdb create record --id=countries/ie --data='{name: Ireland}'
+
+# Create a record in a GitHub repository
+export GITHUB_TOKEN=ghp_...
+ingitdb create record --github=myorg/mydb --id=countries/ie \
+  --data='{name: Ireland, capital: Dublin, population: 5000000}'
+```
+
+---
+
+### `update record` — update fields of an existing record
+
+```
+ingitdb update record --id=ID --set=YAML [--path=PATH]
+ingitdb update record --id=ID --set=YAML --github=OWNER/REPO[@REF] [--token=TOKEN]
+```
+
+Updates fields of an existing record using patch semantics: only the fields listed in `--set`
+are changed; all other fields are preserved.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--id=ID` | yes | Record ID as `collection/path/key`. |
+| `--set=YAML` | yes | Fields to patch as YAML or JSON (e.g. `'{capital: Dublin}'`). |
+| `--path=PATH` | no | Path to the local database directory. Defaults to the current working directory. |
+| `--github=OWNER/REPO[@REF]` | no | GitHub repository. Mutually exclusive with `--path`. |
+| `--token=TOKEN` | no | GitHub personal access token. Falls back to `GITHUB_TOKEN`. Required for GitHub writes. |
+
+**Examples:**
+
+```shell
+# Patch a record locally
+ingitdb update record --id=countries/ie --set='{capital: Dublin}'
+
+# Patch a record in a GitHub repository
+export GITHUB_TOKEN=ghp_...
+ingitdb update record --github=myorg/mydb --id=countries/ie \
+  --set='{capital: Dublin, population: 5100000}'
+```
+
+---
+
 ### `query` — query records from a collection *(not yet implemented)*
 
 ```
@@ -267,7 +371,7 @@ ingitdb serve --mcp --http --watcher --path=/var/db/myapp
 
 ---
 
-### `list` — list database objects *(not yet implemented)*
+### `list` — list database objects
 
 Top-level command with three subcommands. Shared flags on every subcommand:
 
@@ -281,24 +385,40 @@ Top-level command with three subcommands. Shared flags on every subcommand:
 
 ```
 ingitdb list collections [--path=PATH] [--in=REGEXP] [--filter-name=PATTERN]
+ingitdb list collections --github=OWNER/REPO[@REF] [--token=TOKEN]
 ```
 
-Lists all collection paths defined in the database.
+Lists all collection IDs defined in the database.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--path=PATH` | no | Path to the local database directory. Defaults to the current working directory. |
+| `--github=OWNER/REPO[@REF]` | no | GitHub repository as `owner/repo` or `owner/repo@ref`. Mutually exclusive with `--path`. |
+| `--token=TOKEN` | no | GitHub personal access token. Falls back to `GITHUB_TOKEN` env var. Required for private repos. |
+| `--in=REGEXP` | no | Regular expression that matches the starting-point path. |
+| `--filter-name=PATTERN` | no | Glob-style pattern to filter collection names (e.g. `*city*`). |
 
 **Examples:**
 
 ```shell
-# List all collections
+# List all collections in the current directory
 ingitdb list collections
 
-# List collections nested under a matching path
+# List collections from a GitHub repository (no token needed for public repos)
+ingitdb list collections --github=ingitdb/ingitdb-cli
+
+# Pin to a specific branch or tag
+ingitdb list collections --github=ingitdb/ingitdb-cli@main
+
+# Private repository
+export GITHUB_TOKEN=ghp_...
+ingitdb list collections --github=myorg/private-db
+
+# Local: list collections nested under a matching path
 ingitdb list collections --in='countries/(ie|gb)'
 
-# List collections whose name contains "city"
+# Local: list collections whose name contains "city"
 ingitdb list collections --filter-name='*city*'
-
-# Combined: scope and filter
-ingitdb list collections --in='countries/(provinces|counties)' --filter-name='*ire*'
 ```
 
 #### `list view`
@@ -376,9 +496,39 @@ ingitdb find --exact=Ireland --in='countries/.*' --fields=country
 
 ---
 
-### `delete` — delete database objects *(not yet implemented)*
+### `delete` — delete database objects
 
-Top-level command with three subcommands.
+Top-level command with four subcommands. `delete record` is implemented; the rest are planned.
+
+#### `delete record`
+
+```
+ingitdb delete record --id=ID [--path=PATH]
+ingitdb delete record --id=ID --github=OWNER/REPO[@REF] [--token=TOKEN]
+```
+
+Deletes a single record by ID. For `SingleRecord` collections, the record file is removed. For
+`MapOfIDRecords` collections, the key is removed from the shared map file.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--id=ID` | yes | Record ID as `collection/path/key`. |
+| `--path=PATH` | no | Path to the local database directory. Defaults to the current working directory. |
+| `--github=OWNER/REPO[@REF]` | no | GitHub repository. Mutually exclusive with `--path`. |
+| `--token=TOKEN` | no | GitHub personal access token. Falls back to `GITHUB_TOKEN`. Required for GitHub writes. |
+
+**Examples:**
+
+```shell
+# Delete a record locally
+ingitdb delete record --id=countries/ie
+
+# Delete a record in a GitHub repository
+export GITHUB_TOKEN=ghp_...
+ingitdb delete record --github=myorg/mydb --id=countries/ie
+```
+
+The following subcommands are planned but not yet implemented:
 
 #### `delete collection`
 

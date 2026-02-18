@@ -42,6 +42,7 @@ A one-line description of each document, grouped by purpose.
 | [CLI](CLI.md) | Every subcommand, flag, and exit code for the `ingitdb` binary |
 | [Configuration](configuration/README.md) | Root DB config (`.ingitdb.yaml`) and per-collection schema files |
 | [Features](features/README.md) | Full feature list with status (WIP / pending) and links to detail pages |
+| [GitHub Direct Access](features/github-direct-access.md) | Read and write records in remote GitHub repositories without cloning |
 
 ### Developer docs
 
@@ -70,9 +71,12 @@ A one-line description of each document, grouped by purpose.
 |---|---|---|---|
 | `version` | — | implemented | Print build version, commit hash, and date |
 | `validate` | — | implemented | Check schema and data against `.ingitdb.yaml` |
-| `list` | `collections` `view` `subscribers` | planned | List schema objects, optionally scoped with `--in` and `--filter-name` |
+| `read` | `record` | implemented | Read a single record by ID (local or GitHub) |
+| `create` | `record` | implemented | Create a new record (local or GitHub) |
+| `update` | `record` | implemented | Update fields of an existing record (local or GitHub) |
+| `delete` | `record` `collection` `view` `records` | `record` implemented; others planned | Remove a record, collection, view definition, or individual records |
+| `list` | `collections` `view` `subscribers` | `collections` implemented; others planned | List schema objects, optionally scoped with `--in` and `--filter-name` |
 | `find` | — | planned | Search records by `--substr`, `--re`, or `--exact`; scope with `--in`, `--fields`, `--limit` |
-| `delete` | `collection` `view` `records` | planned | Remove a collection, a view definition, or individual records |
 | `truncate` | — | planned | Remove all records from a collection while keeping its schema |
 | `query` | — | planned | Query and format records from a collection |
 | `materialize` | — | planned | Build materialized views into `$views/` |

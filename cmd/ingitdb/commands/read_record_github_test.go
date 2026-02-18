@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/dal-go/dalgo/dal"
+	"github.com/urfave/cli/v3"
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
 type fakeFileReader struct {
-	files map[string][]byte
+	files       map[string][]byte
+	directories map[string][]string
 }
 
 func (f fakeFileReader) ReadFile(_ context.Context, filePath string) ([]byte, bool, error) {
@@ -20,6 +22,14 @@ func (f fakeFileReader) ReadFile(_ context.Context, filePath string) ([]byte, bo
 		return nil, false, nil
 	}
 	return content, true, nil
+}
+
+func (f fakeFileReader) ListDirectory(_ context.Context, dirPath string) ([]string, error) {
+	entries, ok := f.directories[dirPath]
+	if !ok {
+		return []string{}, nil
+	}
+	return entries, nil
 }
 
 func TestParseGitHubRepoSpec(t *testing.T) {
@@ -119,6 +129,113 @@ func TestReadRecord_GitHubWithPathUnsupported(t *testing.T) {
 	err := runCLICommand(cmd, "--id=todo.tags/active", "--github=ingitdb/ingitdb-cli", "--path=/tmp/cache")
 	if err == nil {
 		t.Fatal("expected error for --github with --path")
+	}
+}
+
+func TestGithubToken_FromFlag(t *testing.T) {
+	t.Parallel()
+	app := &cli.Command{
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "token"},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			token := githubToken(cmd)
+			if token != "test-token" {
+				t.Fatalf("expected test-token, got %s", token)
+			}
+			return nil
+		},
+	}
+	err := app.Run(context.Background(), []string{"app", "--token=test-token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGithubToken_FromEnv(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "env-token")
+	app := &cli.Command{
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "token"},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			token := githubToken(cmd)
+			if token != "env-token" {
+				t.Fatalf("expected env-token, got %s", token)
+			}
+			return nil
+		},
+	}
+	err := app.Run(context.Background(), []string{"app"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGithubToken_FlagTakesPrecedence(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "env-token")
+	app := &cli.Command{
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "token"},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			token := githubToken(cmd)
+			if token != "flag-token" {
+				t.Fatalf("expected flag-token, got %s", token)
+			}
+			return nil
+		},
+	}
+	err := app.Run(context.Background(), []string{"app", "--token=flag-token"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewGitHubConfig(t *testing.T) {
+	t.Parallel()
+	spec := githubRepoSpec{
+		Owner: "testowner",
+		Repo:  "testrepo",
+		Ref:   "main",
+	}
+	cfg := newGitHubConfig(spec, "test-token")
+	if cfg.Owner != "testowner" {
+		t.Fatalf("expected owner testowner, got %s", cfg.Owner)
+	}
+	if cfg.Repo != "testrepo" {
+		t.Fatalf("expected repo testrepo, got %s", cfg.Repo)
+	}
+	if cfg.Ref != "main" {
+		t.Fatalf("expected ref main, got %s", cfg.Ref)
+	}
+	if cfg.Token != "test-token" {
+		t.Fatalf("expected token test-token, got %s", cfg.Token)
+	}
+}
+
+func TestListCollections_GitHub(t *testing.T) {
+	t.Parallel()
+	reader := fakeFileReader{
+		files: map[string][]byte{
+			".ingitdb.yaml": []byte("rootCollections:\n  countries: test-ingitdb/countries\n  todo: test-ingitdb/todo/*\n"),
+		},
+		directories: map[string][]string{
+			"test-ingitdb/todo/": []string{"tags", "tasks"},
+		},
+	}
+	collections, err := listCollectionsFromFileReader(&reader)
+	if err != nil {
+		t.Fatalf("listCollectionsFromFileReader: %v", err)
+	}
+	expectedCollections := []string{"countries", "todo.tags", "todo.tasks"}
+	if len(collections) != len(expectedCollections) {
+		t.Fatalf("expected %d collections, got %d", len(expectedCollections), len(collections))
+	}
+	for i, expected := range expectedCollections {
+		if collections[i] != expected {
+			t.Fatalf("expected collection %q at index %d, got %q", expected, i, collections[i])
+		}
 	}
 }
 

@@ -16,6 +16,7 @@ type Config struct {
 	Owner      string
 	Repo       string
 	Ref        string
+	Token      string
 	APIBaseURL string
 	HTTPClient *http.Client
 }
@@ -33,6 +34,7 @@ func (c Config) validate() error {
 // FileReader reads repository files by path from GitHub.
 type FileReader interface {
 	ReadFile(ctx context.Context, path string) (content []byte, found bool, err error)
+	ListDirectory(ctx context.Context, dirPath string) (entries []string, err error)
 }
 
 type githubFileReader struct {
@@ -50,6 +52,9 @@ func NewGitHubFileReader(cfg Config) (FileReader, error) {
 		httpClient = http.DefaultClient
 	}
 	client := github.NewClient(httpClient)
+	if cfg.Token != "" {
+		client = client.WithAuthToken(cfg.Token)
+	}
 	if cfg.APIBaseURL != "" {
 		baseURL := cfg.APIBaseURL
 		if !strings.HasSuffix(baseURL, "/") {
@@ -100,6 +105,91 @@ func isGitHubNotFound(err error, resp *github.Response) bool {
 		return true
 	}
 	return false
+}
+
+func (r githubFileReader) ListDirectory(ctx context.Context, dirPath string) (entries []string, err error) {
+	cleanPath := strings.TrimPrefix(dirPath, "/")
+	opts := github.RepositoryContentGetOptions{}
+	if r.cfg.Ref != "" {
+		opts.Ref = r.cfg.Ref
+	}
+	_, directoryContent, resp, err := r.client.Repositories.GetContents(ctx, r.cfg.Owner, r.cfg.Repo, cleanPath, &opts)
+	if err != nil {
+		if isGitHubNotFound(err, resp) {
+			return nil, nil
+		}
+		wrappedErr := wrapGitHubError(cleanPath, err, resp)
+		return nil, wrappedErr
+	}
+	result := make([]string, 0, len(directoryContent))
+	for _, entry := range directoryContent {
+		result = append(result, entry.GetName())
+	}
+	return result, nil
+}
+
+func (r githubFileReader) readFileWithSHA(ctx context.Context, filePath string) (content []byte, sha string, found bool, err error) {
+	cleanPath := strings.TrimPrefix(filePath, "/")
+	opts := github.RepositoryContentGetOptions{}
+	if r.cfg.Ref != "" {
+		opts.Ref = r.cfg.Ref
+	}
+	fileContent, _, resp, err := r.client.Repositories.GetContents(ctx, r.cfg.Owner, r.cfg.Repo, cleanPath, &opts)
+	if err != nil {
+		if isGitHubNotFound(err, resp) {
+			return nil, "", false, nil
+		}
+		wrappedErr := wrapGitHubError(cleanPath, err, resp)
+		return nil, "", false, wrappedErr
+	}
+	if fileContent == nil {
+		return nil, "", false, fmt.Errorf("path is not a file: %s", cleanPath)
+	}
+	decodedContent, decodeErr := fileContent.GetContent()
+	if decodeErr != nil {
+		return nil, "", false, fmt.Errorf("failed to decode github file content: %w", decodeErr)
+	}
+	return []byte(decodedContent), fileContent.GetSHA(), true, nil
+}
+
+func (r githubFileReader) writeFile(ctx context.Context, filePath, message string, content []byte, sha string) error {
+	cleanPath := strings.TrimPrefix(filePath, "/")
+	opts := &github.RepositoryContentFileOptions{
+		Message: &message,
+		Content: content,
+	}
+	if r.cfg.Ref != "" {
+		opts.Branch = &r.cfg.Ref
+	}
+	var err error
+	if sha == "" {
+		_, _, err = r.client.Repositories.CreateFile(ctx, r.cfg.Owner, r.cfg.Repo, cleanPath, opts)
+	} else {
+		opts.SHA = &sha
+		_, _, err = r.client.Repositories.UpdateFile(ctx, r.cfg.Owner, r.cfg.Repo, cleanPath, opts)
+	}
+	if err != nil {
+		wrappedErr := wrapGitHubError(cleanPath, err, nil)
+		return wrappedErr
+	}
+	return nil
+}
+
+func (r githubFileReader) deleteFile(ctx context.Context, filePath, message, sha string) error {
+	cleanPath := strings.TrimPrefix(filePath, "/")
+	opts := &github.RepositoryContentFileOptions{
+		Message: &message,
+		SHA:     &sha,
+	}
+	if r.cfg.Ref != "" {
+		opts.Branch = &r.cfg.Ref
+	}
+	_, _, err := r.client.Repositories.DeleteFile(ctx, r.cfg.Owner, r.cfg.Repo, cleanPath, opts)
+	if err != nil {
+		wrappedErr := wrapGitHubError(cleanPath, err, nil)
+		return wrappedErr
+	}
+	return nil
 }
 
 func wrapGitHubError(path string, err error, resp *github.Response) error {

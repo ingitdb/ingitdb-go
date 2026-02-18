@@ -95,18 +95,64 @@ ingitdb delete records --collection=countries/ie/counties --filter-name='*old*'
 
 # Create a new record: the --id format is <collection-id-with-slashes>/<record-key>
 # (collection IDs use "." in the definition, but "/" in --id flags)
-ingitdb create --path=. --id=geo/nations/ie --data='{title: "Ireland"}'
+ingitdb create record --path=. --id=geo/nations/ie --data='{title: "Ireland"}'
 
 # Read a record (output format: yaml or json)
-ingitdb read   --path=. --id=geo/nations/ie
-ingitdb read   --path=. --id=geo/nations/ie --format=json
+ingitdb read record --path=. --id=geo/nations/ie
+ingitdb read record --path=. --id=geo/nations/ie --format=json
 
 # Update fields of an existing record (patch semantics: only listed fields change)
-ingitdb update --path=. --id=geo/nations/ie --set='{title: "Ireland, Republic of"}'
+ingitdb update record --path=. --id=geo/nations/ie --set='{title: "Ireland, Republic of"}'
 
 # Delete a single record
 ingitdb delete record --path=. --id=geo/nations/ie
 ```
+
+## Accessing GitHub Repositories Directly
+
+inGitDB can read and write records in a remote GitHub repository without cloning it. The
+`--github` flag replaces `--path` and points the CLI at a GitHub repository over the REST API.
+
+### Public repositories (no token required)
+
+```shell
+# Read a record
+ingitdb read record --github=owner/repo --id=countries/ie
+
+# Pin to a specific branch, tag, or commit SHA
+ingitdb read record --github=owner/repo@main --id=todo.tags/active
+ingitdb read record --github=owner/repo@v1.2.0 --id=todo.tags/active
+
+# List all collections
+ingitdb list collections --github=owner/repo
+```
+
+### Private repositories
+
+Supply a token via the `GITHUB_TOKEN` environment variable or the `--token` flag. All write
+operations also require a token, even for public repositories.
+
+```shell
+# Set the token once in your shell
+export GITHUB_TOKEN=ghp_...
+
+ingitdb read record --github=owner/repo --id=countries/ie
+ingitdb list collections --github=owner/repo
+ingitdb create record --github=owner/repo --id=countries/ie --data='{name: Ireland}'
+ingitdb update record --github=owner/repo --id=countries/ie --set='{name: Ireland, capital: Dublin}'
+ingitdb delete record --github=owner/repo --id=countries/ie
+
+# Or pass the token inline (not recommended for scripts — it ends up in shell history)
+ingitdb read record --github=owner/repo --token=ghp_... --id=countries/ie
+```
+
+Each write operation (`create record`, `update record`, `delete record`) creates a single commit
+in the remote repository. No local clone is required at any point.
+
+See [GitHub Direct Access](docs/features/github-direct-access.md) for the full reference,
+including authentication details, rate limit notes, and limitations.
+
+---
 
 A minimal `.ingitdb.yaml` at the root of your DB git repository:
 
@@ -123,13 +169,14 @@ languages:
 |---|---|---|
 | `version` | implemented | Print build version, commit hash, and date |
 | `validate` | implemented | Check every record against its collection schema |
-| `list collections\|view\|subscribers` | planned | List schema objects, scoped with `--in` and `--filter-name` |
+| `read record` | implemented | Read a single record by ID (local or GitHub) |
+| `create record` | implemented | Create a new record (local or GitHub; `map[string]any` collections only) |
+| `update record` | implemented | Update fields of an existing record (local or GitHub) |
+| `delete record` | implemented | Delete a single record by ID (local or GitHub) |
+| `list collections` | implemented | List collection IDs (local or GitHub) |
+| `list view\|subscribers` | planned | List view or subscriber definitions |
 | `find` | planned | Search records by substring, regex, or exact value |
-| `create` | implemented | Create a new record (`map[string]any` collections only) |
-| `read` | implemented | Read a single record by ID |
-| `update` | implemented | Update fields of an existing record |
 | `delete collection\|view\|records` | planned | Remove a collection, view definition, or individual records |
-| `delete record` | implemented | Delete a single record by ID |
 | `truncate` | planned | Remove all records from a collection, keeping its schema |
 | `query` | planned | Query and format records from a collection |
 | `materialize` | planned | Build materialized views into `$views/` |
@@ -163,6 +210,7 @@ See the [CLI reference](docs/CLI.md) for flags and examples.
 | [Documentation](docs/README.md) | Full docs index — start here |
 | [CLI reference](docs/CLI.md) | Every subcommand, flag, and exit code |
 | [Features](docs/features/README.md) | What inGitDB can do today and what is coming |
+| [GitHub Direct Access](docs/features/github-direct-access.md) | Read and write records in remote GitHub repositories without cloning |
 | [Architecture](docs/ARCHITECTURE.md) | Data model, package map, and key design decisions |
 | [Roadmap](docs/ROADMAP.md) | Nine delivery phases from Validator to GraphQL |
 | [Contributing](docs/CONTRIBUTING.md) | How to open issues and submit pull requests |

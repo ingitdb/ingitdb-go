@@ -1,0 +1,155 @@
+package dalgo2ingitdb
+
+import (
+	"testing"
+
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+)
+
+func TestParseRecordContent_YAML(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := []byte(`
+name: John
+age: 30
+email: john@example.com
+`)
+	data, err := ParseRecordContent(yamlContent, ingitdb.RecordFormat("yaml"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "John" {
+		t.Errorf("expected name=John, got %v", data["name"])
+	}
+	if data["age"] != 30 {
+		t.Errorf("expected age=30, got %v", data["age"])
+	}
+	if data["email"] != "john@example.com" {
+		t.Errorf("expected email=john@example.com, got %v", data["email"])
+	}
+}
+
+func TestParseRecordContent_JSON(t *testing.T) {
+	t.Parallel()
+
+	jsonContent := []byte(`{
+  "name": "Jane",
+  "age": 25,
+  "email": "jane@example.com"
+}`)
+	data, err := ParseRecordContent(jsonContent, ingitdb.RecordFormat("json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Jane" {
+		t.Errorf("expected name=Jane, got %v", data["name"])
+	}
+	if data["age"] != 25.0 {
+		t.Errorf("expected age=25.0, got %v", data["age"])
+	}
+	if data["email"] != "jane@example.com" {
+		t.Errorf("expected email=jane@example.com, got %v", data["email"])
+	}
+}
+
+func TestParseRecordContent_UnsupportedFormat(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParseRecordContent([]byte("test"), ingitdb.RecordFormat("xml"))
+	if err == nil {
+		t.Fatal("expected error for unsupported format")
+	}
+}
+
+func TestParseMapOfIDRecordsContent_YAML(t *testing.T) {
+	t.Parallel()
+
+	yamlContent := []byte(`
+user1:
+  name: Alice
+  role: admin
+user2:
+  name: Bob
+  role: user
+`)
+	records, err := ParseMapOfIDRecordsContent(yamlContent, ingitdb.RecordFormat("yaml"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(records) != 2 {
+		t.Errorf("expected 2 records, got %d", len(records))
+	}
+
+	user1, ok := records["user1"]
+	if !ok {
+		t.Fatal("expected 'user1' key in records")
+	}
+	if user1["name"] != "Alice" {
+		t.Errorf("expected user1.name=Alice, got %v", user1["name"])
+	}
+	if user1["role"] != "admin" {
+		t.Errorf("expected user1.role=admin, got %v", user1["role"])
+	}
+
+	user2, ok := records["user2"]
+	if !ok {
+		t.Fatal("expected 'user2' key in records")
+	}
+	if user2["name"] != "Bob" {
+		t.Errorf("expected user2.name=Bob, got %v", user2["name"])
+	}
+	if user2["role"] != "user" {
+		t.Errorf("expected user2.role=user, got %v", user2["role"])
+	}
+}
+
+func TestParseMapOfIDRecordsContent_JSON(t *testing.T) {
+	t.Parallel()
+
+	jsonContent := []byte(`{
+  "tag1": {"title": "Work", "color": "blue"},
+  "tag2": {"title": "Home", "color": "green"}
+}`)
+	records, err := ParseMapOfIDRecordsContent(jsonContent, ingitdb.RecordFormat("json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(records) != 2 {
+		t.Errorf("expected 2 records, got %d", len(records))
+	}
+
+	tag1, ok := records["tag1"]
+	if !ok {
+		t.Fatal("expected 'tag1' key in records")
+	}
+	if tag1["title"] != "Work" {
+		t.Errorf("expected tag1.title=Work, got %v", tag1["title"])
+	}
+	if tag1["color"] != "blue" {
+		t.Errorf("expected tag1.color=blue, got %v", tag1["color"])
+	}
+
+	tag2, ok := records["tag2"]
+	if !ok {
+		t.Fatal("expected 'tag2' key in records")
+	}
+	if tag2["title"] != "Home" {
+		t.Errorf("expected tag2.title=Home, got %v", tag2["title"])
+	}
+	if tag2["color"] != "green" {
+		t.Errorf("expected tag2.color=green, got %v", tag2["color"])
+	}
+}
+
+func TestParseMapOfIDRecordsContent_InvalidRecord(t *testing.T) {
+	t.Parallel()
+
+	jsonContent := []byte(`{
+  "valid": {"title": "Work"},
+  "invalid": "not a map"
+}`)
+	_, err := ParseMapOfIDRecordsContent(jsonContent, ingitdb.RecordFormat("json"))
+	if err == nil {
+		t.Fatal("expected error for non-map record value")
+	}
+}

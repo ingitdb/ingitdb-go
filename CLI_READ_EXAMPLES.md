@@ -87,8 +87,9 @@ ingitdb read record --github ingitdb/ingitdb-cli --id todo.tags/active --format 
    - Can also use slashes: `todo/tags`, `todo/tasks/statuses` (both are equivalent)
 
 2. **GitHub Access**
-   - Currently works with **public repositories only** (no authentication required)
-   - Phase 2 will add support for private repositories with authentication
+   - Public repositories: no token required
+   - Private repositories: supply `--token=TOKEN` or set the `GITHUB_TOKEN` environment variable
+   - Write operations (`create record`, `update record`, `delete record`) always require a token
 
 3. **Record ID Structure**
    - Format: `collection.id/record-key`
@@ -131,8 +132,9 @@ error: failed to resolve remote definition: .ingitdb file not found in repositor
 | Aspect | Local | GitHub |
 |--------|-------|--------|
 | Command | `--path <dir>` | `--github owner/repo[@ref]` |
-| Authentication | None | None (public only, Phase 2: with auth) |
+| Authentication | None | None for public reads; token required for private reads and all writes |
 | File Access | Direct filesystem | GitHub REST API |
 | Performance | Fast (local disk) | Network dependent |
 | Branch Support | N/A | Yes (`@branch`, `@tag`, `@commit`) |
-| Use Case | Development, local testing | Remote inspection, CI/CD |
+| Write Support | Yes | Yes (creates one commit per write) |
+| Use Case | Development, local testing | Remote inspection, CI/CD, scripted writes |

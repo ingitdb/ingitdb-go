@@ -35,6 +35,10 @@ func readRecord(
 				Usage: "GitHub source as owner/repo[@branch|tag|commit] (public read-only)",
 			},
 			&cli.StringFlag{
+				Name:  "token",
+				Usage: "GitHub personal access token (or set GITHUB_TOKEN env var)",
+			},
+			&cli.StringFlag{
 				Name:     "id",
 				Usage:    "record ID in the format collection/path/key (e.g. countries/ie)",
 				Required: true,
@@ -67,7 +71,7 @@ func readRecord(
 				if readErr != nil {
 					return fmt.Errorf("failed to resolve remote definition: %w", readErr)
 				}
-				cfg := dalgo2ghingitdb.Config{Owner: spec.Owner, Repo: spec.Repo, Ref: spec.Ref}
+				cfg := newGitHubConfig(spec, githubToken(cmd))
 				db, err = dalgo2ghingitdb.NewGitHubDBWithDef(cfg, def)
 				if err != nil {
 					return fmt.Errorf("failed to open github database: %w", err)

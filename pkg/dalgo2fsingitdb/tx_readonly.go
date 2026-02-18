@@ -1,4 +1,4 @@
-package dalgo2ingitdb
+package dalgo2fsingitdb
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/dal-go/dalgo/dal"
 	"github.com/dal-go/dalgo/recordset"
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
@@ -63,7 +64,7 @@ func (r readonlyTx) Get(ctx context.Context, record dal.Record) error {
 		}
 		record.SetError(nil)
 		target := record.Data().(map[string]any)
-		maps.Copy(target, applyLocaleToRead(recordData, colDef.Columns))
+		maps.Copy(target, dalgo2ingitdb.ApplyLocaleToRead(recordData, colDef.Columns))
 	default:
 		return fmt.Errorf("not yet implemented for record type %q", colDef.RecordFile.RecordType)
 	}

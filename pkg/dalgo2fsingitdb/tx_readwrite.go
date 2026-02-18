@@ -1,4 +1,4 @@
-package dalgo2ingitdb
+package dalgo2fsingitdb
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/dal-go/dalgo/dal"
 	"github.com/dal-go/dalgo/update"
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
@@ -40,7 +41,7 @@ func (r readwriteTx) Set(ctx context.Context, record dal.Record) error {
 		if allRecords == nil {
 			allRecords = make(map[string]map[string]any)
 		}
-		allRecords[recordKey] = applyLocaleToWrite(data, colDef.Columns)
+		allRecords[recordKey] = dalgo2ingitdb.ApplyLocaleToWrite(data, colDef.Columns)
 		return writeMapOfIDRecordsFile(path, colDef.RecordFile.Format, allRecords)
 	default:
 		return writeRecordToFile(path, colDef.RecordFile.Format, data)
@@ -119,7 +120,7 @@ func (r readwriteTx) Insert(ctx context.Context, record dal.Record, opts ...dal.
 		}
 		record.SetError(nil)
 		data := record.Data().(map[string]any)
-		allRecords[recordKey] = applyLocaleToWrite(data, colDef.Columns)
+		allRecords[recordKey] = dalgo2ingitdb.ApplyLocaleToWrite(data, colDef.Columns)
 		return writeMapOfIDRecordsFile(path, colDef.RecordFile.Format, allRecords)
 	default:
 		_, statErr := os.Stat(path)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/dal-go/dalgo/dal"
 
-	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2fsingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
@@ -26,7 +26,7 @@ func TestReadCollection_Success(t *testing.T) {
 	getWd := func() (string, error) { return dir, nil }
 	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
 	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
-		return dalgo2ingitdb.NewLocalDBWithDef(root, d)
+		return dalgo2fsingitdb.NewLocalDBWithDef(root, d)
 	}
 	logf := func(...any) {}
 
@@ -46,7 +46,7 @@ func TestReadCollection_CollectionNotFound(t *testing.T) {
 	getWd := func() (string, error) { return dir, nil }
 	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
 	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
-		return dalgo2ingitdb.NewLocalDBWithDef(root, d)
+		return dalgo2fsingitdb.NewLocalDBWithDef(root, d)
 	}
 	logf := func(...any) {}
 
@@ -67,7 +67,7 @@ func TestReadCollection_DefinitionError(t *testing.T) {
 		return nil, errors.New("boom")
 	}
 	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
-		return dalgo2ingitdb.NewLocalDBWithDef(root, d)
+		return dalgo2fsingitdb.NewLocalDBWithDef(root, d)
 	}
 	logf := func(...any) {}
 

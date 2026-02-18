@@ -3,19 +3,41 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"strings"
+
+	"github.com/urfave/cli/v3"
+	"gopkg.in/yaml.v3"
 
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
-	"gopkg.in/yaml.v3"
 )
 
 type githubRepoSpec struct {
 	Owner string
 	Repo  string
 	Ref   string
+}
+
+// githubToken returns the GitHub token from the --token flag or GITHUB_TOKEN env var.
+func githubToken(cmd *cli.Command) string {
+	token := cmd.String("token")
+	if token == "" {
+		token = os.Getenv("GITHUB_TOKEN")
+	}
+	return token
+}
+
+// newGitHubConfig builds a dalgo2ghingitdb.Config from a repo spec and token.
+func newGitHubConfig(spec githubRepoSpec, token string) dalgo2ghingitdb.Config {
+	return dalgo2ghingitdb.Config{
+		Owner: spec.Owner,
+		Repo:  spec.Repo,
+		Ref:   spec.Ref,
+		Token: token,
+	}
 }
 
 func parseGitHubRepoSpec(value string) (githubRepoSpec, error) {
@@ -139,4 +161,42 @@ func resolveRemoteCollectionPath(rootCollections map[string]string, id string) (
 		return "", "", "", fmt.Errorf("unable to resolve collection for record id %q", id)
 	}
 	return collectionID, recordKey, collectionPath, nil
+}
+
+// listCollectionsFromFileReader reads the root config and lists all collections from a FileReader.
+func listCollectionsFromFileReader(fileReader dalgo2ghingitdb.FileReader) ([]string, error) {
+	ctx := context.Background()
+	rootConfigContent, found, readErr := fileReader.ReadFile(ctx, config.RootConfigFileName)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read .ingitdb.yaml: %w", readErr)
+	}
+	if !found {
+		return nil, fmt.Errorf("file not found: %s", config.RootConfigFileName)
+	}
+	var rootConfig config.RootConfig
+	unmarshalErr := yaml.Unmarshal(rootConfigContent, &rootConfig)
+	if unmarshalErr != nil {
+		return nil, fmt.Errorf("failed to parse .ingitdb.yaml: %w", unmarshalErr)
+	}
+	validateErr := rootConfig.Validate()
+	if validateErr != nil {
+		return nil, fmt.Errorf("invalid .ingitdb.yaml: %w", validateErr)
+	}
+	var ids []string
+	for rootID, rootPath := range rootConfig.RootCollections {
+		if strings.HasSuffix(rootPath, "/*") {
+			dirPath := strings.TrimSuffix(rootPath, "*")
+			entries, listErr := fileReader.ListDirectory(ctx, dirPath)
+			if listErr != nil {
+				return nil, fmt.Errorf("failed to list directory %s: %w", dirPath, listErr)
+			}
+			for _, entry := range entries {
+				collectionID := rootID + "." + entry
+				ids = append(ids, collectionID)
+			}
+		} else {
+			ids = append(ids, rootID)
+		}
+	}
+	return ids, nil
 }
