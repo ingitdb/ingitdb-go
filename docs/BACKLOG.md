@@ -118,6 +118,42 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
+## Phase 4: Watcher
+
+### P4-1: Implement watch command
+
+**What:** Implement `ingitdb watch` to monitor an inGitDB directory for file-system changes and stream structured record events to stdout.
+
+**Why:** Developers and tooling need real-time visibility into which records change and how, without polling or running `validate` repeatedly.
+
+**Acceptance criteria:**
+- `ingitdb watch [--path=PATH] [--format=text|json]` runs in the foreground and exits cleanly on SIGINT/SIGTERM
+- One event per line written to stdout as it occurs
+- Text format:
+  ```
+  Record /countries/gb/cities/london: added
+  Record /countries/gb/cities/london: 2 fields updated: {population: 9000000, area: 1572}
+  Record /countries/gb/cities/london: deleted
+  ```
+- JSON format (`--format=json`):
+  ```json
+  {"type":"added","record":"/countries/gb/cities/london"}
+  {"type":"updated","record":"/countries/gb/cities/london","fields":{"population":9000000,"area":1572}}
+  {"type":"deleted","record":"/countries/gb/cities/london"}
+  ```
+- `--path` defaults to current working directory; `~` is expanded
+- Non-record file changes (schema files, view definitions) are ignored
+- Startup errors (invalid path, unreadable config) exit with code 2
+
+**Implementation notes:**
+- Use `fsnotify` (or equivalent) for OS-level file-system events
+- Load `Definition` on startup via `validator.ReadDefinition`; use it to map changed paths back to collection + record ID
+- Compare old and new file content to produce the `fields` map for `updated` events (read file before and after the write event)
+- Implement the `Watcher` interface defined in [component doc](components/watcher.md)
+- `ingitdb serve --watcher` should reuse the same `Watcher` implementation
+
+---
+
 ## Phase 2: Query
 
 ### P2-1: Implement query subcommand

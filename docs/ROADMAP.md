@@ -11,11 +11,12 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 | 1 | Validator + Materialized Views | WIP |
 | 2 | Query | Pending |
 | 3 | Git Merge Conflict Resolution | Pending |
-| 4 | Subscribers | Pending |
-| 5 | MCP Server | Pending |
-| 6 | HTTP API Server | Pending |
-| 7 | GraphQL | Pending |
-| 8 | Migration Script Generator | Pending |
+| 4 | Watcher | Pending |
+| 5 | Subscribers | Pending |
+| 6 | MCP Server | Pending |
+| 7 | HTTP API Server | Pending |
+| 8 | GraphQL | Pending |
+| 9 | Migration Script Generator | Pending |
 
 ---
 
@@ -58,7 +59,20 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 4: Subscribers
+## Phase 4: Watcher
+
+**Goal:** Real-time visibility into record changes as they happen on the file system.
+
+**Deliverables:**
+- `ingitdb watch [--path=PATH] [--format=text|json]` — foreground command that streams record events to stdout until interrupted
+- `ingitdb serve --watcher` — same engine running as part of a multi-service process
+- Events: `added`, `updated` (with changed field names and values), `deleted`
+- Text and JSON output formats; one event per line for easy piping
+- See [Watcher component doc](components/watcher.md) and [feature doc](features/watcher.md)
+
+---
+
+## Phase 5: Subscribers
 
 **Goal:** Event-driven notifications when data changes, usable in CI or as standalone hooks.
 
@@ -69,18 +83,18 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 5: MCP Server
+## Phase 6: MCP Server
 
 **Goal:** Expose inGitDB to AI agents via the Model Context Protocol (MCP).
 
 **Deliverables:**
-- MCP server mode: `ingitdb mcp [--path=PATH]`
+- `ingitdb serve --mcp [--path=PATH]`
 - Tools: list known DBs, list collections, get collection metadata, CRUD on records
 - Transaction support: begin / commit / rollback
 
 ---
 
-## Phase 6: HTTP API Server
+## Phase 7: HTTP API Server
 
 **Goal:** REST access to inGitDB data for external tooling and integrations.
 
@@ -91,7 +105,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 7: GraphQL
+## Phase 8: GraphQL
 
 **Goal:** GraphQL interface auto-generated from collection schemas.
 
@@ -101,7 +115,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 8: Migration Script Generator
+## Phase 9: Migration Script Generator
 
 **Goal:** Generate forward and rollback migration scripts to sync a target database with a desired inGitDB version.
 
