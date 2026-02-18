@@ -9,3 +9,4 @@ This documentation is intended for both human beings and AI agents.
 - [Components](components) - building blocks of the inGitDB CLI.
 - [CLI](CLI.md) - how to use inGitDB CLI
 - [Configuration](configuration/README.md) - how to configure inGitDB
+- [Competitors](COMPETITORS.md) - how inGitDB compares to related projects
