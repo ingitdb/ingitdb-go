@@ -64,6 +64,29 @@ A one-line description of each document, grouped by purpose.
 
 ---
 
+## CLI Commands at a Glance
+
+| Command | Subcommands | Status | Description |
+|---|---|---|---|
+| `version` | — | implemented | Print build version, commit hash, and date |
+| `validate` | — | implemented | Check schema and data against `.ingitdb.yaml` |
+| `list` | `collections` `view` `subscribers` | planned | List schema objects, optionally scoped with `--in` and `--filter-name` |
+| `find` | — | planned | Search records by `--substr`, `--re`, or `--exact`; scope with `--in`, `--fields`, `--limit` |
+| `delete` | `collection` `view` `records` | planned | Remove a collection, a view definition, or individual records |
+| `truncate` | — | planned | Remove all records from a collection while keeping its schema |
+| `query` | — | planned | Query and format records from a collection |
+| `materialize` | — | planned | Build materialized views into `$views/` |
+| `pull` | — | planned | Pull remote changes, auto-resolve generated-file conflicts, rebuild views |
+| `watch` | — | planned | Stream change events to stdout as records are added, updated, or deleted |
+| `serve` | — | planned | Start MCP server, HTTP API server, or file watcher (flags: `--mcp`, `--http`, `--watcher`) |
+| `resolve` | — | planned | Interactive TUI for resolving merge conflicts in data files |
+| `setup` | — | planned | Initialise a new database directory with a starter `.ingitdb.yaml` |
+| `migrate` | — | planned | Migrate records between schema versions |
+
+See [CLI.md](CLI.md) for the full flag reference.
+
+---
+
 ## Architecture at a Glance
 
 The diagram below shows the write path: a CLI command loads the database definition, validates
