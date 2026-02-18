@@ -92,6 +92,37 @@ ingitdb resolve [--path=PATH] [--file=FILE]
 
 ---
 
+### `watch` — watch database for changes *(not yet implemented)*
+
+```
+ingitdb watch [--path=PATH] [--format=text|json]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--path=PATH` | Path to the database directory. Defaults to the current working directory. |
+| `--format=FORMAT` | Output format: `text` (default) or `json`. |
+
+Watches the database directory for file-system changes and writes a structured event to **stdout** for every record that is added, updated, or deleted. Runs in the foreground until interrupted.
+
+**Text output example:**
+
+```
+Record /countries/gb/cities/london: added
+Record /countries/gb/cities/london: 2 fields updated: {population: 9000000, area: 1572}
+Record /countries/gb/cities/london: deleted
+```
+
+**JSON output example (`--format=json`):**
+
+```json
+{"type":"added","record":"/countries/gb/cities/london"}
+{"type":"updated","record":"/countries/gb/cities/london","fields":{"population":9000000,"area":1572}}
+{"type":"deleted","record":"/countries/gb/cities/london"}
+```
+
+---
+
 ### `serve` — start one or more servers *(not yet implemented)*
 
 ```

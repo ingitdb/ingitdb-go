@@ -5,6 +5,7 @@
 | [Validator](validator.md)                   | WIP     | Validates schema & data; rebuilds materialized views in the same pass                                                                             |
 | [Materialized views](materialized-views.md) | WIP     | Generate a precomputed output dataset from multiple source files using defined filters, joins, and transformation logic for fast reuse and access. |
 | [Merge Conflict Resolution](merge-conflict-resolution.md) | pending | Auto-resolves conflicts in generated files; interactive TUI for source data file conflicts                                                   |
+| [Watcher](watcher.md)                       | pending | Watch DB for file-system changes and emit structured record events to stdout                                                                        |
 | [Subscribers](subscribers.md)               | pending | Receive notifications about inGitDB changes                                                                                                        |
 | [MCP server](mcp-server.md)                 | pending | MCP server for AI agents to read & modify data                                                                                                     |
 | [HTTP API server](http-api-server.md)                | pending | Provides API to read & edit inGitDB data                                                                                                           |
