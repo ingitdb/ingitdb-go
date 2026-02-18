@@ -41,9 +41,16 @@ func run(
 	app := &cli.Command{
 		Name:      "ingitdb",
 		Usage:     "Git-backed database CLI",
-		Version:   fmt.Sprintf("%s (%s) @ %s", version, commit, date),
 		ErrWriter: os.Stderr,
 		Commands: []*cli.Command{
+			{
+				Name:  "version",
+				Usage: "Print build version, commit hash, and build date",
+				Action: func(_ context.Context, _ *cli.Command) error {
+					fmt.Printf("ingitdb %s (%s) @ %s\n", version, commit, date)
+					return nil
+				},
+			},
 			{
 				Name:  "validate",
 				Usage: "Validate an inGitDB database directory",

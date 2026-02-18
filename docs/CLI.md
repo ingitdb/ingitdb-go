@@ -6,10 +6,19 @@
 
 | Flag | Description |
 |------|-------------|
-| `--version`, `-v` | Print build version, commit hash, and build date, then exit. |
 | `--help`, `-h` | Print usage information and exit. |
 
 ## Commands
+
+### `version` — print build information
+
+```
+ingitdb version
+```
+
+Prints build version, commit hash, and build date.
+
+---
 
 ### `validate` — validate database schema and data
 

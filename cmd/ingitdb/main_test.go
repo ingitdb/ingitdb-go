@@ -11,7 +11,7 @@ import (
 func TestRun_Version(t *testing.T) {
 	t.Parallel()
 
-	args := []string{"ingitdb", "--version"}
+	args := []string{"ingitdb", "version"}
 	readCalled := false
 	fatalCalled := false
 	readDefinition := func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
@@ -27,10 +27,10 @@ func TestRun_Version(t *testing.T) {
 
 	run(args, homeDir, getWd, readDefinition, fatal, logf)
 	if readCalled {
-		t.Fatal("readDefinition should not be called for --version")
+		t.Fatal("readDefinition should not be called for version")
 	}
 	if fatalCalled {
-		t.Fatal("fatal should not be called for --version")
+		t.Fatal("fatal should not be called for version")
 	}
 }
 
@@ -189,9 +189,9 @@ func TestExpandHome_Error(t *testing.T) {
 	}
 }
 
-func TestMain_VersionFlag(t *testing.T) {
+func TestMain_VersionCmd(t *testing.T) {
 	args := os.Args
-	os.Args = []string{"ingitdb", "--version"}
+	os.Args = []string{"ingitdb", "version"}
 	t.Cleanup(func() {
 		os.Args = args
 	})
