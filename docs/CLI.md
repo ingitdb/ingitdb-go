@@ -10,6 +10,10 @@
 
 ## Commands
 
+Each command is implemented in its own file under `cmd/ingitdb/commands/`
+(e.g. `validate.go`, `list.go`). `cmd/ingitdb/main.go` assembles them and
+injects process-level dependencies. See [Architecture](ARCHITECTURE.md) for details.
+
 ### `version` — print build information
 
 ```
