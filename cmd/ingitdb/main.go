@@ -227,6 +227,198 @@ func run(
 				},
 			},
 			{
+				Name:  "list",
+				Usage: "List database objects (collections, views, or subscribers)",
+				Commands: []*cli.Command{
+					{
+						Name:  "collections",
+						Usage: "List collections in the database",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "path",
+								Usage: "path to the database directory",
+							},
+							&cli.StringFlag{
+								Name:  "in",
+								Usage: "regular expression for the starting-point path",
+							},
+							&cli.StringFlag{
+								Name:  "filter-name",
+								Usage: "pattern to filter collection names (e.g. *substr*)",
+							},
+						},
+						Action: func(_ context.Context, _ *cli.Command) error {
+							return cli.Exit("not yet implemented", 1)
+						},
+					},
+					{
+						Name:  "view",
+						Usage: "List views in the database",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "path",
+								Usage: "path to the database directory",
+							},
+							&cli.StringFlag{
+								Name:  "in",
+								Usage: "regular expression for the starting-point path",
+							},
+							&cli.StringFlag{
+								Name:  "filter-name",
+								Usage: "pattern to filter view names (e.g. *substr*)",
+							},
+						},
+						Action: func(_ context.Context, _ *cli.Command) error {
+							return cli.Exit("not yet implemented", 1)
+						},
+					},
+					{
+						Name:  "subscribers",
+						Usage: "List subscribers in the database",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "path",
+								Usage: "path to the database directory",
+							},
+							&cli.StringFlag{
+								Name:  "in",
+								Usage: "regular expression for the starting-point path",
+							},
+							&cli.StringFlag{
+								Name:  "filter-name",
+								Usage: "pattern to filter subscriber names (e.g. *substr*)",
+							},
+						},
+						Action: func(_ context.Context, _ *cli.Command) error {
+							return cli.Exit("not yet implemented", 1)
+						},
+					},
+				},
+			},
+			{
+				Name:  "find",
+				Usage: "Search for records matching a pattern",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+					&cli.StringFlag{
+						Name:  "substr",
+						Usage: "match records containing this substring",
+					},
+					&cli.StringFlag{
+						Name:  "re",
+						Usage: "match records where a field value matches this regular expression",
+					},
+					&cli.StringFlag{
+						Name:  "exact",
+						Usage: "match records where a field value matches exactly",
+					},
+					&cli.StringFlag{
+						Name:  "in",
+						Usage: "regular expression scoping the search to a sub-path",
+					},
+					&cli.IntFlag{
+						Name:  "limit",
+						Usage: "maximum number of records to return",
+					},
+					&cli.StringFlag{
+						Name:  "fields",
+						Usage: "comma-separated list of fields to search (default: all fields)",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
+				Name:  "delete",
+				Usage: "Delete database objects (collection, view, or records)",
+				Commands: []*cli.Command{
+					{
+						Name:  "collection",
+						Usage: "Delete a collection and all its records",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "path",
+								Usage: "path to the database directory",
+							},
+							&cli.StringFlag{
+								Name:     "collection",
+								Usage:    "collection id to delete (e.g. countries/ie/counties)",
+								Required: true,
+							},
+						},
+						Action: func(_ context.Context, _ *cli.Command) error {
+							return cli.Exit("not yet implemented", 1)
+						},
+					},
+					{
+						Name:  "view",
+						Usage: "Delete a view definition and its materialised files",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "path",
+								Usage: "path to the database directory",
+							},
+							&cli.StringFlag{
+								Name:     "view",
+								Usage:    "view id to delete",
+								Required: true,
+							},
+						},
+						Action: func(_ context.Context, _ *cli.Command) error {
+							return cli.Exit("not yet implemented", 1)
+						},
+					},
+					{
+						Name:  "records",
+						Usage: "Delete individual records from a collection",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:  "path",
+								Usage: "path to the database directory",
+							},
+							&cli.StringFlag{
+								Name:     "collection",
+								Usage:    "collection to delete records from",
+								Required: true,
+							},
+							&cli.StringFlag{
+								Name:  "in",
+								Usage: "regular expression scoping deletion to a sub-path",
+							},
+							&cli.StringFlag{
+								Name:  "filter-name",
+								Usage: "pattern to match record names to delete",
+							},
+						},
+						Action: func(_ context.Context, _ *cli.Command) error {
+							return cli.Exit("not yet implemented", 1)
+						},
+					},
+				},
+			},
+			{
+				Name:  "truncate",
+				Usage: "Remove all records from a collection",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+					&cli.StringFlag{
+						Name:     "collection",
+						Usage:    "collection id to truncate (e.g. countries/ie/counties/dublin)",
+						Required: true,
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
 				Name:  "migrate",
 				Usage: "Migrate data between schema versions",
 				Flags: []cli.Flag{
