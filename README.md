@@ -90,6 +90,22 @@ ingitdb delete collection --collection=countries/ie/counties/dublin
 
 # Delete records matching a pattern within a collection
 ingitdb delete records --collection=countries/ie/counties --filter-name='*old*'
+
+# --- Record CRUD (requires record_file.type: "map[string]any" collections) ---
+
+# Create a new record: the --id format is <collection-id-with-slashes>/<record-key>
+# (collection IDs use "." in the definition, but "/" in --id flags)
+ingitdb create --path=. --id=geo/nations/ie --data='{title: "Ireland"}'
+
+# Read a record (output format: yaml or json)
+ingitdb read   --path=. --id=geo/nations/ie
+ingitdb read   --path=. --id=geo/nations/ie --format=json
+
+# Update fields of an existing record (patch semantics: only listed fields change)
+ingitdb update --path=. --id=geo/nations/ie --set='{title: "Ireland, Republic of"}'
+
+# Delete a single record
+ingitdb delete record --path=. --id=geo/nations/ie
 ```
 
 A minimal `.ingitdb.yaml` at the root of your DB git repository:
@@ -109,7 +125,11 @@ languages:
 | `validate` | implemented | Check every record against its collection schema |
 | `list collections\|view\|subscribers` | planned | List schema objects, scoped with `--in` and `--filter-name` |
 | `find` | planned | Search records by substring, regex, or exact value |
+| `create` | implemented | Create a new record (`map[string]any` collections only) |
+| `read` | implemented | Read a single record by ID |
+| `update` | implemented | Update fields of an existing record |
 | `delete collection\|view\|records` | planned | Remove a collection, view definition, or individual records |
+| `delete record` | implemented | Delete a single record by ID |
 | `truncate` | planned | Remove all records from a collection, keeping its schema |
 | `query` | planned | Query and format records from a collection |
 | `materialize` | planned | Build materialized views into `$views/` |
@@ -119,6 +139,20 @@ languages:
 | `resolve` | planned | Interactive TUI for resolving data-file merge conflicts |
 | `setup` | planned | Initialise a new database directory |
 | `migrate` | planned | Migrate records between schema versions |
+
+### --id format
+
+The `--id` flag uses `/` as separator for both the collection path and the record key:
+
+```
+<collection-path-with-slashes>/<record-key>
+```
+
+Collection IDs in the definition use `.` as separator (e.g. `geo.nations`), but the `--id` flag uses
+`/` (e.g. `--id=geo/nations/ie`). The longest matching collection prefix wins when ambiguous.
+
+Only collections with `record_file.type: "map[string]any"` support CRUD. Collections using
+`[]map[string]any` (list) or `map[string]map[string]any` (dictionary) are not yet implemented.
 
 See the [CLI reference](docs/CLI.md) for flags and examples.
 

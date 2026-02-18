@@ -77,6 +77,7 @@ func readCollectionDef(rootPath, relPath, id string, o ingitdb.ReadOptions) (col
 		return nil, fmt.Errorf("failed to parse YAML file %s: %w", colDefFilePath, err)
 	}
 	colDef.ID = id
+	colDef.DirPath = filepath.Join(rootPath, relPath)
 
 	if o.IsValidationRequired() {
 		if err = colDef.Validate(); err != nil {

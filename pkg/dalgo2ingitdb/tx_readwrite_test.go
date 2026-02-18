@@ -32,23 +32,9 @@ func TestReadwriteTx_Panics(t *testing.T) {
 			},
 		},
 		{
-			name: "set",
-			fn: func() {
-				err := tx.Set(ctx, record)
-				_ = err
-			},
-		},
-		{
 			name: "set_multi",
 			fn: func() {
 				err := tx.SetMulti(ctx, records)
-				_ = err
-			},
-		},
-		{
-			name: "delete",
-			fn: func() {
-				err := tx.Delete(ctx, key)
 				_ = err
 			},
 		},
@@ -77,13 +63,6 @@ func TestReadwriteTx_Panics(t *testing.T) {
 			name: "update_multi",
 			fn: func() {
 				err := tx.UpdateMulti(ctx, keys, updates, preconditions...)
-				_ = err
-			},
-		},
-		{
-			name: "insert",
-			fn: func() {
-				err := tx.Insert(ctx, record, insertOptions...)
 				_ = err
 			},
 		},

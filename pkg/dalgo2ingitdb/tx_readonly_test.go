@@ -13,7 +13,6 @@ func TestReadonlyTx_Panics(t *testing.T) {
 
 	tx := readonlyTx{db: localDB{rootDirPath: "/tmp/root"}}
 	ctx := context.Background()
-	var record dal.Record
 	var key *dal.Key
 	var query dal.Query
 	var records []dal.Record
@@ -27,13 +26,6 @@ func TestReadonlyTx_Panics(t *testing.T) {
 			name: "options",
 			fn: func() {
 				tx.Options()
-			},
-		},
-		{
-			name: "get",
-			fn: func() {
-				err := tx.Get(ctx, record)
-				_ = err
 			},
 		},
 		{
