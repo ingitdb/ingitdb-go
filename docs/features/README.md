@@ -8,3 +8,4 @@
 | [MCP server](mcp-server.md)                 | pending | MCP server for AI agents to read & modify data                                                                                                     |
 | [HTTP API server](http-api-server.md)                | pending | Provides API to read & edit inGitDB data                                                                                                           |
 | [GraphQL](graph-ql.md)                               | pending |                                                                                                                                                    |
+| [Migration Script Generator](migration.md)           | pending | Generates forward and rollback migration scripts to sync a target database with a desired inGitDB version                                          |

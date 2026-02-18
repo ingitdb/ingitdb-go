@@ -14,6 +14,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 | 4 | MCP Server | Pending |
 | 5 | HTTP API Server | Pending |
 | 6 | GraphQL | Pending |
+| 7 | Migration Script Generator | Pending |
 
 ---
 
@@ -81,3 +82,16 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 **Deliverables:**
 - Schema derived from `.ingitdb-collection.yaml` definitions
 - Query and mutation support
+
+---
+
+## Phase 7: Migration Script Generator
+
+**Goal:** Generate forward and rollback migration scripts to sync a target database with a desired inGitDB version.
+
+**Deliverables:**
+- `ingitdb migrate --from=<sha> --to=<sha> --target=<connection-string> [--collections=...] [--output-dir=...]`
+- Diffs records and schemas between two git SHAs; produces INSERT/UPDATE/DELETE and ALTER TABLE statements
+- Rollback script generated alongside the forward migration
+- Initial format: SQL; target introspected via connection string to validate applicability and infer dialect
+- See [Migration Generator component doc](components/migration-generator.md) for implementation details
