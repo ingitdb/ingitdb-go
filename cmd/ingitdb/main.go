@@ -61,7 +61,7 @@ func run(
 			commands.List(),
 			commands.Find(),
 			commands.Create(homeDir, getWd, readDefinition, newDB, logf),
-			commands.ReadRecord(homeDir, getWd, readDefinition, newDB, logf),
+			commands.Read(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Update(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Delete(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Truncate(),

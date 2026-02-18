@@ -14,8 +14,8 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
-// ReadRecord returns the read command for fetching a single record.
-func ReadRecord(
+// Read returns the read command group.
+func Read(
 	homeDir func() (string, error),
 	getWd func() (string, error),
 	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
@@ -23,7 +23,21 @@ func ReadRecord(
 	logf func(...any),
 ) *cli.Command {
 	return &cli.Command{
-		Name:  "read",
+		Name:     "read",
+		Usage:    "Read database objects",
+		Commands: []*cli.Command{readRecord(homeDir, getWd, readDefinition, newDB, logf)},
+	}
+}
+
+func readRecord(
+	homeDir func() (string, error),
+	getWd func() (string, error),
+	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
+	newDB func(string, *ingitdb.Definition) (dal.DB, error),
+	logf func(...any),
+) *cli.Command {
+	return &cli.Command{
+		Name:  "record",
 		Usage: "Read a single record from a collection",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -32,7 +46,7 @@ func ReadRecord(
 			},
 			&cli.StringFlag{
 				Name:     "id",
-				Usage:    "record ID in the format collection/path/key (e.g. todo/tags/ie)",
+				Usage:    "record ID in the format collection/path/key (e.g. countries/ie)",
 				Required: true,
 			},
 			&cli.StringFlag{
