@@ -130,6 +130,31 @@ func run(
 				},
 			},
 			{
+				Name:  "pull",
+				Usage: "Pull latest changes, resolve conflicts, and rebuild views",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+					&cli.StringFlag{
+						Name:  "strategy",
+						Usage: "git pull strategy: rebase (default) or merge",
+					},
+					&cli.StringFlag{
+						Name:  "remote",
+						Usage: "remote name (default: origin)",
+					},
+					&cli.StringFlag{
+						Name:  "branch",
+						Usage: "branch to pull (default: tracking branch)",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
 				Name:  "setup",
 				Usage: "Set up a new inGitDB database",
 				Flags: []cli.Flag{

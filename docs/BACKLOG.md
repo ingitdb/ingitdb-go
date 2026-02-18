@@ -118,6 +118,47 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
+## Phase 3: Git Merge Conflict Resolution
+
+### P3-1: Implement pull command
+
+**What:** Add `ingitdb pull` — a single command that pulls the latest git changes, resolves conflicts, rebuilds views, and prints a change summary.
+
+**Why:** Running `git pull` followed by manual conflict resolution, `ingitdb resolve`, and `ingitdb materialize` is error-prone and tedious. `ingitdb pull` automates the full cycle.
+
+**Acceptance criteria:**
+- `ingitdb pull [--path=PATH] [--strategy=rebase|merge] [--remote=REMOTE] [--branch=BRANCH]` executes the pull cycle end-to-end
+- Default strategy is `rebase`; `--strategy=merge` switches to `git pull --no-rebase`
+- `--remote` defaults to `origin`; `--branch` defaults to the current branch's configured tracking branch
+- Generated file conflicts (`$views/**`, `README.md`) are resolved silently by regeneration
+- Data file conflicts open the TUI resolver one file at a time (reuses the resolver from `ingitdb resolve`)
+- Materialized views and `README.md` are rebuilt after all conflicts are resolved
+- A human-readable change summary is printed to stdout listing records added, updated, and deleted by the pull
+- Exit codes: `0` success, `1` unresolved conflicts remain, `2` infrastructure error (git failure, network, bad flags)
+
+**Change summary format:**
+```
+Pulled 3 commits from origin/main (rebase)
+
+  Records added:   2
+    + /countries/de/cities/berlin
+    + /countries/fr/cities/paris
+
+  Records updated: 1
+    ~ /countries/gb/cities/london  (2 fields: population, area)
+
+  Records deleted: 0
+```
+
+**Implementation notes:**
+- Run `git pull [--rebase|--no-rebase] <remote> <branch>` via `os/exec`; capture stderr for error messages
+- After pull, run `git status --porcelain` to detect conflicted files; delegate to the conflict resolver (Phase 3 `resolve` implementation)
+- Collect the set of changed files from `git diff --name-only ORIG_HEAD HEAD` after a successful pull to build the summary
+- Reuse the Views Builder (Phase 1) for regenerating views post-pull
+- Summary goes to stdout; all diagnostic messages (progress, errors) go to stderr
+
+---
+
 ## Phase 4: Watcher
 
 ### P4-1: Implement watch command

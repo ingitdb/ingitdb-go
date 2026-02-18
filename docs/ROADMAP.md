@@ -53,6 +53,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 **Deliverables:**
 - `ingitdb setup [--path=PATH]` — registers `ingitdb` as a git merge driver in `.gitattributes` and local git config
 - `ingitdb resolve [--path=PATH]` — scans for conflicted files and resolves them
+- `ingitdb pull [--path=PATH] [--strategy=rebase|merge] [--remote=REMOTE] [--branch=BRANCH]` — pulls from origin, auto-resolves generated file conflicts, opens TUI for data conflicts, rebuilds views, and prints a change summary
 - Generated files (`$views/**`, `README.md`) resolved automatically by regenerating from current source data
 - Source data files (`$records/*`) resolved interactively via a TUI showing conflicting fields side-by-side in a data table format
 - See [Merge Conflict Resolver component doc](components/merge-conflict-resolver.md) for implementation details
