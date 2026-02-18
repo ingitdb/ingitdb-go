@@ -160,12 +160,24 @@ func run(
 				},
 			},
 			{
-				Name:  "mcp",
-				Usage: "Start the MCP server",
+				Name:  "serve",
+				Usage: "Start one or more servers (MCP, HTTP API, watcher)",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "path",
 						Usage: "path to the database directory",
+					},
+					&cli.BoolFlag{
+						Name:  "mcp",
+						Usage: "enable MCP server",
+					},
+					&cli.BoolFlag{
+						Name:  "http",
+						Usage: "enable HTTP API server",
+					},
+					&cli.BoolFlag{
+						Name:  "watcher",
+						Usage: "enable file watcher",
 					},
 				},
 				Action: func(_ context.Context, _ *cli.Command) error {

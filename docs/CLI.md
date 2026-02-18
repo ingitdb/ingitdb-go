@@ -92,17 +92,20 @@ ingitdb resolve [--path=PATH] [--file=FILE]
 
 ---
 
-### `mcp` — start the MCP server *(not yet implemented)*
+### `serve` — start one or more servers *(not yet implemented)*
 
 ```
-ingitdb mcp [--path=PATH]
+ingitdb serve [--path=PATH] [--mcp] [--http] [--watcher]
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--path=PATH` | Path to the database directory. Defaults to the current working directory. |
+| `--mcp` | Enable the MCP (Model Context Protocol) server. |
+| `--http` | Enable the HTTP API server. |
+| `--watcher` | Enable the file watcher. |
 
-Starts a Model Context Protocol server that exposes the database to AI tooling.
+At least one service flag must be provided. Multiple flags may be combined to run services together in a single process.
 
 ---
 
