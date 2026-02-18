@@ -10,11 +10,12 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 |---|---|---|
 | 1 | Validator + Materialized Views | WIP |
 | 2 | Query | Pending |
-| 3 | Subscribers | Pending |
-| 4 | MCP Server | Pending |
-| 5 | HTTP API Server | Pending |
-| 6 | GraphQL | Pending |
-| 7 | Migration Script Generator | Pending |
+| 3 | Git Merge Conflict Resolution | Pending |
+| 4 | Subscribers | Pending |
+| 5 | MCP Server | Pending |
+| 6 | HTTP API Server | Pending |
+| 7 | GraphQL | Pending |
+| 8 | Migration Script Generator | Pending |
 
 ---
 
@@ -42,7 +43,22 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 3: Subscribers
+## Phase 3: Git Merge Conflict Resolution
+
+**Goal:** Resolve git merge and rebase conflicts inside an inGitDB database without manual editing of conflict markers.
+
+**Why here:** Depends on Phase 1 (views builder, to regenerate conflicted generated files) and Phase 2 (data reading, used by the diff TUI).
+
+**Deliverables:**
+- `ingitdb setup [--path=PATH]` — registers `ingitdb` as a git merge driver in `.gitattributes` and local git config
+- `ingitdb resolve [--path=PATH]` — scans for conflicted files and resolves them
+- Generated files (`$views/**`, `README.md`) resolved automatically by regenerating from current source data
+- Source data files (`$records/*`) resolved interactively via a TUI showing conflicting fields side-by-side in a data table format
+- See [Merge Conflict Resolver component doc](components/merge-conflict-resolver.md) for implementation details
+
+---
+
+## Phase 4: Subscribers
 
 **Goal:** Event-driven notifications when data changes, usable in CI or as standalone hooks.
 
@@ -53,7 +69,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 4: MCP Server
+## Phase 5: MCP Server
 
 **Goal:** Expose inGitDB to AI agents via the Model Context Protocol (MCP).
 
@@ -64,7 +80,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 5: HTTP API Server
+## Phase 6: HTTP API Server
 
 **Goal:** REST access to inGitDB data for external tooling and integrations.
 
@@ -75,7 +91,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 6: GraphQL
+## Phase 7: GraphQL
 
 **Goal:** GraphQL interface auto-generated from collection schemas.
 
@@ -85,7 +101,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 7: Migration Script Generator
+## Phase 8: Migration Script Generator
 
 **Goal:** Generate forward and rollback migration scripts to sync a target database with a desired inGitDB version.
 
