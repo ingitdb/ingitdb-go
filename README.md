@@ -62,7 +62,7 @@ ingitdb validate --path=/path/to/your/db
 ingitdb validate --from-commit=abc1234 --to-commit=def5678
 ```
 
-A minimal `.ingitdb.yaml` at the root of your database directory:
+A minimal `.ingitdb.yaml` at the root of your DB git repository:
 
 ```yaml
 rootCollections:
