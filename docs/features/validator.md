@@ -1,3 +1,6 @@
 # inGitDB Validator
 
-`ingitdb --validate` will validate an inGitDB directory. 
+`ingitdb validate` validates an inGitDB directory.
+
+See the [CLI reference](../CLI.md#validate--validate-database-schema-and-data) for the full flag list,
+and the [Validator component docs](../components/validator/README.md) for implementation details.

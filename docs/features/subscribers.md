@@ -17,7 +17,7 @@ subscribers:
       to:
         - alice@example.com
         - bob@example.com
-      SMTP: smpt.example.com
+      SMTP: smtp.example.com
 
   - name: Logger
     shell:

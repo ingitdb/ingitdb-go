@@ -7,7 +7,7 @@ This is not required as `ingitdb` CLI will autodetect repository config when sta
 
 # Repository config
 
-At the root of repositor you should have a `.ingitdb.yaml` file that defines:
+At the root of the repository you should have a `.ingitdb.yaml` file that defines:
 
 - [root_collections](root-collections.md)
 - [languages](languages.md)

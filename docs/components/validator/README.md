@@ -1,13 +1,13 @@
-# inGitDB validator
+# inGitDB Validator
 
-Validate inGitDB schema and data.
+Validates inGitDB schema and data.
 
 Consists of two subcomponents:
 
 - [Schema validator](schema-validator.md)
 - [Data validator](data-validator.md)
 
-There is two mode of validations:
+There are two validation modes:
 
-- [Full validation](full-validation.md) – does a full DB scan and validates everything.
-- [Change validation](change-validation.md) – validates difference between two commits.
+- [Full validation](full-validation.md) — performs a full DB scan and validates everything.
+- [Change validation](change-validation.md) — validates only the difference between two commits.

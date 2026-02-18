@@ -2,7 +2,7 @@
 
 ```yaml
 # `languages` list supported languages should preferably use `ISO 639-1`
-#  or alternatively `IERF BCP 47` (`RFC 5646` / `RFC 4647`).
+#  or alternatively `IETF BCP 47` (`RFC 5646` / `RFC 4647`).
 #
 # Examples:
 #  - required: en

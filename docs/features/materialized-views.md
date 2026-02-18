@@ -14,8 +14,8 @@ For example you can have `cities` collection and might want to have few material
 for a quick load from a web app. Such as:
 
 - Top 100 cities by population in descending order including population field value for each city
-- Top 100 cities by alphabet (_id and name only_)
-- All city ids like `['London', 'Mancheser', ...]`
+- Top 100 cities alphabetically (_id and name only_)
+- All city ids like `['London', 'Manchester', ...]`
 
 ## Record level views
 
@@ -28,5 +28,5 @@ Example:
 
 ## Root level views
 
-- Top 10 most populas cities in the world and their official language
+- Top 10 most populous cities in the world and their official language
 - Top 10 French-speaking cities

@@ -31,7 +31,7 @@ Connection string format follows standard DSN conventions (e.g. `postgres://user
 
 | Format | Status |
 |---|---|
-| SQL | Phase 7 |
+| SQL | Phase 9 |
 
 Additional formats (e.g. Prisma migrations, Liquibase changesets) may be added in later phases.
 

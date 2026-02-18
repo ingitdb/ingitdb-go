@@ -2,7 +2,7 @@
 
 ## Skills
 
-- List known inGidDB databases registered in the `~/.ingitdb/ingitdbs.yaml`
+- List known inGitDB databases registered in `~/.ingitdb/ingitdbs.yaml`
 - List inGitDB objects (metadata):
     - Collections
     - Materialized views

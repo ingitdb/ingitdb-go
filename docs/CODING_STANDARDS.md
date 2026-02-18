@@ -11,7 +11,7 @@
 
 - Strictly follow standard Go idioms and formatting (`go fmt`).
 - always check or explicitly ignore returned errors
-- avoid calling functions inside calls of other functions:
+- avoid calling functions inside calls of other functions (no nested calls)
 - at the end always verify changes with `golangci-lint run` - should report no errors or warnings.
 - Use `fmt.Fprintf` to `os.Stderr` or specific buffers instead of
   `fmt.Println` or `fmt.Printf` to avoid interfering with the TUI output on `stdout`.
@@ -43,15 +43,12 @@ All commits MUST follow the Conventional Commits specification.
 ## Tests
 
 - We aim for 100% test coverage.
-- All top tests that do replace mock package level variable should be able to run in parallel (call `t.Parallel()` as
-  1st stament of the test)
+- Call `t.Parallel()` as the first statement of every top-level test.
 - use `-timeout=10s` when running tests
 
 - **Adding New Tests**:
     - Place tests in the same package as the code being tested, using the `_test.go` suffix.
-    - The project uses both the standard `testing` package and `github.com/stretchr/testify/assert` for more expressive
-      assertions.
-    - For UI-related tests, check `pkg/sneatv/ttestutils` for helper functions.
+    - The project uses the standard `testing` package.
 
 
 ### Unused arguments – explicitly mark function parameters as intentionally unused

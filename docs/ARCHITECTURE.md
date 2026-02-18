@@ -42,12 +42,13 @@ titles:
 data_dir: $records
 record_file:
   name: "$records/{key}.json"
-  type: "[]map[string]any"   # or "map[string]any" for single-record files
+  type: "[]map[string]any"   # or "map[string]any" (single record) or "map[string]map[string]any" (keyed dict)
   format: json               # or yaml
 columns:
   title:
     type: string
     required: true
+    min_length: 1
     max_length: 100
     titles:
       en: Task title

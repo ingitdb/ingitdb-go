@@ -60,13 +60,14 @@ We welcome pull requests for bug fixes, new features, and improvements to docume
 To run all tests:
 
 ```shell
-go test ./...
+go test -timeout=10s ./...
 ```
 
 To run tests with coverage:
 
 ```shell
-go test -cover ./...
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 ```
 
 ### Building from source
@@ -74,7 +75,7 @@ go test -cover ./...
 To build the executable:
 
 ```shell
-go build -o ft main.go
+go build -o ingitdb ./cmd/ingitdb
 ```
 
 ## Coding Standards
@@ -84,4 +85,4 @@ Please read [our guidelines](GUIDELINES.md) and follow our [coding standards](CO
 ## License
 
 By contributing to inGitDB, you agree that your contributions will be licensed under the
-project's [GPLv3 License](../LICENSE).
+project's [MIT License](../LICENSE).
