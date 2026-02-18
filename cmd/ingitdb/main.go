@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/urfave/cli/v3"
 
 	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-go/pkg/ingitdb/validator"
@@ -20,41 +23,213 @@ var (
 
 func main() {
 	fatal := func(err error) {
-		log.Print(err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		exit(1)
 	}
-	run(os.Args, os.UserHomeDir, validator.ReadDefinition, fatal, log.Println)
+	logf := func(args ...any) { fmt.Fprintln(os.Stderr, args...) }
+	run(os.Args, os.UserHomeDir, os.Getwd, validator.ReadDefinition, fatal, logf)
 }
 
 func run(
 	args []string,
 	homeDir func() (string, error),
+	getWd func() (string, error),
 	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
 	fatal func(error),
 	logf func(...any),
 ) {
-	if args[1] == "--version" {
-		fmt.Printf("ingitdb %s (%s) @ %s\n", version, commit, date)
+	app := &cli.Command{
+		Name:      "ingitdb",
+		Usage:     "Git-backed database CLI",
+		Version:   fmt.Sprintf("%s (%s) @ %s", version, commit, date),
+		ErrWriter: os.Stderr,
+		Commands: []*cli.Command{
+			{
+				Name:  "validate",
+				Usage: "Validate an inGitDB database directory",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory (default: current directory)",
+					},
+					&cli.StringFlag{
+						Name:  "from-commit",
+						Usage: "validate only records changed since this commit",
+					},
+					&cli.StringFlag{
+						Name:  "to-commit",
+						Usage: "validate only records up to this commit",
+					},
+				},
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					dirPath := cmd.String("path")
+					if dirPath == "" {
+						wd, err := getWd()
+						if err != nil {
+							return fmt.Errorf("failed to get working directory: %w", err)
+						}
+						dirPath = wd
+					}
+					expanded, err := expandHome(dirPath, homeDir)
+					if err != nil {
+						return err
+					}
+					dirPath = expanded
+					logf("inGitDB db path: ", dirPath)
+					_, err = readDefinition(dirPath, ingitdb.Validate())
+					if err != nil {
+						return fmt.Errorf("inGitDB database validation failed: %w", err)
+					}
+					return nil
+				},
+			},
+			{
+				Name:  "query",
+				Usage: "Query records from a collection",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "collection",
+						Usage:    "collection to query",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+					&cli.StringFlag{
+						Name:  "format",
+						Usage: "output format (json, yaml)",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
+				Name:  "materialize",
+				Usage: "Materialize views in the database",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+					&cli.StringFlag{
+						Name:  "views",
+						Usage: "comma-separated list of views to materialize",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
+				Name:  "setup",
+				Usage: "Set up a new inGitDB database",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
+				Name:  "resolve",
+				Usage: "Resolve merge conflicts in database files",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+					&cli.StringFlag{
+						Name:  "file",
+						Usage: "specific file to resolve",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
+				Name:  "mcp",
+				Usage: "Start the MCP server",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+			{
+				Name:  "migrate",
+				Usage: "Migrate data between schema versions",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "from",
+						Usage:    "source schema version",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "to",
+						Usage:    "target schema version",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "target",
+						Usage:    "migration target",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "path",
+						Usage: "path to the database directory",
+					},
+					&cli.StringFlag{
+						Name:  "format",
+						Usage: "output format",
+					},
+					&cli.StringFlag{
+						Name:  "collections",
+						Usage: "comma-separated list of collections to migrate",
+					},
+					&cli.StringFlag{
+						Name:  "output-dir",
+						Usage: "directory for migration output",
+					},
+				},
+				Action: func(_ context.Context, _ *cli.Command) error {
+					return cli.Exit("not yet implemented", 1)
+				},
+			},
+		},
+	}
+
+	err := app.Run(context.Background(), args)
+	if err == nil {
 		return
 	}
-
-	dirPath := expandHome(args[1], homeDir, fatal)
-	logf("inGitDB db path: ", dirPath)
-
-	_, err := readDefinition(dirPath, ingitdb.Validate())
-	if err != nil {
-		fatal(fmt.Errorf("inGitDB database validation failed: %w", err))
+	var exitErr cli.ExitCoder
+	if errors.As(err, &exitErr) {
+		code := exitErr.ExitCode()
+		if code != 0 {
+			exit(code)
+		}
+		return
 	}
+	fatal(err)
 }
 
-func expandHome(path string, homeDir func() (string, error), fatal func(error)) string {
+func expandHome(path string, homeDir func() (string, error)) (string, error) {
 	if strings.HasPrefix(path, "~") {
 		home, err := homeDir()
 		if err != nil {
-			fatal(fmt.Errorf("failed to expand home directory: %w", err))
-			return ""
+			return "", fmt.Errorf("failed to expand home directory: %w", err)
 		}
-		return filepath.Join(home, path[1:])
+		return filepath.Join(home, path[1:]), nil
 	}
-	return path
+	return path, nil
 }
