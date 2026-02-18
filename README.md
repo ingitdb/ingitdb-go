@@ -71,6 +71,27 @@ languages:
   - required: en
 ```
 
+## Commands
+
+| Command | Status | Description |
+|---|---|---|
+| `version` | implemented | Print build version, commit hash, and date |
+| `validate` | implemented | Check every record against its collection schema |
+| `list collections\|view\|subscribers` | planned | List schema objects, scoped with `--in` and `--filter-name` |
+| `find` | planned | Search records by substring, regex, or exact value |
+| `delete collection\|view\|records` | planned | Remove a collection, view definition, or individual records |
+| `truncate` | planned | Remove all records from a collection, keeping its schema |
+| `query` | planned | Query and format records from a collection |
+| `materialize` | planned | Build materialized views into `$views/` |
+| `pull` | planned | Pull remote changes and rebuild views |
+| `watch` | planned | Stream record change events to stdout |
+| `serve` | planned | Start MCP, HTTP API, or file-watcher server |
+| `resolve` | planned | Interactive TUI for resolving data-file merge conflicts |
+| `setup` | planned | Initialise a new database directory |
+| `migrate` | planned | Migrate records between schema versions |
+
+See the [CLI reference](docs/CLI.md) for flags and examples.
+
 ## Documentation
 
 | Document | Description |
