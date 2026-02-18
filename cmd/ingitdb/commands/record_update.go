@@ -13,7 +13,7 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
-// Update returns the update command for patching a single record.
+// Update returns the update command group.
 func Update(
 	homeDir func() (string, error),
 	getWd func() (string, error),
@@ -22,7 +22,21 @@ func Update(
 	logf func(...any),
 ) *cli.Command {
 	return &cli.Command{
-		Name:  "update",
+		Name:     "update",
+		Usage:    "Update database objects",
+		Commands: []*cli.Command{updateRecord(homeDir, getWd, readDefinition, newDB, logf)},
+	}
+}
+
+func updateRecord(
+	homeDir func() (string, error),
+	getWd func() (string, error),
+	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
+	newDB func(string, *ingitdb.Definition) (dal.DB, error),
+	logf func(...any),
+) *cli.Command {
+	return &cli.Command{
+		Name:  "record",
 		Usage: "Update fields of an existing record",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -31,7 +45,7 @@ func Update(
 			},
 			&cli.StringFlag{
 				Name:     "id",
-				Usage:    "record ID in the format collection/path/key (e.g. todo/tags/ie)",
+				Usage:    "record ID in the format collection/path/key (e.g. todo/countries/ie)",
 				Required: true,
 			},
 			&cli.StringFlag{

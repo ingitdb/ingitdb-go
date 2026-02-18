@@ -12,7 +12,7 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
-// Create returns the create command for inserting a single record.
+// Create returns the create command group.
 func Create(
 	homeDir func() (string, error),
 	getWd func() (string, error),
@@ -21,7 +21,21 @@ func Create(
 	logf func(...any),
 ) *cli.Command {
 	return &cli.Command{
-		Name:  "create",
+		Name:     "create",
+		Usage:    "Create database objects",
+		Commands: []*cli.Command{createRecord(homeDir, getWd, readDefinition, newDB, logf)},
+	}
+}
+
+func createRecord(
+	homeDir func() (string, error),
+	getWd func() (string, error),
+	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
+	newDB func(string, *ingitdb.Definition) (dal.DB, error),
+	logf func(...any),
+) *cli.Command {
+	return &cli.Command{
+		Name:  "record",
 		Usage: "Create a new record in a collection",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -30,7 +44,7 @@ func Create(
 			},
 			&cli.StringFlag{
 				Name:     "id",
-				Usage:    "record ID in the format collection/path/key (e.g. todo/tags/ie)",
+				Usage:    "record ID in the format collection/path/key (e.g. todo/countries/ie)",
 				Required: true,
 			},
 			&cli.StringFlag{
