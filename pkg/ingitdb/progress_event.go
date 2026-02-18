@@ -15,10 +15,10 @@ const (
 // ProgressEvent carries one progress update from a running task.
 type ProgressEvent struct {
 	Kind     ProgressKind
-	TaskName string            // "validate" or "materialize"
-	Scope    string            // collection or view ID
-	ItemKey  string            // record key or output file name
-	Done     int               // items completed so far
-	Total    int               // total items; 0 = unknown
-	Err      *ValidationError  // non-nil only for ProgressKindError
+	TaskName string           // "validate" or "materialize"
+	Scope    string           // collection or view ID
+	ItemKey  string           // record key or output file name
+	Done     int              // items completed so far
+	Total    int              // total items; 0 = unknown
+	Err      *ValidationError // non-nil only for ProgressKindError
 }

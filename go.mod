@@ -4,9 +4,12 @@ go 1.24.1
 
 require gopkg.in/yaml.v3 v3.0.1
 
+require github.com/google/go-querystring v1.1.0 // indirect
+
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/google/go-github/v72 v72.0.0
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.9.1 // indirect
 	github.com/metoro-io/mcp-golang v0.16.0

@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
@@ -30,6 +31,10 @@ func readRecord(
 				Usage: "path to the database directory (default: current directory)",
 			},
 			&cli.StringFlag{
+				Name:  "github",
+				Usage: "GitHub source as owner/repo[@branch|tag|commit] (public read-only)",
+			},
+			&cli.StringFlag{
 				Name:     "id",
 				Usage:    "record ID in the format collection/path/key (e.g. countries/ie)",
 				Required: true,
@@ -41,32 +46,54 @@ func readRecord(
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			dirPath, err := resolveDBPath(cmd, homeDir, getWd)
-			if err != nil {
-				return err
-			}
 			_ = logf
-
-			def, err := readDefinition(dirPath)
-			if err != nil {
-				return fmt.Errorf("failed to read database definition: %w", err)
-			}
-
 			id := cmd.String("id")
-			colDef, recordKey, err := dalgo2ingitdb.CollectionForKey(def, id)
-			if err != nil {
-				return fmt.Errorf("invalid --id: %w", err)
+			githubValue := cmd.String("github")
+			var (
+				key *dal.Key
+				db  dal.DB
+				err error
+			)
+			if githubValue != "" {
+				pathValue := cmd.String("path")
+				if pathValue != "" {
+					return fmt.Errorf("--path with --github is not supported yet")
+				}
+				spec, parseErr := parseGitHubRepoSpec(githubValue)
+				if parseErr != nil {
+					return parseErr
+				}
+				def, collectionID, recordKey, readErr := readRemoteDefinitionForID(ctx, spec, id)
+				if readErr != nil {
+					return fmt.Errorf("failed to resolve remote definition: %w", readErr)
+				}
+				cfg := dalgo2ghingitdb.Config{Owner: spec.Owner, Repo: spec.Repo, Ref: spec.Ref}
+				db, err = dalgo2ghingitdb.NewGitHubDBWithDef(cfg, def)
+				if err != nil {
+					return fmt.Errorf("failed to open github database: %w", err)
+				}
+				key = dal.NewKeyWithID(collectionID, recordKey)
+			} else {
+				dirPath, resolveErr := resolveDBPath(cmd, homeDir, getWd)
+				if resolveErr != nil {
+					return resolveErr
+				}
+				def, readErr := readDefinition(dirPath)
+				if readErr != nil {
+					return fmt.Errorf("failed to read database definition: %w", readErr)
+				}
+				colDef, recordKey, parseErr := dalgo2ingitdb.CollectionForKey(def, id)
+				if parseErr != nil {
+					return fmt.Errorf("invalid --id: %w", parseErr)
+				}
+				db, err = newDB(dirPath, def)
+				if err != nil {
+					return fmt.Errorf("failed to open database: %w", err)
+				}
+				key = dal.NewKeyWithID(colDef.ID, recordKey)
 			}
-
-			db, err := newDB(dirPath, def)
-			if err != nil {
-				return fmt.Errorf("failed to open database: %w", err)
-			}
-
-			key := dal.NewKeyWithID(colDef.ID, recordKey)
 			data := map[string]any{}
 			record := dal.NewRecordWithData(key, data)
-
 			err = db.RunReadonlyTransaction(ctx, func(ctx context.Context, tx dal.ReadTransaction) error {
 				return tx.Get(ctx, record)
 			})
@@ -76,7 +103,6 @@ func readRecord(
 			if !record.Exists() {
 				return fmt.Errorf("record not found: %s", id)
 			}
-
 			format := cmd.String("format")
 			switch format {
 			case "yaml", "yml":

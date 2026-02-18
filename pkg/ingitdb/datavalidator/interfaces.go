@@ -31,7 +31,7 @@ type DataValidator interface {
 type AffectedRecord struct {
 	CollectionID string
 	FilePath     string
-	RecordKey    string             // empty if entire file changed (list/map format)
+	RecordKey    string // empty if entire file changed (list/map format)
 	ChangeKind   ingitdb.ChangeKind
 }
 
