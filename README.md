@@ -119,6 +119,7 @@ languages:
 | `resolve` | planned | Interactive TUI for resolving data-file merge conflicts |
 | `setup` | planned | Initialise a new database directory |
 | `migrate` | planned | Migrate records between schema versions |
+| `import` | planned | Import data from external databases (SQL, GraphQL, etc) |
 
 See the [CLI reference](docs/CLI.md) for flags and examples.
 

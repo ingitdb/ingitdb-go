@@ -58,6 +58,7 @@ func run(
 			commands.Delete(),
 			commands.Truncate(),
 			commands.Migrate(),
+			commands.Import(),
 		},
 	}
 

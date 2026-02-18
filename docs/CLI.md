@@ -491,3 +491,39 @@ ingitdb migrate --from=v1 --to=v2 --target=production --collections=tasks,users
 # Write migrated records to a staging directory
 ingitdb migrate --from=v1 --to=v2 --target=production --output-dir=/tmp/migration
 ```
+
+---
+
+### `import` — import data from external databases *(not yet implemented)*
+
+```
+ingitdb import --connection=CONN [--path=PATH] [--global-filter=CONDITION] [--table=TABLE1] [--table=TABLE2:CONDITION]
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--connection=CONN` | yes | Connection string for the external database (e.g., PostgreSQL, MySQL, GraphQL endpoint). |
+| `--path=PATH` | no | Path to the inGitDB database directory. Defaults to the current working directory. |
+| `--global-filter=CONDITION` | no | Generic condition applied to all tables that have the specified fields (e.g., `status == "active"`). |
+| `--table=TABLE` | no | Table to import. Can be specified multiple times. Format: `table_name` or `table_name:condition` for table-specific conditions. |
+
+The import command (also known as the "Data ingesting" feature or "Ingester component") loads data from external databases such as SQL databases, GraphQL APIs, or other data sources. It applies the global filter to all tables that have the relevant fields, and optionally applies per-table conditions.
+
+**Examples:**
+
+```shell
+# Import all tables from a PostgreSQL database
+ingitdb import --connection="postgres://user:pass@localhost:5432/mydb"
+
+# Import with a global filter applied to all tables with a 'status' field
+ingitdb import --connection="postgres://user:pass@localhost:5432/mydb" --global-filter='status == "active"'
+
+# Import specific tables only
+ingitdb import --connection="postgres://user:pass@localhost:5432/mydb" --table=users --table=orders
+
+# Import specific tables with per-table conditions
+ingitdb import --connection="postgres://user:pass@localhost:5432/mydb" --table=users:role=="admin" --table=orders:total>100
+
+# Import to a specific database path
+ingitdb import --connection="postgres://user:pass@localhost:5432/mydb" --path=/var/db/myapp
+```
