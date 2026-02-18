@@ -3,7 +3,7 @@
 #
 # Binaries for programs and plugins
 ingitdb-go
-ingitdb
+/ingitdb
 *.exe
 *.exe~
 *.dll
