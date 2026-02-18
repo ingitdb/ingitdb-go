@@ -40,6 +40,19 @@ Reads `.ingitdb.yaml`, checks that every record file matches its collection sche
 
 Exit code is `0` on success, non-zero on any validation error.
 
+**Examples:**
+
+```shell
+# Validate the current directory
+ingitdb validate
+
+# Validate a specific path
+ingitdb validate --path=/path/to/your/db
+
+# Fast CI mode: validate only records changed between two commits
+ingitdb validate --from-commit=abc1234 --to-commit=def5678
+```
+
 ---
 
 ### `query` — query records from a collection *(not yet implemented)*
@@ -185,10 +198,22 @@ Top-level command with three subcommands. Shared flags on every subcommand:
 ingitdb list collections [--path=PATH] [--in=REGEXP] [--filter-name=PATTERN]
 ```
 
-Lists all collection paths defined in the database. Example:
+Lists all collection paths defined in the database.
 
-```
-ingitdb list collections --in=countries/(provinces|counties) --filter-name=*ire*
+**Examples:**
+
+```shell
+# List all collections
+ingitdb list collections
+
+# List collections nested under a matching path
+ingitdb list collections --in='countries/(ie|gb)'
+
+# List collections whose name contains "city"
+ingitdb list collections --filter-name='*city*'
+
+# Combined: scope and filter
+ingitdb list collections --in='countries/(provinces|counties)' --filter-name='*ire*'
 ```
 
 #### `list view`
@@ -228,6 +253,22 @@ be provided. When multiple search flags are given they are combined with OR.
 | `--fields=LIST` | no | Comma-separated list of field names to search. Without this flag all fields are searched. |
 | `--limit=N` | no | Maximum number of matching records to return. |
 
+**Examples:**
+
+```shell
+# Search all fields for a substring
+ingitdb find --substr=Dublin
+
+# Regex search with a result cap
+ingitdb find --re='pop.*[0-9]{6,}' --limit=10
+
+# Search specific fields only
+ingitdb find --substr=Dublin --fields=name,capital
+
+# Scope search to a sub-path and match a specific field value exactly
+ingitdb find --exact=Ireland --in='countries/.*' --fields=country
+```
+
 ---
 
 ### `delete` — delete database objects *(not yet implemented)*
@@ -246,6 +287,12 @@ Deletes a collection definition and all of its record files.
 |------|----------|-------------|
 | `--collection=ID` | yes | Collection id to delete (e.g. `countries/ie/counties`). |
 | `--path=PATH` | no | Path to the database directory. Defaults to the current working directory. |
+
+**Example:**
+
+```shell
+ingitdb delete collection --collection=countries/ie/counties/dublin
+```
 
 #### `delete view`
 
@@ -275,6 +322,12 @@ Deletes individual records from a collection. Use `--in` and `--filter-name` to 
 | `--in=REGEXP` | no | Regular expression scoping deletion to a sub-path. |
 | `--filter-name=PATTERN` | no | Glob-style pattern to match record names to delete. |
 
+**Example:**
+
+```shell
+ingitdb delete records --collection=countries/ie/counties --filter-name='*old*'
+```
+
 ---
 
 ### `truncate` — remove all records from a collection *(not yet implemented)*
@@ -289,6 +342,12 @@ Removes every record file from the specified collection, leaving the collection 
 |------|----------|-------------|
 | `--collection=ID` | yes | Collection id to truncate (e.g. `countries/ie/counties/dublin`). Nested paths are supported. |
 | `--path=PATH` | no | Path to the database directory. Defaults to the current working directory. |
+
+**Example:**
+
+```shell
+ingitdb truncate --collection=countries/ie/counties
+```
 
 ---
 
