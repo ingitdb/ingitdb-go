@@ -57,7 +57,7 @@ func run(
 			commands.Setup(),
 			commands.Resolve(),
 			commands.Watch(),
-			commands.Serve(),
+			commands.Serve(homeDir, getWd, readDefinition, newDB, logf),
 			commands.List(),
 			commands.Find(),
 			commands.Create(homeDir, getWd, readDefinition, newDB, logf),

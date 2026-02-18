@@ -3,11 +3,20 @@ package commands
 import (
 	"context"
 
+	"github.com/dal-go/dalgo/dal"
 	"github.com/urfave/cli/v3"
+
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
 // Serve returns the serve command.
-func Serve() *cli.Command {
+func Serve(
+	homeDir func() (string, error),
+	getWd func() (string, error),
+	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
+	newDB func(string, *ingitdb.Definition) (dal.DB, error),
+	logf func(...any),
+) *cli.Command {
 	return &cli.Command{
 		Name:  "serve",
 		Usage: "Start one or more servers (MCP, HTTP API, watcher)",
@@ -18,7 +27,7 @@ func Serve() *cli.Command {
 			},
 			&cli.BoolFlag{
 				Name:  "mcp",
-				Usage: "enable MCP server",
+				Usage: "enable MCP server over stdio",
 			},
 			&cli.BoolFlag{
 				Name:  "http",
@@ -29,8 +38,15 @@ func Serve() *cli.Command {
 				Usage: "enable file watcher",
 			},
 		},
-		Action: func(_ context.Context, _ *cli.Command) error {
-			return cli.Exit("not yet implemented", 1)
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			if cmd.Bool("mcp") {
+				dirPath, err := resolveDBPath(cmd, homeDir, getWd)
+				if err != nil {
+					return err
+				}
+				return serveMCP(ctx, dirPath, readDefinition, newDB, logf)
+			}
+			return cli.Exit("no server mode specified; use --mcp, --http, or --watcher", 1)
 		},
 	}
 }
