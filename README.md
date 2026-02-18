@@ -58,8 +58,38 @@ ingitdb validate
 # Validate a specific path
 ingitdb validate --path=/path/to/your/db
 
-# Validate only records changed between two commits
+# Validate only records changed between two commits (fast CI mode)
 ingitdb validate --from-commit=abc1234 --to-commit=def5678
+
+# List all collections
+ingitdb list collections
+
+# List collections nested under a path (regular expression)
+ingitdb list collections --in='countries/(ie|gb)'
+
+# List collections whose name contains "city"
+ingitdb list collections --filter-name='*city*'
+
+# Search records for a substring across all fields
+ingitdb find --substr=Dublin
+
+# Search records using a regular expression, limited to 10 results
+ingitdb find --re='pop.*[0-9]{6,}' --limit=10
+
+# Search only specific fields
+ingitdb find --substr=Dublin --fields=name,capital
+
+# Scope a search to a sub-path
+ingitdb find --exact=Ireland --in='countries/.*' --fields=country
+
+# Delete all records from a collection (keeps the schema)
+ingitdb truncate --collection=countries/ie/counties
+
+# Delete a specific collection and all its records
+ingitdb delete collection --collection=countries/ie/counties/dublin
+
+# Delete records matching a pattern within a collection
+ingitdb delete records --collection=countries/ie/counties --filter-name='*old*'
 ```
 
 A minimal `.ingitdb.yaml` at the root of your DB git repository:
