@@ -23,6 +23,7 @@ func Update(
 ) *cli.Command {
 	return &cli.Command{
 		Name:     "update",
+		Aliases:  []string{"u"},
 		Usage:    "Update database objects",
 		Commands: []*cli.Command{updateRecord(homeDir, getWd, readDefinition, newDB, logf)},
 	}

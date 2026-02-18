@@ -22,6 +22,7 @@ func Create(
 ) *cli.Command {
 	return &cli.Command{
 		Name:     "create",
+		Aliases:  []string{"c"},
 		Usage:    "Create database objects",
 		Commands: []*cli.Command{createRecord(homeDir, getWd, readDefinition, newDB, logf)},
 	}

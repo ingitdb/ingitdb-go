@@ -21,6 +21,7 @@ func Delete(
 ) *cli.Command {
 	return &cli.Command{
 		Name:     "delete",
+		Aliases:  []string{"d"},
 		Usage:    "Delete database objects (collection, view, or records)",
 		Commands: []*cli.Command{collection(), deleteView(), records(), deleteRecord(homeDir, getWd, readDefinition, newDB, logf)},
 	}

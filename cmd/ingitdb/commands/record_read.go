@@ -24,6 +24,7 @@ func Read(
 ) *cli.Command {
 	return &cli.Command{
 		Name:     "read",
+		Aliases:  []string{"r"},
 		Usage:    "Read database objects",
 		Commands: []*cli.Command{readRecord(homeDir, getWd, readDefinition, newDB, logf)},
 	}
