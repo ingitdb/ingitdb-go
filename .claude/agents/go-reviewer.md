@@ -5,8 +5,9 @@ description: >
   produces output. go-reviewer checks for convention violations (CLAUDE.md
   rules), missing or weak tests, logic errors, and API design issues. It does
   not fix code — it reports findings so the author agent can correct them.
-  Use before marking any coding task as done.
-tools: Read, Glob, Grep, Bash
+  Use before marking any coding task as done. When documentation gaps are found,
+  delegate documentation updates to the docs-writer agent.
+tools: Read, Glob, Grep, Bash, Task
 model: haiku
 ---
 
@@ -26,7 +27,9 @@ You review diffs and changed files against:
 4. API design clarity
 
 You do **not** fix code. You produce a structured review report and exit. The
-agent that wrote the code is responsible for applying fixes.
+agent that wrote the code is responsible for applying fixes. When you find
+documentation gaps, you may delegate those updates to the `docs-writer` agent
+using the `Task` tool with `subagent_type: docs-writer`.
 
 ## Review checklist
 
