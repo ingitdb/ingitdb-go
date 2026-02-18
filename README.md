@@ -1,10 +1,10 @@
 # inGitDB
 
-[![Build, Test, Vet, Lint](https://github.com/ingitdb/ingitdb-go/actions/workflows/golangci.yml/badge.svg)](https://github.com/ingitdb/ingitdb-go/actions/workflows/golangci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ingitdb/ingitdb-go)](https://goreportcard.com/report/github.com/ingitdb/ingitdb-go)
-[![Coverage Status](https://coveralls.io/repos/github/ingitdb/ingitdb-go/badge.svg?branch=main&kill-cache=3)](https://coveralls.io/github/ingitdb/ingitdb-go?branch=main)
-[![GoDoc](https://godoc.org/github.com/ingitdb/ingitdb-go?status.svg)](https://godoc.org/github.com/ingitdb/ingitdb-go)
-[![Version](https://img.shields.io/github/v/tag/ingitdb/ingitdb-go?filter=v*.*.*&logo=Go)](https://github.com/ingitdb/ingitdb-go/tags)
+[![Build, Test, Vet, Lint](https://github.com/ingitdb/ingitdb-cli/actions/workflows/golangci.yml/badge.svg)](https://github.com/ingitdb/ingitdb-cli/actions/workflows/golangci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ingitdb/ingitdb-cli)](https://goreportcard.com/report/github.com/ingitdb/ingitdb-cli)
+[![Coverage Status](https://coveralls.io/repos/github/ingitdb/ingitdb-cli/badge.svg?branch=main&kill-cache=3)](https://coveralls.io/github/ingitdb/ingitdb-cli?branch=main)
+[![GoDoc](https://godoc.org/github.com/ingitdb/ingitdb-cli?status.svg)](https://godoc.org/github.com/ingitdb/ingitdb-cli)
+[![Version](https://img.shields.io/github/v/tag/ingitdb/ingitdb-cli?filter=v*.*.*&logo=Go)](https://github.com/ingitdb/ingitdb-cli/tags)
 
 <img src="https://github.com/ingitdb/.github/raw/main/inGitDB-full4.png" alt="inGitDB Logo" />
 
@@ -143,7 +143,7 @@ is to point the CLI at a directory of YAML files and run `ingitdb validate`, the
 To contribute:
 
 1. Read [CONTRIBUTING.md](docs/CONTRIBUTING.md) for the pull-request workflow.
-2. Browse [open issues](https://github.com/ingitdb/ingitdb-go/issues) to find something to work on.
+2. Browse [open issues](https://github.com/ingitdb/ingitdb-cli/issues) to find something to work on.
 3. Open or comment on an issue before investing time in a large change.
 
 Bug reports, documentation improvements, and questions are all welcome.

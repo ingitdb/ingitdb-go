@@ -8,9 +8,9 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/ingitdb/ingitdb-go/cmd/ingitdb/commands"
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb/validator"
+	"github.com/ingitdb/ingitdb-cli/cmd/ingitdb/commands"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/validator"
 )
 
 var (
@@ -22,10 +22,12 @@ var (
 
 func main() {
 	fatal := func(err error) {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		exit(1)
 	}
-	logf := func(args ...any) { fmt.Fprintln(os.Stderr, args...) }
+	logf := func(args ...any) {
+		_, _ = fmt.Fprintln(os.Stderr, args...)
+	}
 	run(os.Args, os.UserHomeDir, os.Getwd, validator.ReadDefinition, fatal, logf)
 }
 

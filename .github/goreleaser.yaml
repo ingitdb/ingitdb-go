@@ -49,4 +49,4 @@ checksum:
 release:
   github:
     owner: ingitdb
-    name: ingitdb-go
+    name: ingitdb-cli

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb/config"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
 	"gopkg.in/yaml.v3"
 )
 

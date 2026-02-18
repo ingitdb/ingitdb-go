@@ -120,7 +120,7 @@ To contribute:
 
 1. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the pull-request workflow.
 2. Read [CODING_STANDARDS.md](CODING_STANDARDS.md) before writing any Go.
-3. Open or comment on an [issue](https://github.com/ingitdb/ingitdb-go/issues) to discuss your
+3. Open or comment on an [issue](https://github.com/ingitdb/ingitdb-cli/issues) to discuss your
    idea before investing time in a large change.
 
 Bug reports, documentation improvements, and questions are all welcome. The project is small

@@ -9,7 +9,7 @@ process for everyone involved.
 
 ### Reporting Bugs
 
-If you find a bug, please check the [existing issues](https://github.com/ingitdb/ingitdb-go/issues) to see if it has
+If you find a bug, please check the [existing issues](https://github.com/ingitdb/ingitdb-cli/issues) to see if it has
 already been reported. If not, please open a new issue and include:
 
 - A clear and descriptive title.
@@ -22,7 +22,7 @@ already been reported. If not, please open a new issue and include:
 
 We're always looking for ways to improve ingitdb! If you have an idea for a new feature or an enhancement:
 
-1. Check the [existing issues](https://github.com/ingitdb/ingitdb-go/issues) to see if the feature has already been
+1. Check the [existing issues](https://github.com/ingitdb/ingitdb-cli/issues) to see if the feature has already been
    suggested.
 2. If not, open a new issue and describe the proposed change, why it would be useful, and how you imagine it working.
 
@@ -46,8 +46,8 @@ We welcome pull requests for bug fixes, new features, and improvements to docume
 
 1. Clone your fork of the repository:
    ```shell
-   git clone https://github.com/YOUR_USERNAME/ingitdb-go.git
-   cd ingitdb-go
+   git clone https://github.com/YOUR_USERNAME/ingitdb-cli.git
+   cd ingitdb-cli
    ```
 
 2. Download dependencies:

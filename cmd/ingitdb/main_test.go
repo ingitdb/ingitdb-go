@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
 func TestRun_Version(t *testing.T) {
@@ -147,7 +147,6 @@ func TestRun_ValidateHomePath(t *testing.T) {
 	}
 }
 
-
 func TestMain_VersionCmd(t *testing.T) {
 	args := os.Args
 	os.Args = []string{"ingitdb", "version"}
@@ -188,4 +187,3 @@ func TestMain_ReadDefinitionError(t *testing.T) {
 		t.Fatal("expected exit to be called")
 	}
 }
-

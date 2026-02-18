@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"gopkg.in/yaml.v3"
 )
 

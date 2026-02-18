@@ -8,7 +8,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
 // Validate returns the validate command.

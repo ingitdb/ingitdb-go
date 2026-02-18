@@ -1,4 +1,4 @@
-module github.com/ingitdb/ingitdb-go
+module github.com/ingitdb/ingitdb-cli
 
 go 1.24.1
 

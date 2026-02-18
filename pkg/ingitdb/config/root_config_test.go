@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
 func TestRootConfigValidate(t *testing.T) {

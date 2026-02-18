@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb"
-	"github.com/ingitdb/ingitdb-go/pkg/ingitdb/config"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
 )
 
 func writeCollectionDef(t *testing.T, dir string, content string) {
