@@ -56,16 +56,10 @@ homebrew_casks:
     ids:
       - tarball
     description: "ingitdb – a CLI for a developer-grade, schema-validated, AI-native database whose storage engine is a Git repository."
-    homepage: https:/ingitdb.com
+    homepage: https://ingitdb.com
     license: MIT
 
     repository:
       owner: ingitdb
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-
-    install: |
-      bin.install "ingitdb"
-
-    test: |
-      system "#{bin}/ingitdb", "--version"
