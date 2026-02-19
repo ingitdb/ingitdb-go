@@ -2,12 +2,10 @@ package commands
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/dal-go/dalgo/dal"
 	"github.com/urfave/cli/v3"
 
-	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
@@ -41,77 +39,20 @@ func deleteRecord(
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			_ = logf
 			id := cmd.String("id")
-			githubValue := cmd.String("github")
-			var (
-				db        dal.DB
-				colDef    *ingitdb.CollectionDef
-				colDefID  string
-				recordKey string
-				dirPath   string
-				def       *ingitdb.Definition
-				err       error
-			)
-			if githubValue != "" {
-				spec, parseErr := parseGitHubRepoSpec(githubValue)
-				if parseErr != nil {
-					return parseErr
-				}
-				def, collectionID, key, readErr := readRemoteDefinitionForID(ctx, spec, id)
-				if readErr != nil {
-					return fmt.Errorf("failed to resolve remote definition: %w", readErr)
-				}
-				cfg := newGitHubConfig(spec, githubToken(cmd))
-				db, err = gitHubDBFactory.NewGitHubDBWithDef(cfg, def)
-				if err != nil {
-					return fmt.Errorf("failed to open github database: %w", err)
-				}
-				colDefID = collectionID
-				recordKey = key
-			} else {
-				dirPath, resolveErr := resolveDBPath(cmd, homeDir, getWd)
-				if resolveErr != nil {
-					return resolveErr
-				}
-				_ = logf
-				def, err = readDefinition(dirPath)
-				if err != nil {
-					return fmt.Errorf("failed to read database definition: %w", err)
-				}
-				var (
-					parseErr error
-					key      string
-				)
-				colDef, key, parseErr = dalgo2ingitdb.CollectionForKey(def, id)
-				if parseErr != nil {
-					return fmt.Errorf("invalid --id: %w", parseErr)
-				}
-				colDefID = colDef.ID
-				recordKey = key
-				db, err = newDB(dirPath, def)
-				if err != nil {
-					return fmt.Errorf("failed to open database: %w", err)
-				}
+			rctx, err := resolveRecordContext(ctx, cmd, id, homeDir, getWd, readDefinition, newDB)
+			if err != nil {
+				return err
 			}
-			key := dal.NewKeyWithID(colDefID, recordKey)
-			err = db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+			key := dal.NewKeyWithID(rctx.colDef.ID, rctx.recordKey)
+			err = rctx.db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
 				return tx.Delete(ctx, key)
 			})
 			if err != nil {
 				return err
 			}
-			if githubValue == "" {
-				builder, err := viewBuilderFactory.ViewBuilderForCollection(colDef)
-				if err != nil {
-					return fmt.Errorf("failed to init view builder for collection %s: %w", colDefID, err)
-				}
-				if builder != nil {
-					if _, buildErr := builder.BuildViews(ctx, dirPath, colDef, def); buildErr != nil {
-						return fmt.Errorf("failed to materialize views for collection %s: %w", colDefID, buildErr)
-					}
-				}
-			}
-			return nil
+			return buildLocalViews(ctx, rctx)
 		},
 	}
 }

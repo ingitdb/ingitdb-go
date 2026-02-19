@@ -10,7 +10,6 @@ import (
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
 
@@ -51,53 +50,17 @@ func readRecord(
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			_ = logf
 			id := cmd.String("id")
-			githubValue := cmd.String("github")
-			var (
-				key *dal.Key
-				db  dal.DB
-				err error
-			)
-			if githubValue != "" {
-				pathValue := cmd.String("path")
-				if pathValue != "" {
-					return fmt.Errorf("--path with --github is not supported yet")
-				}
-				spec, parseErr := parseGitHubRepoSpec(githubValue)
-				if parseErr != nil {
-					return parseErr
-				}
-				def, collectionID, recordKey, readErr := readRemoteDefinitionForID(ctx, spec, id)
-				if readErr != nil {
-					return fmt.Errorf("failed to resolve remote definition: %w", readErr)
-				}
-				cfg := newGitHubConfig(spec, githubToken(cmd))
-				db, err = gitHubDBFactory.NewGitHubDBWithDef(cfg, def)
-				if err != nil {
-					return fmt.Errorf("failed to open github database: %w", err)
-				}
-				key = dal.NewKeyWithID(collectionID, recordKey)
-			} else {
-				dirPath, resolveErr := resolveDBPath(cmd, homeDir, getWd)
-				if resolveErr != nil {
-					return resolveErr
-				}
-				def, readErr := readDefinition(dirPath)
-				if readErr != nil {
-					return fmt.Errorf("failed to read database definition: %w", readErr)
-				}
-				colDef, recordKey, parseErr := dalgo2ingitdb.CollectionForKey(def, id)
-				if parseErr != nil {
-					return fmt.Errorf("invalid --id: %w", parseErr)
-				}
-				db, err = newDB(dirPath, def)
-				if err != nil {
-					return fmt.Errorf("failed to open database: %w", err)
-				}
-				key = dal.NewKeyWithID(colDef.ID, recordKey)
+			if cmd.String("github") != "" && cmd.String("path") != "" {
+				return fmt.Errorf("--path with --github is not supported yet")
 			}
+			rctx, err := resolveRecordContext(ctx, cmd, id, homeDir, getWd, readDefinition, newDB)
+			if err != nil {
+				return err
+			}
+			key := dal.NewKeyWithID(rctx.colDef.ID, rctx.recordKey)
 			data := map[string]any{}
 			record := dal.NewRecordWithData(key, data)
-			err = db.RunReadonlyTransaction(ctx, func(ctx context.Context, tx dal.ReadTransaction) error {
+			err = rctx.db.RunReadonlyTransaction(ctx, func(ctx context.Context, tx dal.ReadTransaction) error {
 				return tx.Get(ctx, record)
 			})
 			if err != nil {
