@@ -34,7 +34,7 @@ func TestReadRecord_Success(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Read(homeDir, getWd, readDef, newDB, logf)
-	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/r1"); err != nil {
+	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/r1"); err != nil {
 		t.Fatalf("ReadRecord: %v", err)
 	}
 }
@@ -54,7 +54,7 @@ func TestReadRecord_NotFound(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Read(homeDir, getWd, readDef, newDB, logf)
-	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/ghost")
+	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/ghost")
 	if err == nil {
 		t.Fatal("expected error for not-found record")
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
@@ -120,20 +119,8 @@ func listCollectionsGitHub(ctx context.Context, githubValue, token string) error
 		return fmt.Errorf("invalid .ingitdb.yaml: %w", validateErr)
 	}
 	ids := make([]string, 0)
-	for rootID, rootPath := range rootConfig.RootCollections {
-		if strings.HasSuffix(rootPath, "/*") {
-			dirPath := strings.TrimSuffix(rootPath, "*")
-			entries, listErr := fileReader.ListDirectory(ctx, dirPath)
-			if listErr != nil {
-				return fmt.Errorf("failed to list directory %s: %w", dirPath, listErr)
-			}
-			for _, entry := range entries {
-				collectionID := rootID + "." + entry
-				ids = append(ids, collectionID)
-			}
-		} else {
-			ids = append(ids, rootID)
-		}
+	for rootID := range rootConfig.RootCollections {
+		ids = append(ids, rootID)
 	}
 	sort.Strings(ids)
 	for _, id := range ids {

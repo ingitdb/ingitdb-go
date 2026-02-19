@@ -94,8 +94,7 @@ type FileReader interface {
 `found = false` (no error) when the file does not exist (HTTP 404).
 
 `ListDirectory` lists the names of all entries inside a directory path. Returns an empty slice
-(no error) when the directory does not exist. Used by `ingitdb list collections` to expand
-wildcard root collections defined as `rootPath/*` in `.ingitdb.yaml`.
+(no error) when the directory does not exist.
 
 `NewGitHubFileReader(cfg Config) (FileReader, error)` is the public constructor.
 

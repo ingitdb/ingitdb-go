@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -28,7 +27,7 @@ func readCollection(
 			},
 			&cli.StringFlag{
 				Name:     "collection",
-				Usage:    "collection ID using slash or dot separator (e.g. countries or todo/countries)",
+				Usage:    "collection ID (alphanumeric and dot only, e.g. countries or todo.countries)",
 				Required: true,
 			},
 		},
@@ -44,14 +43,7 @@ func readCollection(
 				return fmt.Errorf("failed to read database definition: %w", err)
 			}
 
-			wantNorm := strings.ReplaceAll(cmd.String("collection"), ".", "/")
-			var colDef *ingitdb.CollectionDef
-			for colID, cd := range def.Collections {
-				if strings.ReplaceAll(colID, ".", "/") == wantNorm {
-					colDef = cd
-					break
-				}
-			}
+			colDef := def.Collections[cmd.String("collection")]
 			if colDef == nil {
 				return fmt.Errorf("collection %q not found", cmd.String("collection"))
 			}

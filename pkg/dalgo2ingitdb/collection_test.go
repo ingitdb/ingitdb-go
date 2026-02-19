@@ -70,20 +70,14 @@ func TestCollectionForKey_DotSeparatedNamespacedID(t *testing.T) {
 	}
 }
 
-func TestCollectionForKey_SlashNormalizedNamespacedID(t *testing.T) {
+func TestCollectionForKey_SlashNormalizedNamespacedIDRejected(t *testing.T) {
 	t.Parallel()
 
-	// "todo/tags/abc" uses "/" as namespace separator (legacy format still accepted).
+	// "todo/tags/abc" is invalid because "/" is reserved as the collection/key separator.
 	def := collectionForKeyDef()
-	colDef, key, err := CollectionForKey(def, "todo/tags/abc")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if colDef.ID != "todo.tags" {
-		t.Errorf("colDef.ID = %q, want %q", colDef.ID, "todo.tags")
-	}
-	if key != "abc" {
-		t.Errorf("key = %q, want %q", key, "abc")
+	_, _, err := CollectionForKey(def, "todo/tags/abc")
+	if err == nil {
+		t.Fatal("expected error for slash-normalized namespaced collection ID")
 	}
 }
 

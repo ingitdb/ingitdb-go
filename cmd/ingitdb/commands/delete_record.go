@@ -37,7 +37,7 @@ func deleteRecord(
 			},
 			&cli.StringFlag{
 				Name:     "id",
-				Usage:    "record ID in the format collection/path/key (e.g. todo/tags/ie)",
+				Usage:    "record ID in the format collection/path/key (e.g. todo.tags/ie)",
 				Required: true,
 			},
 		},

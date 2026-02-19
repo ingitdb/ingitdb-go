@@ -26,8 +26,9 @@ A database is a directory tree inside a Git repository:
 
 ```yaml
 rootCollections:
-  todo: test-ingitdb/todo/*   # wildcard: each subdir becomes a collection
-  countries: geo/countries    # explicit single collection path
+  todo.tags: test-ingitdb/todo/tags
+  todo.tasks: test-ingitdb/todo/tasks
+  countries: geo/countries
 languages:
   - required: en
   - required: fr

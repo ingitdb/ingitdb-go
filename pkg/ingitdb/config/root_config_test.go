@@ -41,6 +41,24 @@ func TestRootConfigValidate(t *testing.T) {
 			err: "root collection path cannot be empty",
 		},
 		{
+			name: "wildcard_path_not_allowed",
+			rc: &RootConfig{
+				RootCollections: map[string]string{
+					"todo": "todo/*",
+				},
+			},
+			err: "root collection path cannot contain wildcard",
+		},
+		{
+			name: "invalid_collection_id_with_slash",
+			rc: &RootConfig{
+				RootCollections: map[string]string{
+					"todo/tags": "todo/tags",
+				},
+			},
+			err: "invalid root collection id",
+		},
+		{
 			name: "duplicate_path",
 			rc: &RootConfig{
 				RootCollections: map[string]string{

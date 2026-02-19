@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -116,46 +117,21 @@ func readRemoteDefinitionForIDWithReader(ctx context.Context, id string, fileRea
 func resolveRemoteCollectionPath(rootCollections map[string]string, id string) (collectionID, recordKey, collectionPath string, err error) {
 	var bestPrefixLen int
 	for rootID, rootPath := range rootCollections {
-		// Check both "/" and "." based prefixes to handle both formats
-		// e.g., for rootID="todo", check "todo/" and "todo."
-		// Also handle slash-normalized format: "todo/" maps to both "todo/" and "todo/"
-		prefixes := []string{
-			rootID + "/", // "todo/" for rootID="todo"
-			rootID + ".", // "todo." for rootID="todo"
-			strings.ReplaceAll(rootID, ".", "/") + "/", // "todo/" for rootID="todo"
+		prefix := rootID + "/"
+		if !strings.HasPrefix(id, prefix) {
+			continue
 		}
-		for _, prefix := range prefixes {
-			if !strings.HasPrefix(id, prefix) {
-				continue
-			}
-			if len(prefix) <= bestPrefixLen {
-				continue
-			}
-			remainder := id[len(prefix):]
-			if remainder == "" {
-				continue
-			}
-			if strings.HasSuffix(rootPath, "*") {
-				localID, remRecordKey, found := strings.Cut(remainder, "/")
-				if !found || localID == "" || remRecordKey == "" {
-					continue
-				}
-				collectionPrefix := rootID
-				if !strings.HasSuffix(collectionPrefix, ".") {
-					collectionPrefix += "."
-				}
-				collectionID = collectionPrefix + localID
-				recordKey = remRecordKey
-				basePath := strings.TrimSuffix(rootPath, "*")
-				collectionPath = path.Clean(path.Join(basePath, localID))
-				bestPrefixLen = len(prefix)
-				continue
-			}
-			collectionID = rootID
-			recordKey = remainder
-			collectionPath = path.Clean(rootPath)
-			bestPrefixLen = len(prefix)
+		if len(prefix) <= bestPrefixLen {
+			continue
 		}
+		remainder := id[len(prefix):]
+		if remainder == "" {
+			continue
+		}
+		collectionID = rootID
+		recordKey = remainder
+		collectionPath = path.Clean(rootPath)
+		bestPrefixLen = len(prefix)
 	}
 	if collectionID == "" {
 		return "", "", "", fmt.Errorf("unable to resolve collection for record id %q", id)
@@ -183,20 +159,9 @@ func listCollectionsFromFileReader(fileReader dalgo2ghingitdb.FileReader) ([]str
 		return nil, fmt.Errorf("invalid .ingitdb.yaml: %w", validateErr)
 	}
 	var ids []string
-	for rootID, rootPath := range rootConfig.RootCollections {
-		if strings.HasSuffix(rootPath, "/*") {
-			dirPath := strings.TrimSuffix(rootPath, "*")
-			entries, listErr := fileReader.ListDirectory(ctx, dirPath)
-			if listErr != nil {
-				return nil, fmt.Errorf("failed to list directory %s: %w", dirPath, listErr)
-			}
-			for _, entry := range entries {
-				collectionID := rootID + "." + entry
-				ids = append(ids, collectionID)
-			}
-		} else {
-			ids = append(ids, rootID)
-		}
+	for rootID := range rootConfig.RootCollections {
+		ids = append(ids, rootID)
 	}
+	sort.Strings(ids)
 	return ids, nil
 }

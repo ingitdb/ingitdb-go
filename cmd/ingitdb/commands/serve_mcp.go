@@ -57,8 +57,7 @@ func serveMCP(
 }
 
 // sortedCollectionIDs returns all collection IDs from def in ascending alphabetical order.
-// Wildcard entries in .ingitdb.yaml (e.g. "todo: path/*") expand into namespaced IDs
-// (e.g. "todo.tags", "todo.tasks") each of which is returned individually.
+// Collection IDs are explicit in .ingitdb.yaml (one key per collection path).
 func sortedCollectionIDs(def *ingitdb.Definition) []string {
 	ids := make([]string, 0, len(def.Collections))
 	for id := range def.Collections {

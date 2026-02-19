@@ -154,8 +154,9 @@ ingitdb list collections --github=owner/repo[@ref] [--token=TOKEN]
 | `--github` | yes | Repository as `owner/repo[@ref]`. |
 | `--token` | no | GitHub token; falls back to `GITHUB_TOKEN` env var. |
 
-The command reads `.ingitdb.yaml` from the repository root, resolves wildcard root collections
-by listing the corresponding directory on GitHub, and prints each collection ID on its own line.
+The command reads `.ingitdb.yaml` from the repository root and prints each configured collection ID
+on its own line. `rootCollections` entries are explicit (one ID → one directory), so listing does
+not require extra GitHub directory listing calls and returns faster.
 
 **Example:**
 
@@ -166,8 +167,9 @@ ingitdb list collections --github=ingitdb/ingitdb-cli
 **Output:**
 
 ```
+countries
 todo.tags
-todo.tasks.statuses
+todo.tasks
 ```
 
 ---

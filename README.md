@@ -83,29 +83,29 @@ ingitdb find --substr=Dublin --fields=name,capital
 ingitdb find --exact=Ireland --in='countries/.*' --fields=country
 
 # Delete all records from a collection (keeps the schema)
-ingitdb truncate --collection=countries/ie/counties
+ingitdb truncate --collection=countries.counties
 
 # Delete a specific collection and all its records
-ingitdb delete collection --collection=countries/ie/counties/dublin
+ingitdb delete collection --collection=countries.counties.dublin
 
 # Delete records matching a pattern within a collection
-ingitdb delete records --collection=countries/ie/counties --filter-name='*old*'
+ingitdb delete records --collection=countries.counties --filter-name='*old*'
 
 # --- Record CRUD (requires record_file.type: "map[string]any" collections) ---
 
-# Create a new record: the --id format is <collection-id-with-slashes>/<record-key>
-# (collection IDs use "." in the definition, but "/" in --id flags)
-ingitdb create record --path=. --id=geo/nations/ie --data='{title: "Ireland"}'
+# Create a new record: the --id format is <collection-id>/<record-key>
+# (collection IDs allow alphanumeric and "." only; "/" separates collection and key)
+ingitdb create record --path=. --id=geo.nations/ie --data='{title: "Ireland"}'
 
 # Read a record (output format: yaml or json)
-ingitdb read record --path=. --id=geo/nations/ie
-ingitdb read record --path=. --id=geo/nations/ie --format=json
+ingitdb read record --path=. --id=geo.nations/ie
+ingitdb read record --path=. --id=geo.nations/ie --format=json
 
 # Update fields of an existing record (patch semantics: only listed fields change)
-ingitdb update record --path=. --id=geo/nations/ie --set='{title: "Ireland, Republic of"}'
+ingitdb update record --path=. --id=geo.nations/ie --set='{title: "Ireland, Republic of"}'
 
 # Delete a single record
-ingitdb delete record --path=. --id=geo/nations/ie
+ingitdb delete record --path=. --id=geo.nations/ie
 ```
 
 ## Accessing GitHub Repositories Directly
@@ -158,7 +158,8 @@ A minimal `.ingitdb.yaml` at the root of your DB git repository:
 
 ```yaml
 rootCollections:
-  tasks: data/tasks/*   # each subdirectory becomes a collection
+  tasks.backlog: data/tasks/backlog
+  tasks.inprogress: data/tasks/in-progress
 languages:
   - required: en
 ```
@@ -189,14 +190,15 @@ languages:
 
 ### --id format
 
-The `--id` flag uses `/` as separator for both the collection path and the record key:
+The `--id` flag uses `/` to separate collection ID from the record key:
 
 ```
-<collection-path-with-slashes>/<record-key>
+<collection-id>/<record-key>
 ```
 
-Collection IDs in the definition use `.` as separator (e.g. `geo.nations`), but the `--id` flag uses
-`/` (e.g. `--id=geo/nations/ie`). The longest matching collection prefix wins when ambiguous.
+Collection IDs may contain only alphanumeric characters and `.` (e.g. `geo.nations`), and must start
+and end with an alphanumeric character. Use `/` only after the collection ID (e.g. `--id=geo.nations/ie`).
+The longest matching collection prefix wins when ambiguous.
 
 Only collections with `record_file.type: "map[string]any"` support CRUD. Collections using
 `[]map[string]any` (list) or `map[string]map[string]any` (dictionary) are not yet implemented.

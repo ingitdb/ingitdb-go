@@ -175,7 +175,7 @@ ingitdb query --collection=KEY [--path=PATH] [--format=json|yaml]
 
 ```shell
 # Query all records from a collection (JSON output)
-ingitdb query --collection=countries/ie/counties
+ingitdb query --collection=countries.counties
 
 # Query with YAML output
 ingitdb query --collection=tasks --format=yaml
@@ -540,13 +540,13 @@ Deletes a collection definition and all of its record files.
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--collection=ID` | yes | Collection id to delete (e.g. `countries/ie/counties`). |
+| `--collection=ID` | yes | Collection id to delete (e.g. `countries.counties`). |
 | `--path=PATH` | no | Path to the database directory. Defaults to the current working directory. |
 
 **Example:**
 
 ```shell
-ingitdb delete collection --collection=countries/ie/counties/dublin
+ingitdb delete collection --collection=countries.counties.dublin
 ```
 
 #### `delete view`
@@ -586,7 +586,7 @@ Deletes individual records from a collection. Use `--in` and `--filter-name` to 
 **Example:**
 
 ```shell
-ingitdb delete records --collection=countries/ie/counties --filter-name='*old*'
+ingitdb delete records --collection=countries.counties --filter-name='*old*'
 ```
 
 ---
@@ -601,13 +601,13 @@ Removes every record file from the specified collection, leaving the collection 
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--collection=ID` | yes | Collection id to truncate (e.g. `countries/ie/counties/dublin`). Nested paths are supported. |
+| `--collection=ID` | yes | Collection id to truncate (e.g. `countries.counties.dublin`). |
 | `--path=PATH` | no | Path to the database directory. Defaults to the current working directory. |
 
 **Example:**
 
 ```shell
-ingitdb truncate --collection=countries/ie/counties
+ingitdb truncate --collection=countries.counties
 ```
 
 ---

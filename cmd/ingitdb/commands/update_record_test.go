@@ -34,7 +34,7 @@ func TestUpdate_Success(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Update(homeDir, getWd, readDef, newDB, logf)
-	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/item", "--set={name: New}"); err != nil {
+	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/item", "--set={name: New}"); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestUpdate_NotFound(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Update(homeDir, getWd, readDef, newDB, logf)
-	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/ghost", "--set={name: X}")
+	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/ghost", "--set={name: X}")
 	if err == nil {
 		t.Fatal("expected error for not-found record")
 	}

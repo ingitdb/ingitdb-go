@@ -31,7 +31,7 @@ func TestReadCollection_Success(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Read(homeDir, getWd, readDef, newDB, logf)
-	if err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=test/items"); err != nil {
+	if err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=test.items"); err != nil {
 		t.Fatalf("ReadCollection: %v", err)
 	}
 }
@@ -51,9 +51,30 @@ func TestReadCollection_CollectionNotFound(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Read(homeDir, getWd, readDef, newDB, logf)
-	err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=no/such/collection")
+	err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=no.such.collection")
 	if err == nil {
 		t.Fatal("expected error for unknown collection")
+	}
+}
+
+func TestReadCollection_SlashNormalizedCollectionIDRejected(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := testDef(dir)
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2fsingitdb.NewLocalDBWithDef(root, d)
+	}
+	logf := func(...any) {}
+
+	cmd := Read(homeDir, getWd, readDef, newDB, logf)
+	err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=test/items")
+	if err == nil {
+		t.Fatal("expected error for slash-normalized collection ID")
 	}
 }
 
@@ -72,7 +93,7 @@ func TestReadCollection_DefinitionError(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Read(homeDir, getWd, readDef, newDB, logf)
-	err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=test/items")
+	err := runCLICommand(cmd, "collection", "--path="+dir, "--collection=test.items")
 	if err == nil {
 		t.Fatal("expected error when readDefinition fails")
 	}

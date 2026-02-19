@@ -38,7 +38,7 @@ func createRecord(
 			},
 			&cli.StringFlag{
 				Name:     "id",
-				Usage:    "record ID in the format collection/path/key (e.g. todo/countries/ie)",
+				Usage:    "record ID in the format collection/path/key (e.g. todo.countries/ie)",
 				Required: true,
 			},
 			&cli.StringFlag{

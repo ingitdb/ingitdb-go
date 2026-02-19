@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/dal-go/dalgo/dal"
-	"github.com/urfave/cli/v3"
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+	"github.com/urfave/cli/v3"
 )
 
 type fakeFileReader struct {
@@ -73,7 +73,7 @@ func TestResolveRemoteCollectionPath(t *testing.T) {
 	t.Parallel()
 	rootCollections := map[string]string{
 		"countries": "test-ingitdb/countries",
-		"todo":      "test-ingitdb/todo/*",
+		"todo.tags": "test-ingitdb/todo/tags",
 	}
 	collectionID, recordKey, collectionPath, err := resolveRemoteCollectionPath(rootCollections, "todo.tags/active")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestResolveRemoteCollectionPath(t *testing.T) {
 func TestReadRemoteDefinitionForIDWithReader(t *testing.T) {
 	t.Parallel()
 	reader := fakeFileReader{files: map[string][]byte{
-		".ingitdb.yaml": []byte("rootCollections:\n  todo: test-ingitdb/todo/*\n"),
+		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
 		"test-ingitdb/todo/tags/.ingitdb-collection.yaml": []byte("record_file:\n  name: tags.json\n  type: map[string]map[string]any\n  format: json\ncolumns:\n  title:\n    type: string\n"),
 	}}
 	def, collectionID, recordKey, err := readRemoteDefinitionForIDWithReader(context.Background(), "todo.tags/active", reader)
@@ -218,17 +218,14 @@ func TestListCollections_GitHub(t *testing.T) {
 	t.Parallel()
 	reader := fakeFileReader{
 		files: map[string][]byte{
-			".ingitdb.yaml": []byte("rootCollections:\n  countries: test-ingitdb/countries\n  todo: test-ingitdb/todo/*\n"),
-		},
-		directories: map[string][]string{
-			"test-ingitdb/todo/": []string{"tags", "tasks"},
+			".ingitdb.yaml": []byte("rootCollections:\n  countries: test-ingitdb/countries\n  todo.tags: test-ingitdb/todo/tags\n"),
 		},
 	}
 	collections, err := listCollectionsFromFileReader(&reader)
 	if err != nil {
 		t.Fatalf("listCollectionsFromFileReader: %v", err)
 	}
-	expectedCollections := []string{"countries", "todo.tags", "todo.tasks"}
+	expectedCollections := []string{"countries", "todo.tags"}
 	if len(collections) != len(expectedCollections) {
 		t.Fatalf("expected %d collections, got %d", len(expectedCollections), len(collections))
 	}

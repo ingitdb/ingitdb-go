@@ -36,7 +36,7 @@ func TestDeleteRecord_Success(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Delete(homeDir, getWd, readDef, newDB, logf)
-	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/bye"); err != nil {
+	if err = runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/bye"); err != nil {
 		t.Fatalf("delete record: %v", err)
 	}
 	if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
@@ -59,7 +59,7 @@ func TestDeleteRecord_NotFound(t *testing.T) {
 	logf := func(...any) {}
 
 	cmd := Delete(homeDir, getWd, readDef, newDB, logf)
-	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test/items/ghost")
+	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/ghost")
 	if err == nil {
 		t.Fatal("expected error for not-found record")
 	}

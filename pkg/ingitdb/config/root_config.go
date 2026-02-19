@@ -32,8 +32,18 @@ func (rc *RootConfig) Validate() error {
 		if id == "" {
 			return errors.New("root collection id cannot be empty")
 		}
+		if err := ingitdb.ValidateCollectionID(id); err != nil {
+			return fmt.Errorf("invalid root collection id %q: %w", id, err)
+		}
 		if path == "" {
 			return fmt.Errorf("root collection path cannot be empty, ID=%s", id)
+		}
+		if path != "" {
+			for _, r := range path {
+				if r == '*' {
+					return fmt.Errorf("root collection path cannot contain wildcard '*', ID=%s, path=%s", id, path)
+				}
+			}
 		}
 		for _, p := range paths {
 			if p == path {
