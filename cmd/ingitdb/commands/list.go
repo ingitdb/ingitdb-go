@@ -9,7 +9,6 @@ import (
 	"github.com/urfave/cli/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
 )
@@ -98,7 +97,7 @@ func listCollectionsGitHub(ctx context.Context, githubValue, token string) error
 		return parseErr
 	}
 	cfg := newGitHubConfig(spec, token)
-	fileReader, newReaderErr := dalgo2ghingitdb.NewGitHubFileReader(cfg)
+	fileReader, newReaderErr := gitHubFileReaderFactory.NewGitHubFileReader(cfg)
 	if newReaderErr != nil {
 		return fmt.Errorf("failed to create github file reader: %w", newReaderErr)
 	}

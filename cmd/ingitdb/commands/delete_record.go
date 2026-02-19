@@ -7,7 +7,6 @@ import (
 	"github.com/dal-go/dalgo/dal"
 	"github.com/urfave/cli/v3"
 
-	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
@@ -63,7 +62,7 @@ func deleteRecord(
 					return fmt.Errorf("failed to resolve remote definition: %w", readErr)
 				}
 				cfg := newGitHubConfig(spec, githubToken(cmd))
-				db, err = dalgo2ghingitdb.NewGitHubDBWithDef(cfg, def)
+				db, err = gitHubDBFactory.NewGitHubDBWithDef(cfg, def)
 				if err != nil {
 					return fmt.Errorf("failed to open github database: %w", err)
 				}
@@ -102,7 +101,7 @@ func deleteRecord(
 				return err
 			}
 			if githubValue == "" {
-				builder, err := viewBuilderForCollection(colDef)
+				builder, err := viewBuilderFactory.ViewBuilderForCollection(colDef)
 				if err != nil {
 					return fmt.Errorf("failed to init view builder for collection %s: %w", colDefID, err)
 				}
