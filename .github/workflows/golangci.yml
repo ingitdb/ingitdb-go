@@ -11,6 +11,7 @@ on:
       - '**/*.go'
       - 'src/**'
       - '.github/workflows/*.yml'
+      - '.github/goreleaser.yaml'
 
   pull_request:
     branches:
