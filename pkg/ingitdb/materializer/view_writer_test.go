@@ -20,7 +20,7 @@ func TestFileViewWriter_RenderAndWrite(t *testing.T) {
 		RecordsVarName: "tags",
 	}
 	templatePath := filepath.Join(dir, ".ingitdb-view.README.md")
-	templateContent := "| Title |\n| ----- |\n{{- range .tags }}| {{ .title }} |\n{{- end }}"
+	templateContent := "| Title |\n| ----- |\n{{ range .tags }}| {{ .title }} |\n{{ end }}"
 	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
 		t.Fatalf("write template: %v", err)
 	}

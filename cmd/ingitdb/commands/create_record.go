@@ -11,6 +11,7 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/materializer"
 )
 
 func createRecord(
@@ -18,6 +19,7 @@ func createRecord(
 	getWd func() (string, error),
 	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
 	newDB func(string, *ingitdb.Definition) (dal.DB, error),
+	viewBuilder materializer.ViewBuilder,
 	logf func(...any),
 ) *cli.Command {
 	return &cli.Command{
@@ -55,6 +57,8 @@ func createRecord(
 				db        dal.DB
 				colDef    *ingitdb.CollectionDef
 				recordKey string
+				dirPath   string
+				def       *ingitdb.Definition
 				err       error
 			)
 			if githubValue != "" {
@@ -82,9 +86,9 @@ func createRecord(
 					return resolveErr
 				}
 				logf("inGitDB db path: ", dirPath)
-				def, readErr := readDefinition(dirPath)
-				if readErr != nil {
-					return fmt.Errorf("failed to read database definition: %w", readErr)
+				def, err = readDefinition(dirPath)
+				if err != nil {
+					return fmt.Errorf("failed to read database definition: %w", err)
 				}
 				var parseErr error
 				colDef, recordKey, parseErr = dalgo2ingitdb.CollectionForKey(def, id)
@@ -102,9 +106,18 @@ func createRecord(
 			}
 			key := dal.NewKeyWithID(colDef.ID, recordKey)
 			record := dal.NewRecordWithData(key, data)
-			return db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+			err = db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
 				return tx.Insert(ctx, record)
 			})
+			if err != nil {
+				return err
+			}
+			if viewBuilder != nil && githubValue == "" {
+				if _, buildErr := viewBuilder.BuildViews(ctx, dirPath, colDef, def); buildErr != nil {
+					return fmt.Errorf("failed to materialize views for collection %s: %w", colDef.ID, buildErr)
+				}
+			}
+			return nil
 		},
 	}
 }
