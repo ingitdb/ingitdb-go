@@ -10,11 +10,9 @@ builds:
   - id: ingitdb-unix
     main: ./cmd/ingitdb
     binary: ingitdb
-    env: [CGO_ENABLED=0]
-    goos: [linux, darwin]
-    goarch: [amd64, arm64, arm]
-    goarm: ["6"]
-    goamd64: [v1]
+    env: [ CGO_ENABLED=0 ]
+    goos: [ linux, darwin ]
+    goarch: [ amd64, arm64 ]
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -22,9 +20,9 @@ builds:
   - id: ingitdb-windows
     main: ./cmd/ingitdb
     binary: ingitdb
-    env: [CGO_ENABLED=0]
-    goos: [windows]
-    goarch: [amd64]
+    env: [ CGO_ENABLED=0 ]
+    goos: [ windows ]
+    goarch: [ amd64 ]
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -34,7 +32,7 @@ archives:
     formats: [ tar.gz ]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-    ids: [ingitdb-unix]
+    ids: [ ingitdb-unix ]
     files:
       - README.md
       - LICENSE*
@@ -43,22 +41,31 @@ archives:
     formats: [ zip ]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-    ids: [ingitdb-windows]
+    ids: [ ingitdb-windows ]
 
 checksum:
   name_template: checksums.txt
-
-homebrew_casks:
-  - name: ingitdb
-    ids: [ingitdb-unix]
-    repository:
-      owner: ingitdb
-      name: homebrew-cli
-      token: "{{ .Env.GORELEASER_GITHUB_TOKEN }}"
-    homepage: https://github.com/ingitdb/ingitdb-cli
-    description: CLI for inGitDB
 
 release:
   github:
     owner: ingitdb
     name: ingitdb-cli
+
+homebrew_casks:
+  - name: ingitdb
+    ids:
+      - tarball
+    description: "ingitdb – a CLI for a developer-grade, schema-validated, AI-native database whose storage engine is a Git repository."
+    homepage: https:/ingitdb.com
+    license: MIT
+
+    repository:
+      owner: ingitdb
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+
+    install: |
+      bin.install "ingitdb"
+
+    test: |
+      system "#{bin}/ingitdb", "--version"
