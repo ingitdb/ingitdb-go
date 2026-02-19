@@ -84,8 +84,14 @@ func stripMarkdownComments(content []byte) []byte {
 	text := string(content)
 	lines := strings.Split(text, "\n")
 	filtered := make([]string, 0, len(lines))
-	for _, line := range lines {
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
 		if isMarkdownCommentLine(line) {
+			if len(filtered) > 0 && isEmptyLine(filtered[len(filtered)-1]) {
+				if i+1 < len(lines) && isEmptyLine(lines[i+1]) {
+					filtered = filtered[:len(filtered)-1]
+				}
+			}
 			continue
 		}
 		filtered = append(filtered, line)
@@ -103,4 +109,8 @@ func isMarkdownCommentLine(line string) bool {
 		return false
 	}
 	return strings.Contains(trimmed, "#")
+}
+
+func isEmptyLine(line string) bool {
+	return strings.TrimSpace(strings.TrimSuffix(line, "\r")) == ""
 }

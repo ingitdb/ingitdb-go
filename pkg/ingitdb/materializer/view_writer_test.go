@@ -120,3 +120,38 @@ func TestFileViewWriter_StripsMarkdownComments(t *testing.T) {
 		t.Fatalf("expected markdown comments to be stripped, got:\n%s", string(content))
 	}
 }
+
+func TestFileViewWriter_StripsMarkdownComments_EmptyLineCollapse(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	col := &ingitdb.CollectionDef{DirPath: dir}
+	view := &ingitdb.ViewDef{
+		Template:       ".ingitdb-view.README.md",
+		FileName:       "README.md",
+		RecordsVarName: "tags",
+	}
+	templatePath := filepath.Join(dir, ".ingitdb-view.README.md")
+	templateContent := "# Tags\n\n[//]: # (comment)\n\n{{ range .tags }}- {{ .title }}\n{{ end }}"
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	writer := NewFileViewWriter()
+	records := []ingitdb.RecordEntry{{Data: map[string]any{"title": "Home"}}}
+	outPath := filepath.Join(dir, "README.md")
+	if _, err := writer.WriteView(context.Background(), col, view, records, outPath); err != nil {
+		t.Fatalf("WriteView: %v", err)
+	}
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	output := string(content)
+	if strings.Contains(output, "[//]:") {
+		t.Fatalf("expected markdown comments to be stripped, got:\n%s", output)
+	}
+	if strings.Contains(output, "\n\n\n") {
+		t.Fatalf("expected one blank line between sections, got:\n%s", output)
+	}
+}
