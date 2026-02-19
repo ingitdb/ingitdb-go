@@ -153,3 +153,57 @@ func TestParseMapOfIDRecordsContent_InvalidRecord(t *testing.T) {
 		t.Fatal("expected error for non-map record value")
 	}
 }
+
+func TestParseRecordContent_YML(t *testing.T) {
+	t.Parallel()
+
+	ymlContent := []byte(`
+name: Test
+value: 123
+`)
+	data, err := ParseRecordContent(ymlContent, ingitdb.RecordFormat("yml"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data["name"] != "Test" {
+		t.Errorf("expected name=Test, got %v", data["name"])
+	}
+	if data["value"] != 123 {
+		t.Errorf("expected value=123, got %v", data["value"])
+	}
+}
+
+func TestParseRecordContent_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	// YAML that cannot be parsed into a map[string]any (e.g., just a scalar value).
+	invalidYAML := []byte(`just a string, not a map`)
+	_, err := ParseRecordContent(invalidYAML, ingitdb.RecordFormat("yaml"))
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+}
+
+func TestParseRecordContent_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	invalidJSON := []byte(`{
+  "name": "John",
+  "age": 30,
+}`)
+	_, err := ParseRecordContent(invalidJSON, ingitdb.RecordFormat("json"))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParseMapOfIDRecordsContent_ParseError(t *testing.T) {
+	t.Parallel()
+
+	// Use invalid YAML syntax that will fail to parse.
+	invalidYAML := []byte(`{broken yaml syntax`)
+	_, err := ParseMapOfIDRecordsContent(invalidYAML, ingitdb.RecordFormat("yaml"))
+	if err == nil {
+		t.Fatal("expected error for invalid YAML in ParseMapOfIDRecordsContent")
+	}
+}
