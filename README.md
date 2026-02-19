@@ -54,7 +54,8 @@ range (`--from-commit` / `--to-commit`) so CI stays fast on large databases.
 go install github.com/ingitdb/ingitdb-cli/cmd/ingitdb
 
 # Mac OS
-brew install ingitdb/cli
+brew tap ingitdb/cli
+brew install ingitdb
 ```
 
 ## Quick start
