@@ -156,8 +156,6 @@ func TestListCollectionsGitHub_Success(t *testing.T) {
 }
 
 func TestListCollectionsGitHub_WithMock(t *testing.T) {
-	t.Parallel()
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -191,8 +189,6 @@ func TestListCollectionsGitHub_ParseError(t *testing.T) {
 }
 
 func TestListCollectionsGitHub_ReaderCreationError(t *testing.T) {
-	t.Parallel()
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -211,8 +207,6 @@ func TestListCollectionsGitHub_ReaderCreationError(t *testing.T) {
 }
 
 func TestListCollectionsGitHub_FileNotFound(t *testing.T) {
-	t.Parallel()
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -232,8 +226,6 @@ func TestListCollectionsGitHub_FileNotFound(t *testing.T) {
 }
 
 func TestListCollectionsGitHub_InvalidYAML(t *testing.T) {
-	t.Parallel()
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -257,8 +249,6 @@ func TestListCollectionsGitHub_InvalidYAML(t *testing.T) {
 }
 
 func TestListCollectionsGitHub_InvalidConfig(t *testing.T) {
-	t.Parallel()
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
