@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -69,5 +70,97 @@ func TestUpdate_NotFound(t *testing.T) {
 	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/ghost", "--set={name: X}")
 	if err == nil {
 		t.Fatal("expected error for not-found record")
+	}
+}
+
+func TestUpdate_InvalidSetYAML(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := testDef(dir)
+	initial, err := yaml.Marshal(map[string]any{"name": "Old"})
+	if err != nil {
+		t.Fatalf("yaml.Marshal: %v", err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "item.yaml"), initial, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2fsingitdb.NewLocalDBWithDef(root, d)
+	}
+	logf := func(...any) {}
+
+	cmd := Update(homeDir, getWd, readDef, newDB, logf)
+	err = runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/item", "--set=: invalid yaml :")
+	if err == nil {
+		t.Fatal("expected error for invalid YAML in --set")
+	}
+}
+
+func TestUpdate_ReadDefinitionError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return nil, errors.New("read def error")
+	}
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2fsingitdb.NewLocalDBWithDef(root, d)
+	}
+	logf := func(...any) {}
+
+	cmd := Update(homeDir, getWd, readDef, newDB, logf)
+	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/item", "--set={name: X}")
+	if err == nil {
+		t.Fatal("expected error when read definition fails")
+	}
+}
+
+func TestUpdate_InvalidID(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := testDef(dir)
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return dalgo2fsingitdb.NewLocalDBWithDef(root, d)
+	}
+	logf := func(...any) {}
+
+	cmd := Update(homeDir, getWd, readDef, newDB, logf)
+	err := runCLICommand(cmd, "record", "--path="+dir, "--id=invalid", "--set={name: X}")
+	if err == nil {
+		t.Fatal("expected error for invalid ID format")
+	}
+}
+
+func TestUpdate_DBOpenError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	def := testDef(dir)
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) { return def, nil }
+	newDB := func(root string, d *ingitdb.Definition) (dal.DB, error) {
+		return nil, errors.New("db open error")
+	}
+	logf := func(...any) {}
+
+	cmd := Update(homeDir, getWd, readDef, newDB, logf)
+	err := runCLICommand(cmd, "record", "--path="+dir, "--id=test.items/item", "--set={name: X}")
+	if err == nil {
+		t.Fatal("expected error when DB open fails")
 	}
 }
