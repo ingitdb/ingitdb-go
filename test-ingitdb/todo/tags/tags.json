@@ -26,6 +26,9 @@
       "ru": "Личное"
     }
   },
+  "to_buy": {
+    "title": "To buy"
+  },
   "work": {
     "titles": {
       "de": "Arbeit",
