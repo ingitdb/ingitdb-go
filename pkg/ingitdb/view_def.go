@@ -8,4 +8,10 @@ type ViewDef struct {
 	Columns []string          `yaml:"columns,omitempty"`
 	// How many records to include; 0 means all
 	Top int `yaml:"top,omitempty"`
+	// Template path relative to the collection directory.
+	Template string `yaml:"template,omitempty"`
+	// Output file name relative to the collection directory.
+	FileName string `yaml:"file_name,omitempty"`
+	// Template variable name for the records slice.
+	RecordsVarName string `yaml:"records_var_name,omitempty"`
 }

@@ -24,10 +24,16 @@ type ViewRenderer interface {
 	) (map[string][]byte, error) // key = format string ("md", "json")
 }
 
-// ViewWriter writes rendered content to the file system.
-// Separate from ViewRenderer so tests can capture output without I/O.
+// ViewWriter renders a view and writes content to the file system.
+// Separate from ViewBuilder so tests can capture output without I/O.
 type ViewWriter interface {
-	WriteView(outPath string, content []byte) error
+	WriteView(
+		ctx context.Context,
+		col *ingitdb.CollectionDef,
+		view *ingitdb.ViewDef,
+		records []ingitdb.RecordEntry,
+		outPath string,
+	) (bool, error)
 }
 
 // ViewBuilder orchestrates full materialisation of all views for one collection.
