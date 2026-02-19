@@ -35,7 +35,6 @@ func (f fakeFileReader) ListDirectory(_ context.Context, dirPath string) ([]stri
 }
 
 func TestParseGitHubRepoSpec(t *testing.T) {
-	t.Parallel()
 	tests := []struct {
 		name      string
 		input     string
@@ -53,7 +52,6 @@ func TestParseGitHubRepoSpec(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 			spec, err := parseGitHubRepoSpec(tt.input)
 			if tt.wantErr {
 				if err == nil {
@@ -72,7 +70,6 @@ func TestParseGitHubRepoSpec(t *testing.T) {
 }
 
 func TestResolveRemoteCollectionPath(t *testing.T) {
-	t.Parallel()
 	rootCollections := map[string]string{
 		"countries": "test-ingitdb/countries",
 		"todo.tags": "test-ingitdb/todo/tags",
@@ -93,7 +90,6 @@ func TestResolveRemoteCollectionPath(t *testing.T) {
 }
 
 func TestReadRemoteDefinitionForIDWithReader(t *testing.T) {
-	t.Parallel()
 	reader := fakeFileReader{files: map[string][]byte{
 		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
 		"test-ingitdb/todo/tags/.ingitdb-collection.yaml": []byte("record_file:\n  name: tags.json\n  type: map[string]map[string]any\n  format: json\ncolumns:\n  title:\n    type: string\n"),
@@ -118,7 +114,6 @@ func TestReadRemoteDefinitionForIDWithReader(t *testing.T) {
 }
 
 func TestReadRecord_GitHubWithPathUnsupported(t *testing.T) {
-	t.Parallel()
 	homeDir := func() (string, error) { return "/tmp/home", nil }
 	getWd := func() (string, error) { return "/tmp/wd", nil }
 	readDefinition := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
@@ -135,7 +130,6 @@ func TestReadRecord_GitHubWithPathUnsupported(t *testing.T) {
 }
 
 func TestGithubToken_FromFlag(t *testing.T) {
-	t.Parallel()
 	app := &cli.Command{
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "token"},
@@ -195,7 +189,6 @@ func TestGithubToken_FlagTakesPrecedence(t *testing.T) {
 }
 
 func TestNewGitHubConfig(t *testing.T) {
-	t.Parallel()
 	spec := githubRepoSpec{
 		Owner: "testowner",
 		Repo:  "testrepo",
@@ -217,7 +210,6 @@ func TestNewGitHubConfig(t *testing.T) {
 }
 
 func TestListCollections_GitHub(t *testing.T) {
-	t.Parallel()
 	reader := fakeFileReader{
 		files: map[string][]byte{
 			".ingitdb.yaml": []byte("rootCollections:\n  countries: test-ingitdb/countries\n  todo.tags: test-ingitdb/todo/tags\n"),
@@ -239,7 +231,6 @@ func TestListCollections_GitHub(t *testing.T) {
 }
 
 func TestReadRemoteDefinitionForIDWithReader_RootConfigNotFound(t *testing.T) {
-	t.Parallel()
 
 	reader := fakeFileReader{files: map[string][]byte{}}
 	_, _, _, err := readRemoteDefinitionForIDWithReader(context.Background(), "todo.tags/active", reader)
@@ -249,7 +240,6 @@ func TestReadRemoteDefinitionForIDWithReader_RootConfigNotFound(t *testing.T) {
 }
 
 func TestReadRemoteDefinitionForIDWithReader_InvalidRootConfig(t *testing.T) {
-	t.Parallel()
 
 	reader := fakeFileReader{files: map[string][]byte{
 		".ingitdb.yaml": []byte("invalid yaml: ["),
@@ -261,7 +251,6 @@ func TestReadRemoteDefinitionForIDWithReader_InvalidRootConfig(t *testing.T) {
 }
 
 func TestReadRemoteDefinitionForIDWithReader_CollectionDefNotFound(t *testing.T) {
-	t.Parallel()
 
 	reader := fakeFileReader{files: map[string][]byte{
 		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
@@ -273,7 +262,6 @@ func TestReadRemoteDefinitionForIDWithReader_CollectionDefNotFound(t *testing.T)
 }
 
 func TestReadRemoteDefinitionForIDWithReader_InvalidCollectionDef(t *testing.T) {
-	t.Parallel()
 
 	reader := fakeFileReader{files: map[string][]byte{
 		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
@@ -286,7 +274,6 @@ func TestReadRemoteDefinitionForIDWithReader_InvalidCollectionDef(t *testing.T) 
 }
 
 func TestReadRemoteDefinitionForIDWithReader_UnresolvedID(t *testing.T) {
-	t.Parallel()
 
 	reader := fakeFileReader{files: map[string][]byte{
 		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
@@ -298,7 +285,6 @@ func TestReadRemoteDefinitionForIDWithReader_UnresolvedID(t *testing.T) {
 }
 
 func TestListCollectionsFromFileReader_NotFound(t *testing.T) {
-	t.Parallel()
 
 	reader := fakeFileReader{files: map[string][]byte{}}
 	_, err := listCollectionsFromFileReader(&reader)
@@ -308,7 +294,6 @@ func TestListCollectionsFromFileReader_NotFound(t *testing.T) {
 }
 
 func TestListCollectionsFromFileReader_InvalidYAML(t *testing.T) {
-	t.Parallel()
 
 	reader := fakeFileReader{files: map[string][]byte{
 		".ingitdb.yaml": []byte("invalid yaml: ["),
@@ -320,7 +305,6 @@ func TestListCollectionsFromFileReader_InvalidYAML(t *testing.T) {
 }
 
 func TestListCollectionsFromFileReader_InvalidConfig(t *testing.T) {
-	t.Parallel()
 
 	// Empty collection ID is invalid
 	reader := fakeFileReader{files: map[string][]byte{
@@ -333,7 +317,6 @@ func TestListCollectionsFromFileReader_InvalidConfig(t *testing.T) {
 }
 
 func TestResolveRemoteCollectionPath_LongestPrefix(t *testing.T) {
-	t.Parallel()
 
 	rootCollections := map[string]string{
 		"countries":            "test-ingitdb/countries",
@@ -358,7 +341,6 @@ func TestResolveRemoteCollectionPath_LongestPrefix(t *testing.T) {
 }
 
 func TestResolveRemoteCollectionPath_NoMatch(t *testing.T) {
-	t.Parallel()
 
 	rootCollections := map[string]string{
 		"countries": "test-ingitdb/countries",
@@ -371,7 +353,6 @@ func TestResolveRemoteCollectionPath_NoMatch(t *testing.T) {
 }
 
 func TestResolveRemoteCollectionPath_EmptyRecordKey(t *testing.T) {
-	t.Parallel()
 
 	rootCollections := map[string]string{
 		"countries": "test-ingitdb/countries",
@@ -387,7 +368,6 @@ func TestResolveRemoteCollectionPath_EmptyRecordKey(t *testing.T) {
 var _ dalgo2ghingitdb.FileReader = (*fakeFileReader)(nil)
 
 func TestReadRecord_GitHub_ParseError(t *testing.T) {
-	t.Parallel()
 
 	homeDir := func() (string, error) { return "/tmp/home", nil }
 	getWd := func() (string, error) { return "/tmp/wd", nil }
@@ -405,7 +385,6 @@ func TestReadRecord_GitHub_ParseError(t *testing.T) {
 }
 
 func TestReadRecord_GitHub_ReadDefinitionError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -434,7 +413,6 @@ func TestReadRecord_GitHub_ReadDefinitionError(t *testing.T) {
 }
 
 func TestReadRecord_GitHub_DBOpenError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -474,7 +452,6 @@ func TestReadRecord_GitHub_DBOpenError(t *testing.T) {
 }
 
 func TestReadRemoteDefinitionForID_WithMock(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -507,7 +484,6 @@ func TestReadRemoteDefinitionForID_WithMock(t *testing.T) {
 }
 
 func TestReadRemoteDefinitionForID_FactoryError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

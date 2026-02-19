@@ -11,7 +11,6 @@ import (
 )
 
 func TestDeleteRecord_GitHub_ParseError(t *testing.T) {
-	t.Parallel()
 
 	homeDir := func() (string, error) { return "/tmp/home", nil }
 	getWd := func() (string, error) { return "/tmp/wd", nil }
@@ -29,7 +28,6 @@ func TestDeleteRecord_GitHub_ParseError(t *testing.T) {
 }
 
 func TestDeleteRecord_GitHub_ReadDefinitionError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -58,7 +56,6 @@ func TestDeleteRecord_GitHub_ReadDefinitionError(t *testing.T) {
 }
 
 func TestDeleteRecord_GitHub_DBOpenError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

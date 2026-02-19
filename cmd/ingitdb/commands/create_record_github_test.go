@@ -13,7 +13,6 @@ import (
 )
 
 func TestCreateRecord_GitHub_ParseError(t *testing.T) {
-	t.Parallel()
 
 	homeDir := func() (string, error) { return "/tmp/home", nil }
 	getWd := func() (string, error) { return "/tmp/wd", nil }
@@ -31,7 +30,6 @@ func TestCreateRecord_GitHub_ParseError(t *testing.T) {
 }
 
 func TestCreateRecord_GitHub_ReadDefinitionError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -61,7 +59,6 @@ func TestCreateRecord_GitHub_ReadDefinitionError(t *testing.T) {
 }
 
 func TestCreateRecord_GitHub_DBOpenError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -101,7 +98,6 @@ func TestCreateRecord_GitHub_DBOpenError(t *testing.T) {
 }
 
 func TestCreateRecord_InvalidDataYAML(t *testing.T) {
-	t.Parallel()
 
 	dir := t.TempDir()
 	def := testDef(dir)

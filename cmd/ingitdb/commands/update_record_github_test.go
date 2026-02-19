@@ -11,7 +11,6 @@ import (
 )
 
 func TestUpdateRecord_GitHub_ParseError(t *testing.T) {
-	t.Parallel()
 
 	homeDir := func() (string, error) { return "/tmp/home", nil }
 	getWd := func() (string, error) { return "/tmp/wd", nil }
@@ -29,7 +28,6 @@ func TestUpdateRecord_GitHub_ParseError(t *testing.T) {
 }
 
 func TestUpdateRecord_GitHub_ReadDefinitionError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -58,7 +56,6 @@ func TestUpdateRecord_GitHub_ReadDefinitionError(t *testing.T) {
 }
 
 func TestUpdateRecord_GitHub_DBOpenError(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -98,7 +95,6 @@ func TestUpdateRecord_GitHub_DBOpenError(t *testing.T) {
 }
 
 func TestUpdateRecord_GitHub_CollectionNotFound(t *testing.T) {
-	t.Parallel()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
