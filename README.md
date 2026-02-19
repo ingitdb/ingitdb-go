@@ -8,7 +8,7 @@
 
 <img src="https://github.com/ingitdb/.github/raw/main/inGitDB-full4.png" alt="inGitDB Logo" />
 
-inGitDB is a **developer-grade, schema-validated, AI-native database whose storage engine is a Git
+[inGitDB](https://ingitdb.com) is a **developer-grade, schema-validated, AI-native database whose storage engine is a Git
 repository**. Every record is a plain YAML or JSON file, every change is a commit, and every team
 workflow — branching, code review, pull requests — extends naturally to data. This makes inGitDB
 simultaneously a database, a version-control system, an event bus, and a data layer for AI agents,
