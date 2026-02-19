@@ -1,0 +1,90 @@
+package materializer
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+)
+
+func TestFileViewWriter_RenderAndWrite(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	col := &ingitdb.CollectionDef{DirPath: dir}
+	view := &ingitdb.ViewDef{
+		Template:       ".ingitdb-view.README.md",
+		FileName:       "README.md",
+		RecordsVarName: "tags",
+	}
+	templatePath := filepath.Join(dir, ".ingitdb-view.README.md")
+	templateContent := "| Title |\n| ----- |\n{{- range .tags }}| {{ .title }} |\n{{- end }}"
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	writer := NewFileViewWriter()
+	records := []ingitdb.RecordEntry{
+		{Data: map[string]any{"title": "Home"}},
+		{Data: map[string]any{"title": "Work"}},
+	}
+	outPath := filepath.Join(dir, "README.md")
+	written, err := writer.WriteView(context.Background(), col, view, records, outPath)
+	if err != nil {
+		t.Fatalf("WriteView: %v", err)
+	}
+	if !written {
+		t.Fatalf("expected file to be written")
+	}
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	expected := "| Title |\n| ----- |\n| Home |\n| Work |\n"
+	if string(content) != expected {
+		t.Fatalf("unexpected output:\n%s", string(content))
+	}
+}
+
+func TestFileViewWriter_Unchanged(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	col := &ingitdb.CollectionDef{DirPath: dir}
+	view := &ingitdb.ViewDef{
+		Template:       ".ingitdb-view.README.md",
+		FileName:       "README.md",
+		RecordsVarName: "tags",
+	}
+	templatePath := filepath.Join(dir, ".ingitdb-view.README.md")
+	templateContent := "{{- range .tags }}{{ .title }}\n{{- end }}"
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	writer := NewFileViewWriter()
+	records := []ingitdb.RecordEntry{{Data: map[string]any{"title": "Home"}}}
+	outPath := filepath.Join(dir, "README.md")
+	if _, err := writer.WriteView(context.Background(), col, view, records, outPath); err != nil {
+		t.Fatalf("WriteView: %v", err)
+	}
+	written, err := writer.WriteView(context.Background(), col, view, records, outPath)
+	if err != nil {
+		t.Fatalf("WriteView: %v", err)
+	}
+	if written {
+		t.Fatalf("expected unchanged output")
+	}
+}
+
+func TestFileViewWriter_MissingTemplate(t *testing.T) {
+	t.Parallel()
+
+	writer := NewFileViewWriter()
+	_, err := writer.WriteView(context.Background(), &ingitdb.CollectionDef{}, &ingitdb.ViewDef{}, nil, "README.md")
+	if err == nil {
+		t.Fatalf("expected error for missing template")
+	}
+}

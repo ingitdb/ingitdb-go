@@ -1,0 +1,77 @@
+package materializer
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"text/template"
+
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+)
+
+// FileViewWriter renders a view template and writes it to a file.
+type FileViewWriter struct {
+	readFile  func(string) ([]byte, error)
+	writeFile func(string, []byte, os.FileMode) error
+	mkdirAll  func(string, os.FileMode) error
+}
+
+func NewFileViewWriter() FileViewWriter {
+	return FileViewWriter{
+		readFile:  os.ReadFile,
+		writeFile: os.WriteFile,
+		mkdirAll:  os.MkdirAll,
+	}
+}
+
+func (w FileViewWriter) WriteView(
+	ctx context.Context,
+	col *ingitdb.CollectionDef,
+	view *ingitdb.ViewDef,
+	records []ingitdb.RecordEntry,
+	outPath string,
+) (bool, error) {
+	_ = ctx
+	if view.Template == "" {
+		return false, fmt.Errorf("view template is required")
+	}
+	templatePath := filepath.Join(col.DirPath, view.Template)
+	tmpl, err := template.ParseFiles(templatePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse template %s: %w", templatePath, err)
+	}
+	data := viewTemplateData(view, records)
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return false, fmt.Errorf("failed to render template %s: %w", templatePath, err)
+	}
+	content := buf.Bytes()
+	if existing, err := w.readFile(outPath); err == nil {
+		if bytes.Equal(existing, content) {
+			return false, nil
+		}
+	}
+	if err := w.mkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return false, fmt.Errorf("failed to create directory for %s: %w", outPath, err)
+	}
+	if err := w.writeFile(outPath, content, 0o644); err != nil {
+		return false, fmt.Errorf("failed to write view output %s: %w", outPath, err)
+	}
+	return true, nil
+}
+
+func viewTemplateData(view *ingitdb.ViewDef, records []ingitdb.RecordEntry) map[string]any {
+	varName := view.RecordsVarName
+	if varName == "" {
+		varName = "records"
+	}
+	items := make([]map[string]any, 0, len(records))
+	for _, record := range records {
+		items = append(items, record.Data)
+	}
+	return map[string]any{
+		varName: items,
+	}
+}
