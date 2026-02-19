@@ -52,7 +52,7 @@ brews:
     repository:
       owner: ingitdb
       name: homebrew-cli
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.GORELEASER_GITHUB_TOKEN }}"
     homepage: https://github.com/ingitdb/ingitdb-cli
     description: CLI for inGitDB
 
