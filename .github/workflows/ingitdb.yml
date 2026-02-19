@@ -38,4 +38,4 @@ jobs:
       - run: chmod +x ingitdb
 
       - name: inGitDB validation
-        run: ./ingitdb .
+        run: ./ingitdb validate .
