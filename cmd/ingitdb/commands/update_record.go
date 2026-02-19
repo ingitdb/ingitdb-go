@@ -56,6 +56,8 @@ func updateRecord(
 				db        dal.DB
 				colDef    *ingitdb.CollectionDef
 				recordKey string
+				dirPath   string
+				def       *ingitdb.Definition
 				err       error
 			)
 			if githubValue != "" {
@@ -83,9 +85,9 @@ func updateRecord(
 					return resolveErr
 				}
 				_ = logf
-				def, readErr := readDefinition(dirPath)
-				if readErr != nil {
-					return fmt.Errorf("failed to read database definition: %w", readErr)
+				def, err = readDefinition(dirPath)
+				if err != nil {
+					return fmt.Errorf("failed to read database definition: %w", err)
 				}
 				var parseErr error
 				colDef, recordKey, parseErr = dalgo2ingitdb.CollectionForKey(def, id)
@@ -102,7 +104,7 @@ func updateRecord(
 				return fmt.Errorf("failed to parse --set: %w", unmarshalErr)
 			}
 			key := dal.NewKeyWithID(colDef.ID, recordKey)
-			return db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+			err = db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
 				data := map[string]any{}
 				record := dal.NewRecordWithData(key, data)
 				getErr := tx.Get(ctx, record)
@@ -115,6 +117,21 @@ func updateRecord(
 				maps.Copy(data, patch)
 				return tx.Set(ctx, record)
 			})
+			if err != nil {
+				return err
+			}
+			if githubValue == "" {
+				builder, err := viewBuilderForCollection(colDef)
+				if err != nil {
+					return fmt.Errorf("failed to init view builder for collection %s: %w", colDef.ID, err)
+				}
+				if builder != nil {
+					if _, buildErr := builder.BuildViews(ctx, dirPath, colDef, def); buildErr != nil {
+						return fmt.Errorf("failed to materialize views for collection %s: %w", colDef.ID, buildErr)
+					}
+				}
+			}
+			return nil
 		},
 	}
 }

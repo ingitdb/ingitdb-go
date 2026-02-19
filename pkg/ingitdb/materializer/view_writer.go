@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
@@ -48,6 +49,9 @@ func (w FileViewWriter) WriteView(
 		return false, fmt.Errorf("failed to render template %s: %w", templatePath, err)
 	}
 	content := buf.Bytes()
+	if strings.HasSuffix(strings.ToLower(outPath), ".md") {
+		content = stripMarkdownComments(content)
+	}
 	if existing, err := w.readFile(outPath); err == nil {
 		if bytes.Equal(existing, content) {
 			return false, nil
@@ -74,4 +78,29 @@ func viewTemplateData(view *ingitdb.ViewDef, records []ingitdb.RecordEntry) map[
 	return map[string]any{
 		varName: items,
 	}
+}
+
+func stripMarkdownComments(content []byte) []byte {
+	text := string(content)
+	lines := strings.Split(text, "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if isMarkdownCommentLine(line) {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	result := strings.Join(filtered, "\n")
+	if strings.HasSuffix(text, "\n") && !strings.HasSuffix(result, "\n") {
+		result += "\n"
+	}
+	return []byte(result)
+}
+
+func isMarkdownCommentLine(line string) bool {
+	trimmed := strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+	if !strings.HasPrefix(trimmed, "[//]:") {
+		return false
+	}
+	return strings.Contains(trimmed, "#")
 }

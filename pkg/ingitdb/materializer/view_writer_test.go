@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
@@ -86,5 +87,36 @@ func TestFileViewWriter_MissingTemplate(t *testing.T) {
 	_, err := writer.WriteView(context.Background(), &ingitdb.CollectionDef{}, &ingitdb.ViewDef{}, nil, "README.md")
 	if err == nil {
 		t.Fatalf("expected error for missing template")
+	}
+}
+
+func TestFileViewWriter_StripsMarkdownComments(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	col := &ingitdb.CollectionDef{DirPath: dir}
+	view := &ingitdb.ViewDef{
+		Template:       ".ingitdb-view.README.md",
+		FileName:       "README.md",
+		RecordsVarName: "tags",
+	}
+	templatePath := filepath.Join(dir, ".ingitdb-view.README.md")
+	templateContent := "# Tags\n[//]: # (comment)\n{{ range .tags }}- {{ .title }}\n{{ end }}"
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
+		t.Fatalf("write template: %v", err)
+	}
+
+	writer := NewFileViewWriter()
+	records := []ingitdb.RecordEntry{{Data: map[string]any{"title": "Home"}}}
+	outPath := filepath.Join(dir, "README.md")
+	if _, err := writer.WriteView(context.Background(), col, view, records, outPath); err != nil {
+		t.Fatalf("WriteView: %v", err)
+	}
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if strings.Contains(string(content), "[//]:") {
+		t.Fatalf("expected markdown comments to be stripped, got:\n%s", string(content))
 	}
 }

@@ -46,8 +46,11 @@ func deleteRecord(
 			githubValue := cmd.String("github")
 			var (
 				db        dal.DB
+				colDef    *ingitdb.CollectionDef
 				colDefID  string
 				recordKey string
+				dirPath   string
+				def       *ingitdb.Definition
 				err       error
 			)
 			if githubValue != "" {
@@ -72,11 +75,15 @@ func deleteRecord(
 					return resolveErr
 				}
 				_ = logf
-				def, readErr := readDefinition(dirPath)
-				if readErr != nil {
-					return fmt.Errorf("failed to read database definition: %w", readErr)
+				def, err = readDefinition(dirPath)
+				if err != nil {
+					return fmt.Errorf("failed to read database definition: %w", err)
 				}
-				colDef, key, parseErr := dalgo2ingitdb.CollectionForKey(def, id)
+				var (
+					parseErr error
+					key      string
+				)
+				colDef, key, parseErr = dalgo2ingitdb.CollectionForKey(def, id)
 				if parseErr != nil {
 					return fmt.Errorf("invalid --id: %w", parseErr)
 				}
@@ -88,9 +95,24 @@ func deleteRecord(
 				}
 			}
 			key := dal.NewKeyWithID(colDefID, recordKey)
-			return db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
+			err = db.RunReadwriteTransaction(ctx, func(ctx context.Context, tx dal.ReadwriteTransaction) error {
 				return tx.Delete(ctx, key)
 			})
+			if err != nil {
+				return err
+			}
+			if githubValue == "" {
+				builder, err := viewBuilderForCollection(colDef)
+				if err != nil {
+					return fmt.Errorf("failed to init view builder for collection %s: %w", colDefID, err)
+				}
+				if builder != nil {
+					if _, buildErr := builder.BuildViews(ctx, dirPath, colDef, def); buildErr != nil {
+						return fmt.Errorf("failed to materialize views for collection %s: %w", colDefID, buildErr)
+					}
+				}
+			}
+			return nil
 		},
 	}
 }

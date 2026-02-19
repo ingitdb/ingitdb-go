@@ -60,7 +60,7 @@ func run(
 			commands.Serve(homeDir, getWd, readDefinition, newDB, logf),
 			commands.List(homeDir, getWd, readDefinition),
 			commands.Find(),
-			commands.Create(homeDir, getWd, readDefinition, newDB, nil, logf),
+			commands.Create(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Read(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Update(homeDir, getWd, readDefinition, newDB, logf),
 			commands.Delete(homeDir, getWd, readDefinition, newDB, logf),

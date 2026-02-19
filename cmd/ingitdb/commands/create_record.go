@@ -11,7 +11,6 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
-	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/materializer"
 )
 
 func createRecord(
@@ -19,7 +18,6 @@ func createRecord(
 	getWd func() (string, error),
 	readDefinition func(string, ...ingitdb.ReadOption) (*ingitdb.Definition, error),
 	newDB func(string, *ingitdb.Definition) (dal.DB, error),
-	viewBuilder materializer.ViewBuilder,
 	logf func(...any),
 ) *cli.Command {
 	return &cli.Command{
@@ -112,35 +110,18 @@ func createRecord(
 			if err != nil {
 				return err
 			}
-			builder := viewBuilder
-			if builder == nil && githubValue == "" {
-				builder, err = viewBuilderForCollection(colDef)
+			if githubValue == "" {
+				builder, err := viewBuilderForCollection(colDef)
 				if err != nil {
 					return fmt.Errorf("failed to init view builder for collection %s: %w", colDef.ID, err)
 				}
-			}
-			if builder != nil && githubValue == "" {
-				if _, buildErr := builder.BuildViews(ctx, dirPath, colDef, def); buildErr != nil {
-					return fmt.Errorf("failed to materialize views for collection %s: %w", colDef.ID, buildErr)
+				if builder != nil {
+					if _, buildErr := builder.BuildViews(ctx, dirPath, colDef, def); buildErr != nil {
+						return fmt.Errorf("failed to materialize views for collection %s: %w", colDef.ID, buildErr)
+					}
 				}
 			}
 			return nil
 		},
 	}
-}
-
-func viewBuilderForCollection(colDef *ingitdb.CollectionDef) (materializer.ViewBuilder, error) {
-	if colDef == nil {
-		return nil, nil
-	}
-	reader := materializer.FileViewDefReader{}
-	views, err := reader.ReadViewDefs(colDef.DirPath)
-	if err != nil {
-		return nil, err
-	}
-	if len(views) == 0 {
-		return nil, nil
-	}
-	// Use the filesystem reader for template-based views like README builders.
-	return materializer.NewViewBuilder(materializer.NewFileRecordsReader()), nil
 }
