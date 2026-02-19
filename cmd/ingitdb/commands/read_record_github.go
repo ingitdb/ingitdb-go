@@ -62,7 +62,7 @@ func parseGitHubRepoSpec(value string) (githubRepoSpec, error) {
 
 func readRemoteDefinitionForID(ctx context.Context, spec githubRepoSpec, id string) (*ingitdb.Definition, string, string, error) {
 	cfg := dalgo2ghingitdb.Config{Owner: spec.Owner, Repo: spec.Repo, Ref: spec.Ref}
-	fileReader, err := dalgo2ghingitdb.NewGitHubFileReader(cfg)
+	fileReader, err := gitHubFileReaderFactory.NewGitHubFileReader(cfg)
 	if err != nil {
 		return nil, "", "", err
 	}
