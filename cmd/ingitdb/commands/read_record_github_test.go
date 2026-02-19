@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"go.uber.org/mock/gomock"
+
 	"github.com/dal-go/dalgo/dal"
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
@@ -383,3 +385,56 @@ func TestResolveRemoteCollectionPath_EmptyRecordKey(t *testing.T) {
 }
 
 var _ dalgo2ghingitdb.FileReader = (*fakeFileReader)(nil)
+
+func TestReadRemoteDefinitionForID_WithMock(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	reader := fakeFileReader{files: map[string][]byte{
+		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
+		"test-ingitdb/todo/tags/.ingitdb-collection.yaml": []byte("record_file:\n  name: tags.json\n  type: map[string]map[string]any\n  format: json\ncolumns:\n  title:\n    type: string\n"),
+	}}
+	mockFactory := NewMockGitHubFileReaderFactory(ctrl)
+	mockFactory.EXPECT().NewGitHubFileReader(gomock.Any()).Return(reader, nil)
+
+	originalFactory := gitHubFileReaderFactory
+	gitHubFileReaderFactory = mockFactory
+	defer func() { gitHubFileReaderFactory = originalFactory }()
+
+	spec := githubRepoSpec{Owner: "owner", Repo: "repo"}
+	def, collectionID, recordKey, err := readRemoteDefinitionForID(context.Background(), spec, "todo.tags/active")
+	if err != nil {
+		t.Fatalf("readRemoteDefinitionForID: %v", err)
+	}
+	if collectionID != "todo.tags" {
+		t.Fatalf("expected collectionID todo.tags, got %s", collectionID)
+	}
+	if recordKey != "active" {
+		t.Fatalf("expected recordKey active, got %s", recordKey)
+	}
+	if def == nil {
+		t.Fatal("expected non-nil definition")
+	}
+}
+
+func TestReadRemoteDefinitionForID_FactoryError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFactory := NewMockGitHubFileReaderFactory(ctrl)
+	mockFactory.EXPECT().NewGitHubFileReader(gomock.Any()).Return(nil, errors.New("factory error"))
+
+	originalFactory := gitHubFileReaderFactory
+	gitHubFileReaderFactory = mockFactory
+	defer func() { gitHubFileReaderFactory = originalFactory }()
+
+	spec := githubRepoSpec{Owner: "owner", Repo: "repo"}
+	_, _, _, err := readRemoteDefinitionForID(context.Background(), spec, "todo.tags/active")
+	if err == nil {
+		t.Fatal("expected error when factory fails")
+	}
+}

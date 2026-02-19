@@ -1,8 +1,12 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
+
+	"go.uber.org/mock/gomock"
 
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
@@ -149,6 +153,132 @@ func TestListCollectionsGitHub_Success(t *testing.T) {
 		}
 	}
 	t.Fatal("collections subcommand not found")
+}
+
+func TestListCollectionsGitHub_WithMock(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	reader := &fakeFileReader{
+		files: map[string][]byte{
+			".ingitdb.yaml": []byte("rootCollections:\n  countries: test-ingitdb/countries\n  todo.tags: test-ingitdb/todo/tags\n"),
+		},
+	}
+	mockFactory := NewMockGitHubFileReaderFactory(ctrl)
+	mockFactory.EXPECT().NewGitHubFileReader(gomock.Any()).Return(reader, nil)
+
+	originalFactory := gitHubFileReaderFactory
+	gitHubFileReaderFactory = mockFactory
+	defer func() { gitHubFileReaderFactory = originalFactory }()
+
+	ctx := context.Background()
+	err := listCollectionsGitHub(ctx, "owner/repo", "")
+	if err != nil {
+		t.Fatalf("listCollectionsGitHub: %v", err)
+	}
+}
+
+func TestListCollectionsGitHub_ParseError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	err := listCollectionsGitHub(ctx, "invalid", "")
+	if err == nil {
+		t.Fatal("expected error for invalid GitHub spec")
+	}
+}
+
+func TestListCollectionsGitHub_ReaderCreationError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFactory := NewMockGitHubFileReaderFactory(ctrl)
+	mockFactory.EXPECT().NewGitHubFileReader(gomock.Any()).Return(nil, errors.New("network error"))
+
+	originalFactory := gitHubFileReaderFactory
+	gitHubFileReaderFactory = mockFactory
+	defer func() { gitHubFileReaderFactory = originalFactory }()
+
+	ctx := context.Background()
+	err := listCollectionsGitHub(ctx, "owner/repo", "")
+	if err == nil {
+		t.Fatal("expected error when file reader creation fails")
+	}
+}
+
+func TestListCollectionsGitHub_FileNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	reader := &fakeFileReader{files: map[string][]byte{}}
+	mockFactory := NewMockGitHubFileReaderFactory(ctrl)
+	mockFactory.EXPECT().NewGitHubFileReader(gomock.Any()).Return(reader, nil)
+
+	originalFactory := gitHubFileReaderFactory
+	gitHubFileReaderFactory = mockFactory
+	defer func() { gitHubFileReaderFactory = originalFactory }()
+
+	ctx := context.Background()
+	err := listCollectionsGitHub(ctx, "owner/repo", "")
+	if err == nil {
+		t.Fatal("expected error when root config file not found")
+	}
+}
+
+func TestListCollectionsGitHub_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	reader := &fakeFileReader{
+		files: map[string][]byte{
+			".ingitdb.yaml": []byte("invalid yaml: ["),
+		},
+	}
+	mockFactory := NewMockGitHubFileReaderFactory(ctrl)
+	mockFactory.EXPECT().NewGitHubFileReader(gomock.Any()).Return(reader, nil)
+
+	originalFactory := gitHubFileReaderFactory
+	gitHubFileReaderFactory = mockFactory
+	defer func() { gitHubFileReaderFactory = originalFactory }()
+
+	ctx := context.Background()
+	err := listCollectionsGitHub(ctx, "owner/repo", "")
+	if err == nil {
+		t.Fatal("expected error when root config has invalid YAML")
+	}
+}
+
+func TestListCollectionsGitHub_InvalidConfig(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	reader := &fakeFileReader{
+		files: map[string][]byte{
+			".ingitdb.yaml": []byte("rootCollections:\n  \"\": some/path\n"),
+		},
+	}
+	mockFactory := NewMockGitHubFileReaderFactory(ctrl)
+	mockFactory.EXPECT().NewGitHubFileReader(gomock.Any()).Return(reader, nil)
+
+	originalFactory := gitHubFileReaderFactory
+	gitHubFileReaderFactory = mockFactory
+	defer func() { gitHubFileReaderFactory = originalFactory }()
+
+	ctx := context.Background()
+	err := listCollectionsGitHub(ctx, "owner/repo", "")
+	if err == nil {
+		t.Fatal("expected error when root config validation fails")
+	}
 }
 
 func TestParseGitHubRepoSpec_Valid(t *testing.T) {
