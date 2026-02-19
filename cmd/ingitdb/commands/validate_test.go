@@ -1,9 +1,297 @@
 package commands
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 )
+
+type mockDataValidator struct {
+	result *ingitdb.ValidationResult
+	err    error
+}
+
+func (m *mockDataValidator) Validate(_ context.Context, _ string, _ *ingitdb.Definition) (*ingitdb.ValidationResult, error) {
+	return m.result, m.err
+}
+
+type mockIncrementalValidator struct {
+	result *ingitdb.ValidationResult
+	err    error
+}
+
+func (m *mockIncrementalValidator) ValidateChanges(_ context.Context, _ string, _ *ingitdb.Definition, _, _ string) (*ingitdb.ValidationResult, error) {
+	return m.result, m.err
+}
+
+func TestValidate_ReturnsCommand(t *testing.T) {
+	t.Parallel()
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return "/tmp/db", nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, nil, logf)
+	if cmd == nil {
+		t.Fatal("Validate() returned nil")
+	}
+	if cmd.Name != "validate" {
+		t.Errorf("expected name 'validate', got %q", cmd.Name)
+	}
+	if cmd.Action == nil {
+		t.Fatal("expected Action to be set")
+	}
+}
+
+func TestValidate_Success(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	dataVal := &mockDataValidator{
+		result: &ingitdb.ValidationResult{},
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, dataVal, nil, logf)
+	err := runCLICommand(cmd, "--path="+dir)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+func TestValidate_NoDataValidator(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, nil, logf)
+	err := runCLICommand(cmd, "--path="+dir)
+	if err != nil {
+		t.Fatalf("Validate with no dataValidator: %v", err)
+	}
+}
+
+func TestValidate_DataValidationErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	dataVal := &mockDataValidator{
+		result: func() *ingitdb.ValidationResult {
+			r := &ingitdb.ValidationResult{}
+			r.Append(ingitdb.ValidationError{Message: "error 1"})
+			r.Append(ingitdb.ValidationError{Message: "error 2"})
+			r.Append(ingitdb.ValidationError{Message: "error 3"})
+			return r
+		}(),
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, dataVal, nil, logf)
+	err := runCLICommand(cmd, "--path="+dir)
+	if err == nil {
+		t.Fatal("expected error when data validation has errors")
+	}
+}
+
+func TestValidate_DataValidationError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	dataVal := &mockDataValidator{
+		err: fmt.Errorf("validation error"),
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, dataVal, nil, logf)
+	err := runCLICommand(cmd, "--path="+dir)
+	if err == nil {
+		t.Fatal("expected error when data validation fails")
+	}
+}
+
+func TestValidate_IncrementalNotImplemented(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, nil, logf)
+	err := runCLICommand(cmd, "--path="+dir, "--from-commit=abc123")
+	if err == nil {
+		t.Fatal("expected error when incremental validator is nil")
+	}
+}
+
+func TestValidate_IncrementalSuccess(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	incVal := &mockIncrementalValidator{
+		result: &ingitdb.ValidationResult{},
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, incVal, logf)
+	err := runCLICommand(cmd, "--path="+dir, "--from-commit=abc123", "--to-commit=def456")
+	if err != nil {
+		t.Fatalf("Validate incremental: %v", err)
+	}
+}
+
+func TestValidate_IncrementalErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	incVal := &mockIncrementalValidator{
+		result: func() *ingitdb.ValidationResult {
+			r := &ingitdb.ValidationResult{}
+			r.Append(ingitdb.ValidationError{Message: "error 1"})
+			r.Append(ingitdb.ValidationError{Message: "error 2"})
+			return r
+		}(),
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, incVal, logf)
+	err := runCLICommand(cmd, "--path="+dir, "--from-commit=abc123")
+	if err == nil {
+		t.Fatal("expected error when incremental validation has errors")
+	}
+}
+
+func TestValidate_IncrementalValidationError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	incVal := &mockIncrementalValidator{
+		err: fmt.Errorf("validation error"),
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, incVal, logf)
+	err := runCLICommand(cmd, "--path="+dir, "--from-commit=abc123")
+	if err == nil {
+		t.Fatal("expected error when incremental validation fails")
+	}
+}
+
+func TestValidate_IncrementalReadDefError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return nil, fmt.Errorf("read error")
+	}
+	incVal := &mockIncrementalValidator{}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, incVal, logf)
+	err := runCLICommand(cmd, "--path="+dir, "--from-commit=abc123")
+	if err == nil {
+		t.Fatal("expected error when readDefinition fails for incremental")
+	}
+}
+
+func TestValidate_ReadDefinitionError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return dir, nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return nil, fmt.Errorf("read error")
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, nil, logf)
+	err := runCLICommand(cmd, "--path="+dir)
+	if err == nil {
+		t.Fatal("expected error when readDefinition fails")
+	}
+}
+
+func TestValidate_GetWdError(t *testing.T) {
+	t.Parallel()
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+	getWd := func() (string, error) { return "", fmt.Errorf("no wd") }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, nil, logf)
+	err := runCLICommand(cmd)
+	if err == nil {
+		t.Fatal("expected error when getWd fails")
+	}
+}
+
+func TestValidate_ExpandHomeError(t *testing.T) {
+	t.Parallel()
+
+	homeDir := func() (string, error) { return "", fmt.Errorf("no home") }
+	getWd := func() (string, error) { return "/tmp/db", nil }
+	readDef := func(_ string, _ ...ingitdb.ReadOption) (*ingitdb.Definition, error) {
+		return &ingitdb.Definition{}, nil
+	}
+	logf := func(...any) {}
+
+	cmd := Validate(homeDir, getWd, readDef, nil, nil, logf)
+	err := runCLICommand(cmd, "--path=~")
+	if err == nil {
+		t.Fatal("expected error when expandHome fails")
+	}
+}
 
 func TestExpandHome_NoTilde(t *testing.T) {
 	t.Parallel()
@@ -30,6 +318,20 @@ func TestExpandHome_Tilde(t *testing.T) {
 	}
 	if got != "/tmp/home" {
 		t.Fatalf("expected /tmp/home, got %s", got)
+	}
+}
+
+func TestExpandHome_TildeWithPath(t *testing.T) {
+	t.Parallel()
+
+	homeDir := func() (string, error) { return "/tmp/home", nil }
+
+	got, err := expandHome("~/db", homeDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "/tmp/home/db" {
+		t.Fatalf("expected /tmp/home/db, got %s", got)
 	}
 }
 
