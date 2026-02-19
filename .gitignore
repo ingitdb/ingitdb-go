@@ -32,3 +32,4 @@ dist/
 
 # Local Claude Code settings
 .claude/settings.local.json
+coverage*.html

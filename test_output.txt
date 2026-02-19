@@ -1,0 +1,40 @@
+=== RUN   TestRun_Version
+=== PAUSE TestRun_Version
+=== RUN   TestRun_NoSubcommand
+=== PAUSE TestRun_NoSubcommand
+=== RUN   TestRun_ValidateSuccess
+=== PAUSE TestRun_ValidateSuccess
+=== RUN   TestRun_ValidateError
+=== PAUSE TestRun_ValidateError
+=== RUN   TestRun_ValidateDefaultPath
+=== PAUSE TestRun_ValidateDefaultPath
+=== RUN   TestRun_ValidateHomePath
+=== PAUSE TestRun_ValidateHomePath
+=== RUN   TestMain_VersionCmd
+ingitdb dev (none) @ unknown
+--- PASS: TestMain_VersionCmd (0.00s)
+=== RUN   TestMain_ReadDefinitionError
+--- PASS: TestMain_ReadDefinitionError (0.00s)
+=== RUN   TestRun_InvalidCommand
+=== PAUSE TestRun_InvalidCommand
+=== RUN   TestRun_ExitCoderWithNonZeroCode
+=== PAUSE TestRun_ExitCoderWithNonZeroCode
+=== RUN   TestRun_ExitCoderWithZeroCode
+=== PAUSE TestRun_ExitCoderWithZeroCode
+=== RUN   TestRun_NonExitCoderError
+=== PAUSE TestRun_NonExitCoderError
+=== RUN   TestRun_AllCommands
+=== PAUSE TestRun_AllCommands
+=== RUN   TestRun_GetWdError
+=== PAUSE TestRun_GetWdError
+=== RUN   TestMain_Fatal
+--- PASS: TestMain_Fatal (0.00s)
+=== RUN   TestMain_Logf
+ingitdb dev (none) @ unknown
+--- PASS: TestMain_Logf (0.00s)
+=== CONT  TestRun_Version
+=== CONT  TestRun_InvalidCommand
+=== CONT  TestRun_NonExitCoderError
+No help topic for 'nonexistent-command'
+FAIL	github.com/ingitdb/ingitdb-cli/cmd/ingitdb	0.005s
+FAIL
