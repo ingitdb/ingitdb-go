@@ -8,7 +8,8 @@
 
 <img src="https://github.com/ingitdb/.github/raw/main/inGitDB-full4.png" alt="inGitDB Logo" />
 
-[inGitDB](https://ingitdb.com) is a **developer-grade, schema-validated, AI-native database whose storage engine is a Git
+[inGitDB](https://ingitdb.com) is a **developer-grade, schema-validated, AI-native database whose storage engine is a
+Git
 repository**. Every record is a plain YAML or JSON file, every change is a commit, and every team
 workflow — branching, code review, pull requests — extends naturally to data. This makes inGitDB
 simultaneously a database, a version-control system, an event bus, and a data layer for AI agents,
@@ -45,6 +46,16 @@ flowchart LR
 The `ingitdb validate` command reads `.ingitdb.yaml`, checks every record against its collection
 schema, and rebuilds materialized views in the same pass. Validation can be scoped to a commit
 range (`--from-commit` / `--to-commit`) so CI stays fast on large databases.
+
+## Installation
+
+```shell
+# From source
+go install github.com/ingitdb/ingitdb-cli/cmd/ingitdb
+
+# Mac OS
+brew install ingitdb/cli
+```
 
 ## Quick start
 
@@ -166,27 +177,27 @@ languages:
 
 ## Commands
 
-| Command | Status | Description |
-|---|---|---|
-| `version` | implemented | Print build version, commit hash, and date |
-| `validate` | implemented | Check every record against its collection schema |
-| `read record` | implemented | Read a single record by ID (local or GitHub) |
-| `create record` | implemented | Create a new record (local or GitHub; `map[string]any` collections only) |
-| `update record` | implemented | Update fields of an existing record (local or GitHub) |
-| `delete record` | implemented | Delete a single record by ID (local or GitHub) |
-| `list collections` | implemented | List collection IDs (local or GitHub) |
-| `list view\|subscribers` | planned | List view or subscriber definitions |
-| `find` | planned | Search records by substring, regex, or exact value |
-| `delete collection\|view\|records` | planned | Remove a collection, view definition, or individual records |
-| `truncate` | planned | Remove all records from a collection, keeping its schema |
-| `query` | planned | Query and format records from a collection |
-| `materialize` | planned | Build materialized views into `$views/` |
-| `pull` | planned | Pull remote changes and rebuild views |
-| `watch` | planned | Stream record change events to stdout |
-| `serve` | planned | Start MCP, HTTP API, or file-watcher server |
-| `resolve` | planned | Interactive TUI for resolving data-file merge conflicts |
-| `setup` | planned | Initialise a new database directory |
-| `migrate` | planned | Migrate records between schema versions |
+| Command                            | Status      | Description                                                              |
+|------------------------------------|-------------|--------------------------------------------------------------------------|
+| `version`                          | implemented | Print build version, commit hash, and date                               |
+| `validate`                         | implemented | Check every record against its collection schema                         |
+| `read record`                      | implemented | Read a single record by ID (local or GitHub)                             |
+| `create record`                    | implemented | Create a new record (local or GitHub; `map[string]any` collections only) |
+| `update record`                    | implemented | Update fields of an existing record (local or GitHub)                    |
+| `delete record`                    | implemented | Delete a single record by ID (local or GitHub)                           |
+| `list collections`                 | implemented | List collection IDs (local or GitHub)                                    |
+| `list view\|subscribers`           | planned     | List view or subscriber definitions                                      |
+| `find`                             | planned     | Search records by substring, regex, or exact value                       |
+| `delete collection\|view\|records` | planned     | Remove a collection, view definition, or individual records              |
+| `truncate`                         | planned     | Remove all records from a collection, keeping its schema                 |
+| `query`                            | planned     | Query and format records from a collection                               |
+| `materialize`                      | planned     | Build materialized views into `$views/`                                  |
+| `pull`                             | planned     | Pull remote changes and rebuild views                                    |
+| `watch`                            | planned     | Stream record change events to stdout                                    |
+| `serve`                            | planned     | Start MCP, HTTP API, or file-watcher server                              |
+| `resolve`                          | planned     | Interactive TUI for resolving data-file merge conflicts                  |
+| `setup`                            | planned     | Initialise a new database directory                                      |
+| `migrate`                          | planned     | Migrate records between schema versions                                  |
 
 ### --id format
 
@@ -207,16 +218,16 @@ See the [CLI reference](docs/CLI.md) for flags and examples.
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [Documentation](docs/README.md) | Full docs index — start here |
-| [CLI reference](docs/CLI.md) | Every subcommand, flag, and exit code |
-| [Features](docs/features/README.md) | What inGitDB can do today and what is coming |
+| Document                                                      | Description                                                          |
+|---------------------------------------------------------------|----------------------------------------------------------------------|
+| [Documentation](docs/README.md)                               | Full docs index — start here                                         |
+| [CLI reference](docs/CLI.md)                                  | Every subcommand, flag, and exit code                                |
+| [Features](docs/features/README.md)                           | What inGitDB can do today and what is coming                         |
 | [GitHub Direct Access](docs/features/github-direct-access.md) | Read and write records in remote GitHub repositories without cloning |
-| [Architecture](docs/ARCHITECTURE.md) | Data model, package map, and key design decisions |
-| [Roadmap](docs/ROADMAP.md) | Nine delivery phases from Validator to GraphQL |
-| [Contributing](docs/CONTRIBUTING.md) | How to open issues and submit pull requests |
-| [Competitors](docs/COMPETITORS.md) | Honest feature comparison with related tools |
+| [Architecture](docs/ARCHITECTURE.md)                          | Data model, package map, and key design decisions                    |
+| [Roadmap](docs/ROADMAP.md)                                    | Nine delivery phases from Validator to GraphQL                       |
+| [Contributing](docs/CONTRIBUTING.md)                          | How to open issues and submit pull requests                          |
+| [Competitors](docs/COMPETITORS.md)                            | Honest feature comparison with related tools                         |
 
 ## Get involved
 
