@@ -12,7 +12,9 @@ builds:
     binary: ingitdb
     env: [CGO_ENABLED=0]
     goos: [linux, darwin]
-    goarch: [amd64, arm64]
+    goarch: [amd64, arm64, arm]
+    goarm: ["6"]
+    goamd64: [v1]
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
