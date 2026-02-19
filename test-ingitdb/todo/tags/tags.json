@@ -1,10 +1,4 @@
 {
-  "abc123": {
-    "title": "Buy milk"
-  },
-  "def345": {
-    "title": "Buy eggs"
-  },
   "home": {
     "titles": {
       "de": "Zuhause",
