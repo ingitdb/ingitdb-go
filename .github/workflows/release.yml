@@ -30,4 +30,4 @@ jobs:
           version: v2
           args: release --clean --config .github/goreleaser.yaml
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.INGITDB_GORELEASER_GITHUB_TOKEN }}

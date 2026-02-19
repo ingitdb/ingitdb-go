@@ -46,6 +46,16 @@ archives:
 checksum:
   name_template: checksums.txt
 
+brews:
+  - name: ingitdb
+    ids: [ingitdb-unix]
+    repository:
+      owner: ingitdb
+      name: homebrew-cli
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/ingitdb/ingitdb-cli
+    description: CLI for inGitDB
+
 release:
   github:
     owner: ingitdb
