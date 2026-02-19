@@ -48,7 +48,7 @@ archives:
 checksum:
   name_template: checksums.txt
 
-brews:
+homebrew_casks:
   - name: ingitdb
     ids: [ingitdb-unix]
     repository:
