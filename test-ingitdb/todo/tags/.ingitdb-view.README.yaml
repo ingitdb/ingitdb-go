@@ -1,8 +1,7 @@
-order_by: $last_modified desc
-formats:
-  - md
+order_by: title
 columns:
   - title
   - description
-
-
+template: .ingitdb-view.README.md
+file_name: README.md
+records_var_name: tags
