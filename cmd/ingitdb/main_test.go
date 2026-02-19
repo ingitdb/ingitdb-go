@@ -191,8 +191,6 @@ func TestMain_ReadDefinitionError(t *testing.T) {
 }
 
 func TestRun_InvalidCommand(t *testing.T) {
-	t.Parallel()
-
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("panic recovered: %v", r)
@@ -251,8 +249,6 @@ func TestRun_InvalidCommand(t *testing.T) {
 }
 
 func TestRun_ExitCoderWithNonZeroCode(t *testing.T) {
-	t.Parallel()
-
 	// Use validate command with invalid flag to trigger ExitCoder error with non-zero code
 	args := []string{"ingitdb", "validate", "--invalid-flag"}
 	osExiterCalled := false
@@ -299,8 +295,6 @@ func TestRun_ExitCoderWithNonZeroCode(t *testing.T) {
 }
 
 func TestRun_ExitCoderWithZeroCode(t *testing.T) {
-	t.Parallel()
-
 	// Mock cli.OsExiter to prevent urfave/cli from calling os.Exit
 	oldOsExiter := cli.OsExiter
 	cli.OsExiter = func(int) {}
