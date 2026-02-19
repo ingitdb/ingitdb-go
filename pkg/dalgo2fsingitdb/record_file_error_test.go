@@ -83,7 +83,7 @@ func TestReadRecordFromFile_ReadPermissionError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setup: chmod: %v", err)
 	}
-	defer os.Chmod(path, 0o644) // Cleanup
+	defer func() { _ = os.Chmod(path, 0o644) }() // Cleanup
 
 	_, _, err = readRecordFromFile(path, "yaml")
 	if err == nil {

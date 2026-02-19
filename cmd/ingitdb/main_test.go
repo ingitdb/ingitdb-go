@@ -480,7 +480,7 @@ func TestMain_Fatal(t *testing.T) {
 
 	main()
 
-	w.Close()
+	_ = w.Close()
 	output := <-done
 
 	if !exitCalled {
@@ -523,7 +523,7 @@ func TestMain_Logf(t *testing.T) {
 
 	main()
 
-	w.Close()
+	_ = w.Close()
 	<-done
 
 	// Test passed - logf was used by version command

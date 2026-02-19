@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -283,7 +284,7 @@ func TestWrapGitHubError_WithResponse(t *testing.T) {
 	resp := &github.Response{
 		Response: &http.Response{StatusCode: http.StatusInternalServerError},
 	}
-	origErr := &http.ProtocolError{ErrorString: "protocol error"}
+	origErr := fmt.Errorf("protocol error")
 	wrappedErr := wrapGitHubError("test/path", origErr, resp)
 	if wrappedErr == nil {
 		t.Fatal("wrapGitHubError() returned nil")

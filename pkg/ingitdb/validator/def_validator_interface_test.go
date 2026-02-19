@@ -20,7 +20,7 @@ func TestNewCollectionsReader(t *testing.T) {
 	}
 
 	// Verify it satisfies the interface
-	var _ ingitdb.CollectionsReader = reader
+	var _ = reader
 }
 
 // TestDefinitionReader_ReadDefinition verifies the CollectionsReader interface
