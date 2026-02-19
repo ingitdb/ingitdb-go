@@ -32,6 +32,10 @@ func testDef(dirPath string) *ingitdb.Definition {
 func runCLICommand(cmd *cli.Command, args ...string) error {
 	app := &cli.Command{
 		Commands: []*cli.Command{cmd},
+		// Prevent os.Exit in tests by providing a custom ExitErrHandler
+		ExitErrHandler: func(_ context.Context, _ *cli.Command, err error) {
+			// Do nothing - just return the error without calling os.Exit
+		},
 	}
 	argv := append([]string{"app", cmd.Name}, args...)
 	return app.Run(context.Background(), argv)

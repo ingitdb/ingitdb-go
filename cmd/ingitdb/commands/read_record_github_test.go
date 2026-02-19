@@ -236,4 +236,150 @@ func TestListCollections_GitHub(t *testing.T) {
 	}
 }
 
+func TestReadRemoteDefinitionForIDWithReader_RootConfigNotFound(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeFileReader{files: map[string][]byte{}}
+	_, _, _, err := readRemoteDefinitionForIDWithReader(context.Background(), "todo.tags/active", reader)
+	if err == nil {
+		t.Fatal("expected error when root config not found")
+	}
+}
+
+func TestReadRemoteDefinitionForIDWithReader_InvalidRootConfig(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeFileReader{files: map[string][]byte{
+		".ingitdb.yaml": []byte("invalid yaml: ["),
+	}}
+	_, _, _, err := readRemoteDefinitionForIDWithReader(context.Background(), "todo.tags/active", reader)
+	if err == nil {
+		t.Fatal("expected error when root config is invalid")
+	}
+}
+
+func TestReadRemoteDefinitionForIDWithReader_CollectionDefNotFound(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeFileReader{files: map[string][]byte{
+		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
+	}}
+	_, _, _, err := readRemoteDefinitionForIDWithReader(context.Background(), "todo.tags/active", reader)
+	if err == nil {
+		t.Fatal("expected error when collection def not found")
+	}
+}
+
+func TestReadRemoteDefinitionForIDWithReader_InvalidCollectionDef(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeFileReader{files: map[string][]byte{
+		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
+		"test-ingitdb/todo/tags/.ingitdb-collection.yaml": []byte("invalid yaml: ["),
+	}}
+	_, _, _, err := readRemoteDefinitionForIDWithReader(context.Background(), "todo.tags/active", reader)
+	if err == nil {
+		t.Fatal("expected error when collection def is invalid")
+	}
+}
+
+func TestReadRemoteDefinitionForIDWithReader_UnresolvedID(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeFileReader{files: map[string][]byte{
+		".ingitdb.yaml": []byte("rootCollections:\n  todo.tags: test-ingitdb/todo/tags\n"),
+	}}
+	_, _, _, err := readRemoteDefinitionForIDWithReader(context.Background(), "unknown.collection/active", reader)
+	if err == nil {
+		t.Fatal("expected error when ID cannot be resolved")
+	}
+}
+
+func TestListCollectionsFromFileReader_NotFound(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeFileReader{files: map[string][]byte{}}
+	_, err := listCollectionsFromFileReader(&reader)
+	if err == nil {
+		t.Fatal("expected error when root config not found")
+	}
+}
+
+func TestListCollectionsFromFileReader_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
+	reader := fakeFileReader{files: map[string][]byte{
+		".ingitdb.yaml": []byte("invalid yaml: ["),
+	}}
+	_, err := listCollectionsFromFileReader(&reader)
+	if err == nil {
+		t.Fatal("expected error when root config is invalid YAML")
+	}
+}
+
+func TestListCollectionsFromFileReader_InvalidConfig(t *testing.T) {
+	t.Parallel()
+
+	// Empty collection ID is invalid
+	reader := fakeFileReader{files: map[string][]byte{
+		".ingitdb.yaml": []byte("rootCollections:\n  \"\": some/path\n"),
+	}}
+	_, err := listCollectionsFromFileReader(&reader)
+	if err == nil {
+		t.Fatal("expected error when root config validation fails")
+	}
+}
+
+func TestResolveRemoteCollectionPath_LongestPrefix(t *testing.T) {
+	t.Parallel()
+
+	rootCollections := map[string]string{
+		"countries":            "test-ingitdb/countries",
+		"countries.cities":     "test-ingitdb/countries/cities",
+		"countries.cities.zip": "test-ingitdb/countries/cities/zip",
+	}
+
+	// Should resolve to the longest matching prefix
+	collectionID, recordKey, collectionPath, err := resolveRemoteCollectionPath(rootCollections, "countries.cities.zip/12345")
+	if err != nil {
+		t.Fatalf("resolveRemoteCollectionPath: %v", err)
+	}
+	if collectionID != "countries.cities.zip" {
+		t.Fatalf("expected collectionID countries.cities.zip, got %s", collectionID)
+	}
+	if recordKey != "12345" {
+		t.Fatalf("expected recordKey 12345, got %s", recordKey)
+	}
+	if collectionPath != "test-ingitdb/countries/cities/zip" {
+		t.Fatalf("expected collectionPath test-ingitdb/countries/cities/zip, got %s", collectionPath)
+	}
+}
+
+func TestResolveRemoteCollectionPath_NoMatch(t *testing.T) {
+	t.Parallel()
+
+	rootCollections := map[string]string{
+		"countries": "test-ingitdb/countries",
+	}
+
+	_, _, _, err := resolveRemoteCollectionPath(rootCollections, "todo.tags/active")
+	if err == nil {
+		t.Fatal("expected error when no collection matches")
+	}
+}
+
+func TestResolveRemoteCollectionPath_EmptyRecordKey(t *testing.T) {
+	t.Parallel()
+
+	rootCollections := map[string]string{
+		"countries": "test-ingitdb/countries",
+	}
+
+	// Should fail because there's no record key after the slash
+	_, _, _, err := resolveRemoteCollectionPath(rootCollections, "countries/")
+	if err == nil {
+		t.Fatal("expected error when record key is empty")
+	}
+}
+
 var _ dalgo2ghingitdb.FileReader = (*fakeFileReader)(nil)
