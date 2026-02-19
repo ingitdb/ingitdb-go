@@ -15,10 +15,10 @@ import (
 )
 
 type githubFileFixture struct {
-	path      string
-	content   string
-	isDir     bool
-	dirItems  []string
+	path     string
+	content  string
+	isDir    bool
+	dirItems []string
 }
 
 func TestGitHubDB_GetSingleRecord(t *testing.T) {

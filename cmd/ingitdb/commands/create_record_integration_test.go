@@ -10,7 +10,6 @@ import (
 
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2fsingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
-	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/materializer"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/validator"
 )
 
@@ -35,10 +34,9 @@ func TestCreateRecord_UpdatesTagsReadme(t *testing.T) {
 	newDB := func(root string, def *ingitdb.Definition) (dal.DB, error) {
 		return dalgo2fsingitdb.NewLocalDBWithDef(root, def)
 	}
-	viewBuilder := materializer.NewViewBuilder(materializer.NewFileRecordsReader())
 	logf := func(...any) {}
 
-	cmd := Create(homeDir, getWd, readDef, newDB, viewBuilder, logf)
+	cmd := Create(homeDir, getWd, readDef, newDB, nil, logf)
 	if err := runCLICommand(cmd, "record", "--path="+tmpDir, "--id=todo.tags/urgent", "--data={title: Urgent}"); err != nil {
 		t.Fatalf("Create record: %v", err)
 	}

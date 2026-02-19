@@ -18,7 +18,6 @@ type readwriteTx struct {
 	readonlyTx
 }
 
-
 func (r readwriteTx) Set(ctx context.Context, record dal.Record) error {
 	colDef, recordKey, err := r.resolveCollection(record.Key())
 	if err != nil {

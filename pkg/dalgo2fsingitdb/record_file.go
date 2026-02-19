@@ -113,4 +113,3 @@ func writeMapOfIDRecordsFile(path string, format ingitdb.RecordFormat, data map[
 	}
 	return writeRecordToFile(path, format, raw)
 }
-
