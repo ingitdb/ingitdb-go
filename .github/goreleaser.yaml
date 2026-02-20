@@ -61,5 +61,5 @@ homebrew_casks:
 
     repository:
       owner: ingitdb
-      name: homebrew-tap
+      name: homebrew-cli
       token: "{{ .Env.GITHUB_TOKEN }}"
