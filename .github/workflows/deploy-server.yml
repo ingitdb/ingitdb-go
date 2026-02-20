@@ -64,6 +64,9 @@ jobs:
         run: |
           VERSION=$(gh release view --repo ${{ github.repository }} --json tagName --jq '.tagName')
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          ASSET="ingitdb_${VERSION#v}_linux_amd64.tar.gz"
+          echo "asset=${ASSET}" >> $GITHUB_OUTPUT
+          echo "Deploying ${ASSET} (${VERSION})"
           gh release download "${VERSION}" \
             --repo ${{ github.repository }} \
             --pattern "ingitdb_*_linux_amd64.tar.gz" \
