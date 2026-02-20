@@ -3,6 +3,7 @@ module github.com/ingitdb/ingitdb-cli
 go 1.24.1
 
 require (
+	github.com/julienschmidt/httprouter v1.3.0
 	go.uber.org/mock v0.6.0
 	gopkg.in/yaml.v3 v3.0.1
 )
