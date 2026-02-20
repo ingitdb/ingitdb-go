@@ -1,4 +1,4 @@
-# inGitDB Validator
+# 📘 inGitDB Validator
 
 Validates inGitDB schema and data.
 

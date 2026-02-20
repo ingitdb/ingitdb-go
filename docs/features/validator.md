@@ -1,4 +1,4 @@
-# inGitDB Validator
+# 📘 inGitDB Validator
 
 `ingitdb validate` validates an inGitDB directory.
 

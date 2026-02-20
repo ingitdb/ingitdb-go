@@ -1,4 +1,4 @@
-# inGitDB README Builder
+# 📘 inGitDB README Builder
 
 The `README.md` is a built-in specialized implementation of [materialized views](../../features/materialized-views.md).
 

@@ -1,6 +1,6 @@
-# dalgo2ghingitdb — GitHub DALgo Adapter
+# 📘 dalgo2ghingitdb — GitHub DALgo Adapter
 
-## Overview
+## 📂 Overview
 
 `pkg/dalgo2ghingitdb` is a [DALgo](https://github.com/dal-go/dalgo) database adapter that
 provides full CRUD access to inGitDB repositories stored on GitHub. It uses the GitHub REST API
@@ -10,7 +10,7 @@ The package is consumed by the `ingitdb` CLI when `--github=owner/repo` is suppl
 also be used as a Go library by any program that needs database access to a remote inGitDB
 repository.
 
-## Features
+## 📂 Features
 
 - Read-only access to public repositories (no token required)
 - Authenticated reads and writes for public and private repositories
@@ -21,7 +21,7 @@ repository.
 - Token supplied via `Config.Token` field or `GITHUB_TOKEN` environment variable (CLI only)
 - Comprehensive error handling: rate limits, 404s, forbidden, and other API errors
 
-## Architecture
+## 📂 Architecture
 
 ```mermaid
 flowchart LR
@@ -36,7 +36,7 @@ flowchart LR
     ROTx --> shared
 ```
 
-### Package structure
+### 🔹 Package structure
 
 | File | Responsibility |
 |---|---|
@@ -47,7 +47,7 @@ flowchart LR
 | `record_content.go` | `resolveRecordPath` — maps collection + key to a file path |
 | `constants.go` | Package-level constants (e.g. `DatabaseID`) |
 
-### Shared parsing — `pkg/dalgo2ingitdb`
+### 🔹 Shared parsing — `pkg/dalgo2ingitdb`
 
 Both the local adapter (`dalgo2ingitdb`) and this package share record parsing and locale logic
 from `pkg/dalgo2ingitdb`:
@@ -61,7 +61,7 @@ This ensures identical record semantics whether data comes from disk or from Git
 
 ---
 
-## Components
+## 📂 Components
 
 ### `Config`
 
@@ -153,7 +153,7 @@ ingitdb: <insert|set|delete> <collectionID>/<recordKey>
 
 ---
 
-## Usage example
+## 📂 Usage example
 
 ```go
 package main
@@ -222,7 +222,7 @@ func main() {
 
 ---
 
-## Error handling
+## 📂 Error handling
 
 | Situation | Behaviour |
 |---|---|
@@ -236,7 +236,7 @@ func main() {
 
 ---
 
-## Testing
+## 📂 Testing
 
 Tests use a mock HTTP server (`httptest.NewServer`) to intercept GitHub API calls, so they run
 entirely offline:
@@ -247,7 +247,7 @@ go test -timeout=10s ./pkg/dalgo2ghingitdb/...
 
 ---
 
-## Dependencies
+## 📂 Dependencies
 
 | Package | Purpose |
 |---|---|
@@ -258,7 +258,7 @@ go test -timeout=10s ./pkg/dalgo2ghingitdb/...
 
 ---
 
-## Design principles
+## 📂 Design principles
 
 1. **Consistency with `dalgo2ingitdb`**: both adapters implement the same `dal.DB` interface and
    share record parsing from `pkg/dalgo2ingitdb`, so switching between local and remote access
@@ -274,7 +274,7 @@ go test -timeout=10s ./pkg/dalgo2ghingitdb/...
 
 ---
 
-## See also
+## 📂 See also
 
 - [GitHub Direct Access](features/github-direct-access.md) — CLI-level documentation with
   command examples, auth setup, rate limits, and limitations

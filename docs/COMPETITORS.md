@@ -1,10 +1,10 @@
-# inGitDB Competitive Landscape
+# 📘 inGitDB Competitive Landscape
 
 inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-native database whose storage engine is a Git repository**. Every record is a plain YAML or JSON file, every change is a commit, and every team workflow — branching, code review, pull requests — extends naturally to data. This makes inGitDB simultaneously a database, a version-control system, an event bus, and an MCP-accessible data layer for AI agents, all with zero server infrastructure for reads. The projects described below overlap with one or more of these capabilities, but none combines all of them in a single tool.
 
 ---
 
-## 1. Dolt — Git for SQL Tables
+## 📂 1. Dolt — Git for SQL Tables
 
 **What it is.** [Dolt](https://github.com/dolthub/dolt) is a relational database that implements the Git object model on top of structured table storage. You run SQL (MySQL dialect) against it and also run `dolt branch`, `dolt merge`, and `dolt diff` commands that work row-by-row instead of line-by-line.
 
@@ -27,7 +27,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 2. lakeFS — Git for Data Lakes
+## 📂 2. lakeFS — Git for Data Lakes
 
 **What it is.** [lakeFS](https://github.com/treeverse/lakeFS) wraps an object store (S3, GCS, Azure Blob) in a Git-like versioning layer: branch, commit, merge, revert. It targets data engineering workflows with Parquet, Delta Lake, and Apache Iceberg.
 
@@ -50,7 +50,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 3. Project Nessie — Git for Data Catalogs
+## 📂 3. Project Nessie — Git for Data Catalogs
 
 **What it is.** [Project Nessie](https://projectnessie.org/) provides Git-like versioning (branch, tag, commit) for Apache Iceberg table catalogs in a data lakehouse. It is the transactional catalog layer, not a data storage engine.
 
@@ -71,7 +71,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 4. DVC — Git for ML Datasets and Pipelines
+## 📂 4. DVC — Git for ML Datasets and Pipelines
 
 **What it is.** [DVC](https://dvc.org/) (Data Version Control) is a Git extension for versioning large binary datasets and ML model artifacts. Data files are replaced in Git with small `.dvc` pointer files; actual data lives in a remote store (S3, GCS, SSH, etc.).
 
@@ -92,7 +92,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 5. TinaCMS — Git-Backed Headless CMS
+## 📂 5. TinaCMS — Git-Backed Headless CMS
 
 **What it is.** [TinaCMS](https://github.com/tinacms/tinacms) is an open-source headless CMS that stores content as Markdown, JSON, and YAML files in a Git repository and exposes them through an auto-generated GraphQL API with a browser-based visual editor.
 
@@ -116,7 +116,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 6. Keystatic — Code-First Git CMS
+## 📂 6. Keystatic — Code-First Git CMS
 
 **What it is.** [Keystatic](https://github.com/Thinkmill/keystatic) is a lightweight, no-database CMS that stores content as Markdown, YAML, or JSON files in a Git repository. Schema is declared in TypeScript; Keystatic auto-generates a local or GitHub-backed admin UI.
 
@@ -139,7 +139,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 7. Decap CMS (formerly Netlify CMS) — Git-Backed Editorial CMS
+## 📂 7. Decap CMS (formerly Netlify CMS) — Git-Backed Editorial CMS
 
 **What it is.** [Decap CMS](https://github.com/decaporg/decap-cms) is a React single-page application that wraps the GitHub, GitLab, or Bitbucket API to provide a web-based editorial UI. Content lives as Markdown and JSON files in a Git repository; Decap handles authentication, media uploads, and a WYSIWYG editor.
 
@@ -163,7 +163,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 8. Contentlayer — Content as Typed Data
+## 📂 8. Contentlayer — Content as Typed Data
 
 **What it is.** [Contentlayer](https://github.com/contentlayerdev/contentlayer) is a content SDK for JavaScript frameworks (Next.js, Remix). It reads Markdown and MDX files from a directory, validates them against a schema defined in JavaScript, and emits typed JSON that you import directly in your application. It does not edit content — it only reads and transforms it.
 
@@ -185,7 +185,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 9. lowdb — JSON File Database for Node.js
+## 📂 9. lowdb — JSON File Database for Node.js
 
 **What it is.** [lowdb](https://github.com/typicode/lowdb) is a minimal JSON database for Node.js, the browser, and Electron. Data lives in a single JSON file and you query it using native JavaScript array methods (no query language). It is intentionally simple — the entire API surface is `db.data`, `db.read()`, and `db.write()`.
 
@@ -208,7 +208,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## 10. SQLite — Embedded Relational Database
+## 📂 10. SQLite — Embedded Relational Database
 
 **What it is.** [SQLite](https://sqlite.org/) is the world's most widely deployed database engine. It stores a full relational database (tables, indexes, triggers, views) in a single binary file and is accessed via SQL. No network, no separate process.
 
@@ -232,7 +232,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 
 ---
 
-## Summary Comparison Matrix
+## 📂 Summary Comparison Matrix
 
 | Tool | Git-native | Human-readable records | Schema validation | CRUD API | Query / views | MCP (AI-native) | Language | License |
 |---|---|---|---|---|---|---|---|---|
@@ -248,7 +248,7 @@ inGitDB occupies a distinctive niche: a **developer-grade, schema-validated, AI-
 | **lowdb** | No | Yes — JSON | No | Yes — JS API | No | No | JavaScript | MIT |
 | **SQLite** | No | No — binary file | Yes — SQL DDL | Yes — SQL / many language bindings | Yes — full SQL | No | C | Public domain |
 
-### Key differentiators for inGitDB
+### 🔹 Key differentiators for inGitDB
 
 - **The only tool that is simultaneously a real Git repo, schema-validated, and MCP-native.** No competitor combines all three.
 - **Zero-infrastructure reads.** Every tool that offers a richer query layer (Dolt, SQLite, lakeFS) requires a server process or runtime. inGitDB reads are plain file-system operations on a git clone.

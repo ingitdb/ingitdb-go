@@ -1,4 +1,4 @@
-# inGitDB Documentation
+# 📘 inGitDB Documentation
 
 inGitDB turns a Git repository into a schema-validated, queryable database where every record is
 a plain YAML or JSON file. There is no server to run and no binary format to decode — the data

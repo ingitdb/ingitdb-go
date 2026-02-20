@@ -1,8 +1,8 @@
-# Merge Conflict Resolver
+# 📘 Merge Conflict Resolver
 
 Resolves git merge conflicts inside an inGitDB database. Operates in two distinct modes depending on whether the conflicted file is generated or hand-authored.
 
-## Git merge driver integration
+## 📂 Git merge driver integration
 
 `ingitdb setup` writes two merge driver definitions to `.gitattributes` and the local `.git/config`:
 
@@ -17,13 +17,13 @@ ingitdb merge-driver --type=<generated|data> %O %A %B %P
 ```
 where `%O` = base, `%A` = current (ours), `%B` = incoming (theirs), `%P` = result path.
 
-## Generated file resolver
+## 📂 Generated file resolver
 
 Ignores all three versions entirely. Reads the current source records from disk (already at their merged state or with conflicts in `$records/`), calls the Views Builder to regenerate the output, and writes the result to the result path. Exits 0 so git marks the conflict resolved.
 
 **Dependency:** Views Builder (Phase 1).
 
-## Data file resolver
+## 📂 Data file resolver
 
 Parses all three versions of the record file (base, ours, theirs) as JSON or YAML. For each field:
 
@@ -51,7 +51,7 @@ After the user resolves all fields, the merged record is written back to the res
 
 Scans the database root for all files with conflict markers (using `git status --porcelain`). Delegates each to the appropriate resolver. Generated files are processed first (silently), then data files are presented one at a time in the TUI.
 
-## Package location
+## 📂 Package location
 
 Implement in `pkg/ingitdb/resolver/`. Two sub-packages:
 - `pkg/ingitdb/resolver/generated/` — generated file resolver

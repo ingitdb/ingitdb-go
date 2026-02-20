@@ -1,14 +1,14 @@
-# Reading Records: Local vs GitHub
+# 📘 Reading Records: Local vs GitHub
 
 This document shows how to read the same record using the ingitdb CLI from two different sources:
 1. Local file system (using `dalgo2ingitdb`)
 2. GitHub repository (using `dalgo2ghingitdb`)
 
-## Example: Reading the "active" tag record
+## 📂 Example: Reading the "active" tag record
 
 Both commands read the same record: `todo/tags/active` from the test-ingitdb repository.
 
-### Command 1: Read from Local Repository
+### 🔹 Command 1: Read from Local Repository
 
 ```bash
 ingitdb read record --path test-ingitdb --id todo.tags/active
@@ -32,7 +32,7 @@ ingitdb read record --id todo.tags/active
 title: Active
 ```
 
-### Command 2: Read from GitHub Repository
+### 🔹 Command 2: Read from GitHub Repository
 
 ```bash
 ingitdb read record --github ingitdb/ingitdb-cli@main --id todo.tags/active
@@ -57,9 +57,9 @@ ingitdb read record --github ingitdb/ingitdb-cli --id todo.tags/active
 title: Active
 ```
 
-## Additional Options
+## 📂 Additional Options
 
-### Change Output Format to JSON
+### 🔹 Change Output Format to JSON
 
 Both commands support JSON output with `--format json`:
 
@@ -80,7 +80,7 @@ ingitdb read record --github ingitdb/ingitdb-cli --id todo.tags/active --format 
 }
 ```
 
-## Important Notes
+## 📂 Important Notes
 
 1. **Collection ID Format**
    - Use dots for collection hierarchy: `todo.tags`, `todo.tasks.statuses`
@@ -105,7 +105,7 @@ ingitdb read record --github ingitdb/ingitdb-cli --id todo.tags/active --format 
      - `--github owner/repo@abc123def456`
      - `--github owner/repo` (uses default branch)
 
-## Error Handling
+## 📂 Error Handling
 
 **Record not found:**
 ```
@@ -127,7 +127,7 @@ error: failed to resolve remote definition: github api error status 404
 error: failed to resolve remote definition: .ingitdb file not found in repository
 ```
 
-## Quick Comparison Table
+## 📂 Quick Comparison Table
 
 | Aspect | Local | GitHub |
 |--------|-------|--------|

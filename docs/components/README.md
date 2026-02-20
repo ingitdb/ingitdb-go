@@ -1,4 +1,4 @@
-# inGitDB Components
+# 📘 inGitDB Components
 
 - [Validator](validator/README.md) — validates inGitDB schema and data
     - [**Schema Validator**](validator/schema-validator.md) — validates inGitDB schema.

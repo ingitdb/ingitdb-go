@@ -1,9 +1,9 @@
-# Collection Definition File (`.ingitdb-collection.yaml`)
+# 📘 Collection Definition File (`.ingitdb-collection.yaml`)
 
 Each collection directory contains an `.ingitdb-collection.yaml` file that describes
 how records are stored and what columns (fields) they have.
 
-## Top-level fields
+## 📂 Top-level fields
 
 | Field           | Type                        | Description |
 |-----------------|-----------------------------|-------------|
@@ -132,7 +132,7 @@ Each entry under `columns` is a **ColumnDef** keyed by the field name.
 | `foreign_key` | `string`              | Reference to another collection |
 | `locale`      | `string`              | Locale shortcut (see below) |
 
-### Column types
+### 🔹 Column types
 
 | Type                | Description |
 |---------------------|-------------|
@@ -148,7 +148,7 @@ Each entry under `columns` is a **ColumnDef** keyed by the field name.
 
 ---
 
-## Locale columns and the `locale` field
+## 📂 Locale columns and the `locale` field
 
 A column with `locale` set is a **locale shortcut** — a convenient single-value
 alias for one locale within a paired `map[locale]string` column.
@@ -167,7 +167,7 @@ columns:
     required: true
 ```
 
-### Read behaviour
+### 🔹 Read behaviour
 
 When a record is read from the file, the locale value is **extracted** from the
 pair column and exposed via the shortcut column. The locale key is **removed**
@@ -185,7 +185,7 @@ Data presented to the application:
 
 The `en` entry is not stored in `titles` when `title` already carries it.
 
-### Write behaviour
+### 🔹 Write behaviour
 
 When a record is written, the shortcut column value is **merged** into the pair
 column under the configured locale key, and the shortcut column itself is
@@ -206,7 +206,7 @@ same value in two places.
 
 ---
 
-## Full example
+## 📂 Full example
 
 `todo/tags/.ingitdb-collection.yaml`:
 

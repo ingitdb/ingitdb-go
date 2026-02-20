@@ -1,6 +1,6 @@
-# MCP server for inGitDB
+# 📘 MCP server for inGitDB
 
-## Skills
+## 📂 Skills
 
 - List known inGitDB databases registered in `~/.ingitdb/ingitdbs.yaml`
 - List inGitDB objects (metadata):

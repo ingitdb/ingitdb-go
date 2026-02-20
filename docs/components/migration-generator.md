@@ -1,8 +1,8 @@
-# Migration Generator
+# 📘 Migration Generator
 
 The Migration Generator diffs two versions of an inGitDB database and produces a forward migration script and a rollback script for a target database.
 
-## How it works
+## 📂 How it works
 
 1. **Resolve versions** — use `git show <sha>:<path>` to read collection schemas and record files at both `--from` and `--to` SHAs without checking out the commits.
 2. **Diff records** — compare records present in `--from` vs `--to` per collection:
@@ -15,11 +15,11 @@ The Migration Generator diffs two versions of an inGitDB database and produces a
    - Type changes → handled per target database dialect
 4. **Write output** — render statements into the chosen format and write both files.
 
-## Collection filtering
+## 📂 Collection filtering
 
 When `--collections` is provided, only the listed collection IDs are included in the diff. Schema changes in excluded collections are ignored.
 
-## Target database connection
+## 📂 Target database connection
 
 The `--target` connection string is used to:
 - Introspect the current state of the target schema (to validate the migration is applicable)
@@ -27,7 +27,7 @@ The `--target` connection string is used to:
 
 Connection string format follows standard DSN conventions (e.g. `postgres://user:pass@host/db`).
 
-## Supported output formats
+## 📂 Supported output formats
 
 | Format | Status |
 |---|---|
@@ -35,6 +35,6 @@ Connection string format follows standard DSN conventions (e.g. `postgres://user
 
 Additional formats (e.g. Prisma migrations, Liquibase changesets) may be added in later phases.
 
-## Package location
+## 📂 Package location
 
 Implement in `pkg/ingitdb/migration/`. The package must have no dependency on the CLI layer — the generator accepts plain Go structs (two `Definition` snapshots and their record sets) and returns the script content as strings.

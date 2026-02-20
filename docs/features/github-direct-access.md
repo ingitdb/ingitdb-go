@@ -1,11 +1,11 @@
-# GitHub Direct Access
+# 📘 GitHub Direct Access
 
 inGitDB can read and write records stored in any GitHub repository without requiring a local
 clone. A single flag — `--github=owner/repo` — replaces `--path` and routes all file I/O
 through the GitHub REST API. The database definition (`.ingitdb.yaml`) is resolved from the
 remote repository automatically.
 
-## Use cases
+## 📂 Use cases
 
 - Inspect live data in a shared team repository from CI or a local shell, with no checkout step.
 - Script record updates that immediately appear as commits in the target repository.
@@ -15,7 +15,7 @@ remote repository automatically.
 
 ---
 
-## The `--github` flag format
+## 📂 The `--github` flag format
 
 ```
 --github=owner/repo
@@ -39,9 +39,9 @@ remote repository automatically.
 
 ---
 
-## Authentication
+## 📂 Authentication
 
-### When a token is required
+### 🔹 When a token is required
 
 | Operation | Public repo | Private repo |
 |-----------|-------------|--------------|
@@ -55,7 +55,7 @@ The GitHub REST API allows unauthenticated reads of public repositories at 60 re
 hour. All write operations use the Contents API endpoint (`PUT`/`DELETE`), which requires a
 token regardless of repository visibility.
 
-### How to supply a token
+### 🔹 How to supply a token
 
 **Environment variable (recommended):**
 
@@ -72,7 +72,7 @@ ingitdb read record --github=owner/repo --token=ghp_... --id=countries/ie
 
 When both are set, `--token` takes precedence over `GITHUB_TOKEN`.
 
-### Creating a GitHub Personal Access Token
+### 🔹 Creating a GitHub Personal Access Token
 
 1. Go to **GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens**.
 2. Click **Generate new token**.
@@ -86,7 +86,7 @@ Classic tokens with the `repo` scope also work but grant broader access than fin
 
 ---
 
-## Supported commands
+## 📂 Supported commands
 
 | Command | `--github` | `--token` | Auth required? |
 |---------|-----------|-----------|----------------|
@@ -100,7 +100,7 @@ Classic tokens with the `repo` scope also work but grant broader access than fin
 
 ---
 
-## Read operations
+## 📂 Read operations
 
 ### `read record`
 
@@ -118,13 +118,13 @@ ingitdb read record --github=owner/repo[@ref] --id=collection/key [--format=yaml
 **Examples:**
 
 ```shell
-# Read a record from a public repository (YAML output)
+# 📘 Read a record from a public repository (YAML output)
 ingitdb read record --github=ingitdb/ingitdb-cli --id=todo.tags/active
 
-# Read from a pinned branch, output as JSON
+# 📘 Read from a pinned branch, output as JSON
 ingitdb read record --github=myorg/mydb@production --id=countries/ie --format=json
 
-# Read from a private repository
+# 📘 Read from a private repository
 export GITHUB_TOKEN=ghp_...
 ingitdb read record --github=myorg/private-db --id=users/alice
 ```
@@ -174,7 +174,7 @@ todo.tasks
 
 ---
 
-## Write operations
+## 📂 Write operations
 
 Each write command reads the `.ingitdb.yaml` configuration and the target collection's schema
 from the remote repository, then calls the GitHub Contents API to create, update, or delete the
@@ -203,14 +203,14 @@ ingitdb create record --github=owner/repo[@ref] --id=collection/key --data=YAML 
 ```shell
 export GITHUB_TOKEN=ghp_...
 
-# Create a simple record
+# 📘 Create a simple record
 ingitdb create record --github=myorg/mydb --id=countries/ie --data='{name: Ireland}'
 
-# Create a record with nested fields
+# 📘 Create a record with nested fields
 ingitdb create record --github=myorg/mydb --id=countries/ie \
   --data='{name: Ireland, capital: Dublin, population: 5000000}'
 
-# Target a specific branch
+# 📘 Target a specific branch
 ingitdb create record --github=myorg/mydb@staging --id=countries/ie --data='{name: Ireland}'
 ```
 
@@ -235,10 +235,10 @@ ingitdb update record --github=owner/repo[@ref] --id=collection/key --set=YAML [
 ```shell
 export GITHUB_TOKEN=ghp_...
 
-# Add or overwrite a single field
+# 📘 Add or overwrite a single field
 ingitdb update record --github=myorg/mydb --id=countries/ie --set='{capital: Dublin}'
 
-# Patch multiple fields at once
+# 📘 Patch multiple fields at once
 ingitdb update record --github=myorg/mydb --id=countries/ie \
   --set='{capital: Dublin, population: 5100000}'
 ```
@@ -267,7 +267,7 @@ ingitdb delete record --github=myorg/mydb --id=countries/ie
 
 ---
 
-## How writes work
+## 📂 How writes work
 
 ```mermaid
 sequenceDiagram
@@ -292,7 +292,7 @@ changes yourself.
 
 ---
 
-## Rate limits
+## 📂 Rate limits
 
 | Token status | Limit |
 |---|---|
@@ -313,7 +313,7 @@ Supply a token to raise the limit from 60 to 5,000 requests per hour.
 
 ---
 
-## Limitations
+## 📂 Limitations
 
 - **No read-after-write consistency within a run.** There is no local cache; each `Get` call
   fetches from GitHub independently. A record written by one command is visible to subsequent
@@ -332,7 +332,7 @@ Supply a token to raise the limit from 60 to 5,000 requests per hour.
 
 ---
 
-## See also
+## 📂 See also
 
 - [CLI reference](../CLI.md) — full flag reference for all commands
 - [DALGO2GHINGITDB adapter](../DALGO2GHINGITDB.md) — Go package documentation for the

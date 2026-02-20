@@ -1,13 +1,13 @@
-# Contributing to inGitDB
+# 📘 Contributing to inGitDB
 
 Thank you for your interest in contributing to inGitDB! We welcome contributions from everyone.
 
 This document provides guidelines for contributing to the project. Following these guidelines helps ensure a smooth
 process for everyone involved.
 
-## How to Contribute
+## 📂 How to Contribute
 
-### Reporting Bugs
+### 🔹 Reporting Bugs
 
 If you find a bug, please check the [existing issues](https://github.com/ingitdb/ingitdb-cli/issues) to see if it has
 already been reported. If not, please open a new issue and include:
@@ -18,7 +18,7 @@ already been reported. If not, please open a new issue and include:
 - Your operating system and terminal emulator.
 - Any relevant logs or screenshots.
 
-### Suggesting Enhancements
+### 🔹 Suggesting Enhancements
 
 We're always looking for ways to improve ingitdb! If you have an idea for a new feature or an enhancement:
 
@@ -26,7 +26,7 @@ We're always looking for ways to improve ingitdb! If you have an idea for a new 
    suggested.
 2. If not, open a new issue and describe the proposed change, why it would be useful, and how you imagine it working.
 
-### Pull Requests
+### 🔹 Pull Requests
 
 We welcome pull requests for bug fixes, new features, and improvements to documentation.
 
@@ -36,13 +36,13 @@ We welcome pull requests for bug fixes, new features, and improvements to docume
 4. **Update documentation** if necessary.
 5. **Submit a pull request** with a clear description of your changes.
 
-## Development
+## 📂 Development
 
-### Prerequisites
+### 🔹 Prerequisites
 
 - [Go](https://go.dev/doc/install) (version specified in `go.mod` or later).
 
-### Setup
+### 🔹 Setup
 
 1. Clone your fork of the repository:
    ```shell
@@ -55,7 +55,7 @@ We welcome pull requests for bug fixes, new features, and improvements to docume
    go mod download
    ```
 
-### Running Tests
+### 🔹 Running Tests
 
 To run all tests:
 
@@ -70,7 +70,7 @@ go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
-### Building from source
+### 🔹 Building from source
 
 To build the executable:
 
@@ -78,11 +78,11 @@ To build the executable:
 go build -o ingitdb ./cmd/ingitdb
 ```
 
-## Coding Standards
+## 📂 Coding Standards
 
 Please read [our guidelines](GUIDELINES.md) and follow our [coding standards](CODING_STANDARDS.md).
 
-## License
+## 📂 License
 
 By contributing to inGitDB, you agree that your contributions will be licensed under the
 project's [MIT License](../LICENSE).

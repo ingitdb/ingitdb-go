@@ -1,5 +1,5 @@
-# Continuous integration for inGitDB
+# 📘 Continuous integration for inGitDB
 
-## GoReleaser
+## 📂 GoReleaser
 
 The config for Go releaser: [.goreleaser.yaml](../.github/goreleaser.yaml)

@@ -1,4 +1,4 @@
-# Materialized views
+# 📘 Materialized views
 
 Materialized views are used to build generated files based on ingitdb data.
 
@@ -8,7 +8,7 @@ Materialized views are used to build generated files based on ingitdb data.
 - Record level view – always takes a single record as an input and produces a child view.
 - Root level views - can join multiple collections.
 
-## Collection level views
+## 📂 Collection level views
 
 For example you can have `cities` collection and might want to have few materialized views
 for a quick load from a web app. Such as:
@@ -17,7 +17,7 @@ for a quick load from a web app. Such as:
 - Top 100 cities alphabetically (_id and name only_)
 - All city ids like `['London', 'Manchester', ...]`
 
-## Record level views
+## 📂 Record level views
 
 Always takes a single record as an input
 and produces a child view stored under the record.
@@ -26,7 +26,7 @@ Example:
 
 - For each country shows a list of other countries with the same official language.
 
-## Root level views
+## 📂 Root level views
 
 - Top 10 most populous cities in the world and their official language
 - Top 10 French-speaking cities

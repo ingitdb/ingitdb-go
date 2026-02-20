@@ -1,12 +1,12 @@
-# inGitDB Pull
+# 📘 inGitDB Pull
 
 `ingitdb pull` is a single command that performs a complete pull cycle for an inGitDB database.
 
-## Status
+## 📂 Status
 
 Pending (Phase 3).
 
-## What it does
+## 📂 What it does
 
 1. **Pulls latest changes** from the remote via `git pull --rebase` (or `--merge`).
 2. **Auto-resolves generated file conflicts** — materialized views and `README.md` files are regenerated rather than manually merged.
@@ -14,11 +14,11 @@ Pending (Phase 3).
 4. **Rebuilds materialized views and README.md** if the incoming changes affect them.
 5. **Prints a change summary** listing every record added, updated, or deleted by the pull.
 
-## Why
+## 📂 Why
 
 Running `git pull` + `ingitdb resolve` + `ingitdb materialize` manually is repetitive and error-prone. `ingitdb pull` automates the full cycle in one command.
 
-## CLI
+## 📂 CLI
 
 ```
 ingitdb pull [--path=PATH] [--strategy=rebase|merge] [--remote=REMOTE] [--branch=BRANCH]
@@ -33,7 +33,7 @@ ingitdb pull [--path=PATH] [--strategy=rebase|merge] [--remote=REMOTE] [--branch
 
 See [CLI reference](../CLI.md#pull--pull-latest-changes-resolve-conflicts-and-rebuild-views-not-yet-implemented).
 
-## Change summary format
+## 📂 Change summary format
 
 ```
 Pulled 3 commits from origin/main (rebase)
@@ -48,7 +48,7 @@ Pulled 3 commits from origin/main (rebase)
   Records deleted: 0
 ```
 
-## Exit codes
+## 📂 Exit codes
 
 | Code | Meaning |
 |------|---------|
@@ -56,7 +56,7 @@ Pulled 3 commits from origin/main (rebase)
 | `1` | Unresolved conflicts remain after interactive resolution. |
 | `2` | Infrastructure error (git not found, network failure, bad flags). |
 
-## Related
+## 📂 Related
 
 - [Merge Conflict Resolution](merge-conflict-resolution.md) — the resolver used by `pull` for both generated and data files.
 - [Watcher](watcher.md) — for real-time change events without a git pull.

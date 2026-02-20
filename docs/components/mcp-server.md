@@ -1,4 +1,4 @@
-# inGitDB Model Context Protocol Server
+# 📘 inGitDB Model Context Protocol Server
 
 Provides MCP server for AI agents.
 

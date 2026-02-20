@@ -1,4 +1,4 @@
-# Subscribers – webhooks, emails, etc.
+# 📘 Subscribers – webhooks, emails, etc.
 
 Subscribers are built-in configurable event-handlers that send notifications about inGitDB changes.
 

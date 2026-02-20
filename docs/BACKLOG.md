@@ -1,4 +1,4 @@
-# Development Backlog
+# 📘 Development Backlog
 
 The backlog is organized by phase. See [ROADMAP.md](ROADMAP.md) for the big picture.
 
@@ -6,9 +6,9 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
-## Phase 1: Validator + Materialized Views
+## 📂 Phase 1: Validator + Materialized Views
 
-### P1-1: Migrate CLI to subcommand-based interface
+### 🔹 P1-1: Migrate CLI to subcommand-based interface
 
 **What:** Replace the positional argument in `cmd/ingitdb/main.go` with a subcommand dispatcher using `github.com/urfave/cli/v3`. For this phase, implement the `validate` subcommand with a `--path` flag.
 
@@ -30,7 +30,7 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
-### P1-2: Implement data validation
+### 🔹 P1-2: Implement data validation
 
 **What:** After loading collection schemas, walk each collection's `data_dir` and validate every record file against its schema.
 
@@ -56,7 +56,7 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
-### P1-3: Implement materialized views builder
+### 🔹 P1-3: Implement materialized views builder
 
 **What:** After successful validation, read each collection's view definitions (`.ingitdb-view.<name>.yaml`) and generate the corresponding output files under `$views/`.
 
@@ -76,7 +76,7 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
-### P1-4: Implement change validation mode
+### 🔹 P1-4: Implement change validation mode
 
 **What:** Add `--from-commit` and `--to-commit` flags to the `validate` subcommand. When provided, validate only the record files changed between those two commits and rematerialize only the affected views.
 
@@ -95,7 +95,7 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
-### P1-5: Structured error reporting and exit codes
+### 🔹 P1-5: Structured error reporting and exit codes
 
 **What:** Standardize error output format and exit codes across all validation paths.
 
@@ -118,9 +118,9 @@ Tasks within each phase are ordered by dependency — implement them top to bott
 
 ---
 
-## Phase 3: Git Merge Conflict Resolution
+## 📂 Phase 3: Git Merge Conflict Resolution
 
-### P3-1: Implement pull command
+### 🔹 P3-1: Implement pull command
 
 **What:** Add `ingitdb pull` — a single command that pulls the latest git changes, resolves conflicts, rebuilds views, and prints a change summary.
 
@@ -159,9 +159,9 @@ Pulled 3 commits from origin/main (rebase)
 
 ---
 
-## Phase 4: Watcher
+## 📂 Phase 4: Watcher
 
-### P4-1: Implement watch command
+### 🔹 P4-1: Implement watch command
 
 **What:** Implement `ingitdb watch` to monitor an inGitDB directory for file-system changes and stream structured record events to stdout.
 
@@ -195,9 +195,9 @@ Pulled 3 commits from origin/main (rebase)
 
 ---
 
-## Phase 2: Query
+## 📂 Phase 2: Query
 
-### P2-1: Implement query subcommand
+### 🔹 P2-1: Implement query subcommand
 
 **What:** Add a `query` subcommand that reads and returns records from a specified collection.
 

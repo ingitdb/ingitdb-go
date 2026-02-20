@@ -1,10 +1,10 @@
-# inGitDB CLI Roadmap
+# 📘 inGitDB CLI Roadmap
 
-## Vision
+## 📂 Vision
 
 A CLI tool that turns a Git repository into a fully-featured, AI-friendly database: schema-validated, queryable, with precomputed views, event-driven integrations, and native MCP support for AI agents.
 
-## Phases
+## 📂 Phases
 
 | Phase | Feature | Status |
 |---|---|---|
@@ -20,7 +20,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 1: Validator + Materialized Views
+## 📂 Phase 1: Validator + Materialized Views
 
 **Goal:** Reliable, fast schema and data validation with materialized views rebuilt as part of the same pass.
 
@@ -34,7 +34,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 2: Query
+## 📂 Phase 2: Query
 
 **Goal:** Read and filter records from collections via the CLI.
 
@@ -44,7 +44,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 3: Git Merge Conflict Resolution
+## 📂 Phase 3: Git Merge Conflict Resolution
 
 **Goal:** Resolve git merge and rebase conflicts inside an inGitDB database without manual editing of conflict markers.
 
@@ -60,7 +60,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 4: Watcher
+## 📂 Phase 4: Watcher
 
 **Goal:** Real-time visibility into record changes as they happen on the file system.
 
@@ -73,7 +73,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 5: Subscribers
+## 📂 Phase 5: Subscribers
 
 **Goal:** Event-driven notifications when data changes, usable in CI or as standalone hooks.
 
@@ -84,7 +84,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 6: MCP Server
+## 📂 Phase 6: MCP Server
 
 **Goal:** Expose inGitDB to AI agents via the Model Context Protocol (MCP).
 
@@ -95,7 +95,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 7: HTTP API Server
+## 📂 Phase 7: HTTP API Server
 
 **Goal:** REST access to inGitDB data for external tooling and integrations.
 
@@ -106,7 +106,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 8: GraphQL
+## 📂 Phase 8: GraphQL
 
 **Goal:** GraphQL interface auto-generated from collection schemas.
 
@@ -119,7 +119,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## Phase 9: Migration Script Generator
+## 📂 Phase 9: Migration Script Generator
 
 **Goal:** Generate forward and rollback migration scripts to sync a target database with a desired inGitDB version.
 
