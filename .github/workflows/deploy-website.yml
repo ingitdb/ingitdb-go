@@ -11,7 +11,6 @@ jobs:
     env:
       GCLOUD_PROJECT_ID: ingitdb
       FIREBASE_TARGET: ingitdb-com
-      FIREBASE_TOOLS_VERSION: "15.7.0"
 
     permissions:
       contents: "read"
@@ -33,16 +32,20 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Get latest Firebase CLI version
+        id: firebase-version
+        run: echo "version=$(npm show firebase-tools version)" >> $GITHUB_OUTPUT
+
       - name: Cache Firebase CLI
         id: cache-firebase
         uses: actions/cache@v4
         with:
           path: ~/.npm-firebase
-          key: firebase-tools-${{ env.FIREBASE_TOOLS_VERSION }}
+          key: firebase-tools-${{ steps.firebase-version.outputs.version }}
 
       - name: Install Firebase CLI
         if: steps.cache-firebase.outputs.cache-hit != 'true'
-        run: npm install -g --prefix ~/.npm-firebase firebase-tools@${{ env.FIREBASE_TOOLS_VERSION }}
+        run: npm install -g --prefix ~/.npm-firebase firebase-tools@${{ steps.firebase-version.outputs.version }}
 
       - name: Add Firebase CLI to PATH
         run: echo "$HOME/.npm-firebase/bin" >> $GITHUB_PATH
