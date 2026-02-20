@@ -16,7 +16,7 @@ workflow — branching, code review, pull requests — extends naturally to data
 simultaneously a database, a version-control system, an event bus, and a data layer for AI agents,
 all with zero server infrastructure for reads.
 
-## Why inGitDB?
+## 💡 Why inGitDB?
 
 - **Plain files, real Git.** Records are YAML or JSON files you can read in any editor, diff in any
   pull request, and clone with a single `git clone`. No binary blobs, no proprietary format.
@@ -32,7 +32,7 @@ all with zero server infrastructure for reads.
 - **Go library via DALgo.** `pkg/dalgo2ingitdb` implements the [DALgo](https://github.com/dal-go/dalgo)
   `dal.DB` interface, so any Go program can use inGitDB as a standard database abstraction.
 
-## How it works
+## ⚙️ How it works
 
 ```mermaid
 flowchart LR
@@ -48,7 +48,7 @@ The `ingitdb validate` command reads `.ingitdb.yaml`, checks every record agains
 schema, and rebuilds materialized views in the same pass. Validation can be scoped to a commit
 range (`--from-commit` / `--to-commit`) so CI stays fast on large databases.
 
-## Installation
+## ⬇️ Installation
 
 ```shell
 # From source
@@ -59,7 +59,7 @@ brew tap ingitdb/cli
 brew install ingitdb
 ```
 
-## Quick start
+## 🚀 Quick start
 
 ```shell
 # Build the CLI
@@ -121,7 +121,7 @@ ingitdb update record --path=. --id=geo.nations/ie --set='{title: "Ireland, Repu
 ingitdb delete record --path=. --id=geo.nations/ie
 ```
 
-## Accessing GitHub Repositories Directly
+## 🔗 Accessing GitHub Repositories Directly
 
 inGitDB can read and write records in a remote GitHub repository without cloning it. The
 `--github` flag replaces `--path` and points the CLI at a GitHub repository over the REST API.
@@ -177,7 +177,7 @@ languages:
   - required: en
 ```
 
-## Commands
+## 🛠️ Commands
 
 | Command             | Status     | Description                                              |
 |---------------------|:-----------|----------------------------------------------------------|
@@ -221,7 +221,7 @@ Only collections with `record_file.type: "map[string]any"` support CRUD. Collect
 
 See the [CLI reference](docs/CLI.md) for flags and examples.
 
-## Documentation
+## 📚 Documentation
 
 | Document                                                      | Description                                                          |
 |---------------------------------------------------------------|----------------------------------------------------------------------|
@@ -234,7 +234,7 @@ See the [CLI reference](docs/CLI.md) for flags and examples.
 | [Contributing](docs/CONTRIBUTING.md)                          | How to open issues and submit pull requests                          |
 | [Competitors](docs/COMPETITORS.md)                            | Honest feature comparison with related tools                         |
 
-## Get involved
+## 🤝 Get involved
 
 inGitDB is small enough that every contribution makes a visible difference. The best way to start
 is to point the CLI at a directory of YAML files and run `ingitdb validate`, then check the
@@ -248,11 +248,11 @@ To contribute:
 
 Bug reports, documentation improvements, and questions are all welcome.
 
-## Dependencies
+## 📦 Dependencies
 
 - [DALgo](https://github.com/dal-go/dalgo) — Database Abstraction Layer for Go
 
-## License
+## 📄 License
 
 This project is free, open source and licensed under the MIT License. See the [LICENSE](LICENSE)
 file for details.
