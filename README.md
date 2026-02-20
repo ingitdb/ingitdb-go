@@ -140,7 +140,7 @@ ingitdb read record --github=owner/repo@v1.2.0 --id=todo.tags/active
 ingitdb list collections --github=owner/repo
 ```
 
-### Private repositories
+### 🔒 Private repositories
 
 Supply a token via the `GITHUB_TOKEN` environment variable or the `--token` flag. All write
 operations also require a token, even for public repositories.
