@@ -42,7 +42,7 @@ python -m http.server 8000
 npx http-server public -p 8000
 
 # Using Firebase Hosting emulator
-firebase emulators:start --only hosting:ingitdb-com --config ../firebase.json
+firebase emulators:start --only hosting:ingitdb-com --config ../server/firebase.json
 ```
 
 Then open http://localhost:8000 in your browser.
@@ -59,7 +59,7 @@ npm install -g firebase-tools
 firebase login
 
 # Deploy to Firebase Hosting
-firebase deploy --only hosting:ingitdb-com --config ../firebase.json
+firebase deploy --only hosting:ingitdb-com --config ../server/firebase.json
 ```
 
 ## Content

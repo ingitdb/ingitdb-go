@@ -28,7 +28,7 @@ jobs:
           workload_identity_provider: "projects/152447355531/locations/global/workloadIdentityPools/github/providers/ingitdb"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6.2.0
         with:
           node-version: "20"
 
@@ -40,5 +40,5 @@ jobs:
           firebase deploy \
             --project "${{ env.GCLOUD_PROJECT_ID }}" \
             --only "hosting:${{ env.FIREBASE_TARGET }}" \
-            --config firebase.json \
+            --config server/firebase.json \
             --non-interactive

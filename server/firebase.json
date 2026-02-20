@@ -2,7 +2,7 @@
   "hosting": [
     {
       "target": "cloud-run",
-      "public": "server/static",
+      "public": "static",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -22,7 +22,7 @@
     },
     {
       "target": "ingitdb-com",
-      "public": "server/ingitdb.com/public",
+      "public": "ingitdb.com/public",
       "ignore": [
         "firebase.json",
         "**/.*",
