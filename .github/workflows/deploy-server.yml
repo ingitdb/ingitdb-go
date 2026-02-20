@@ -2,11 +2,16 @@ name: Deploy server
 
 on:
   workflow_dispatch: # Allows manual trigger from Actions tab
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+    branches: [main]
 
 jobs:
   deploy:
     name: Deploy to Cloud Run
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     env:
       GCLOUD_PROJECT_ID: ingitdb
