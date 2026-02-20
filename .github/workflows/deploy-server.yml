@@ -89,7 +89,20 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.GCLOUD_REGION }}-docker.pkg.dev
 
+      - name: Check if image already exists
+        id: image-check
+        run: |
+          IMAGE=${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ steps.release.outputs.version }}
+          if gcloud artifacts docker images describe "${IMAGE}" --project=${{ env.GCLOUD_PROJECT_ID }} > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Image ${IMAGE} already exists — skipping build/push/deploy"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Image ${IMAGE} not found — will build and deploy"
+          fi
+
       - name: Build Docker image
+        if: steps.image-check.outputs.exists != 'true'
         run: |
           docker build \
             -f server/Dockerfile \
@@ -98,11 +111,13 @@ jobs:
             .
 
       - name: Push Docker image
+        if: steps.image-check.outputs.exists != 'true'
         run: |
           docker push ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ steps.release.outputs.version }}
           docker push ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:latest
 
       - name: Deploy to Cloud Run
+        if: steps.image-check.outputs.exists != 'true'
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image=${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ steps.release.outputs.version }} \
