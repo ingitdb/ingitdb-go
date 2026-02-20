@@ -1,4 +1,4 @@
-name: Go CI
+name: CI (build, lint, test)
 
 on:
   workflow_dispatch:
