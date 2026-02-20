@@ -48,6 +48,7 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
+            -f server/Dockerfile \
             -t ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             -t ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:latest \
             .
