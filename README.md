@@ -179,7 +179,7 @@ languages:
 ## Commands
 
 | Command                            | Status      | Description                                                              |
-|------------------------------------|-------------|--------------------------------------------------------------------------|
+|------------------------------------|:------------|--------------------------------------------------------------------------|
 | `version`                          | implemented | Print build version, commit hash, and date                               |
 | `validate`                         | implemented | Check every record against its collection schema                         |
 | `read record`                      | implemented | Read a single record by ID (local or GitHub)                             |
