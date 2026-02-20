@@ -86,9 +86,6 @@ jobs:
         with:
           project_id: ${{ env.GCLOUD_PROJECT_ID }}
 
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.GCLOUD_REGION }}-docker.pkg.dev
-
       - name: Check if image already exists
         id: image-check
         run: |
@@ -100,6 +97,10 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "Image ${IMAGE} not found — will build and deploy"
           fi
+
+      - name: Configure Docker for Artifact Registry
+        if: steps.image-check.outputs.exists != 'true'
+        run: gcloud auth configure-docker ${{ env.GCLOUD_REGION }}-docker.pkg.dev
 
       - name: Build Docker image
         if: steps.image-check.outputs.exists != 'true'
