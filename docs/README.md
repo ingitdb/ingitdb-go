@@ -6,7 +6,7 @@ lives in files you can read, edit, and diff with any text editor or git client. 
 provides the history, branching, and merge story for free. If that sounds like the right
 trade-off for your project, read on — and consider contributing.
 
-## Index
+## 📂 Index
 
 ### User docs
 
@@ -31,7 +31,7 @@ trade-off for your project, read on — and consider contributing.
 
 ---
 
-## Documentation Map
+## 🗺️ Documentation Map
 
 A one-line description of each document, grouped by purpose.
 
@@ -65,7 +65,7 @@ A one-line description of each document, grouped by purpose.
 
 ---
 
-## CLI Commands at a Glance
+## ⚡ CLI Commands at a Glance
 
 | Command | Subcommands | Status | Description |
 |---|---|---|---|
@@ -91,7 +91,7 @@ See [CLI.md](CLI.md) for the full flag reference.
 
 ---
 
-## Architecture at a Glance
+## 🏗️ Architecture at a Glance
 
 The diagram below shows the write path: a CLI command loads the database definition, validates
 records, rebuilds materialized views, and leaves every change as a normal git commit.
@@ -114,7 +114,7 @@ in `pkg/dalgo2ingitdb`.
 
 ---
 
-## Get Involved
+## 🤝 Get Involved
 
 The best way to understand inGitDB is to point it at a directory of YAML files and run
 `ingitdb validate`. From there, check the [Roadmap](ROADMAP.md) to see what is being built and
