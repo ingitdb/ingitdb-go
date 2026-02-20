@@ -1,4 +1,4 @@
-name: Deploy server (from release)
+name: Deploy server
 
 on:
   workflow_dispatch: # Allows manual trigger from Actions tab
