@@ -12,6 +12,8 @@ const (
 	defaultCookieSecure = true
 )
 
+var defaultScopes = []string{"repo", "read:org", "read:user"}
+
 // Config configures OAuth and shared auth cookie behavior for HTTP API/MCP servers.
 type Config struct {
 	GitHubClientID     string
@@ -26,6 +28,10 @@ type Config struct {
 
 // LoadConfigFromEnv loads authentication settings from environment variables.
 func LoadConfigFromEnv() Config {
+	scopes := parseScopes(os.Getenv("INGITDB_GITHUB_OAUTH_SCOPES"))
+	if len(scopes) == 0 {
+		scopes = defaultScopes
+	}
 	cfg := Config{
 		GitHubClientID:     strings.TrimSpace(os.Getenv("INGITDB_GITHUB_OAUTH_CLIENT_ID")),
 		GitHubClientSecret: strings.TrimSpace(os.Getenv("INGITDB_GITHUB_OAUTH_CLIENT_SECRET")),
@@ -33,11 +39,8 @@ func LoadConfigFromEnv() Config {
 		CookieDomain:       strings.TrimSpace(os.Getenv("INGITDB_AUTH_COOKIE_DOMAIN")),
 		CookieName:         strings.TrimSpace(os.Getenv("INGITDB_AUTH_COOKIE_NAME")),
 		AuthAPIBaseURL:     strings.TrimSpace(os.Getenv("INGITDB_AUTH_API_BASE_URL")),
-		Scopes: []string{
-			"public_repo",
-			"read:user",
-		},
-		CookieSecure: defaultCookieSecure,
+		Scopes:             scopes,
+		CookieSecure:       defaultCookieSecure,
 	}
 	cookieSecure := strings.TrimSpace(os.Getenv("INGITDB_AUTH_COOKIE_SECURE"))
 	if cookieSecure != "" {
@@ -50,6 +53,25 @@ func LoadConfigFromEnv() Config {
 		cfg.CookieName = defaultCookieName
 	}
 	return cfg
+}
+
+func parseScopes(value string) []string {
+	cleanValue := strings.ReplaceAll(value, ",", " ")
+	parts := strings.Fields(cleanValue)
+	if len(parts) == 0 {
+		return nil
+	}
+	scopes := make([]string, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		scope := strings.TrimSpace(part)
+		if scope == "" || seen[scope] {
+			continue
+		}
+		seen[scope] = true
+		scopes = append(scopes, scope)
+	}
+	return scopes
 }
 
 // ValidateForHTTPMode validates required auth settings before HTTP server startup.

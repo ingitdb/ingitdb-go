@@ -10,6 +10,7 @@ func TestLoadConfigFromEnv_Defaults(t *testing.T) {
 	t.Setenv("INGITDB_AUTH_COOKIE_NAME", "")
 	t.Setenv("INGITDB_AUTH_COOKIE_SECURE", "")
 	t.Setenv("INGITDB_AUTH_API_BASE_URL", "")
+	t.Setenv("INGITDB_GITHUB_OAUTH_SCOPES", "")
 
 	cfg := LoadConfigFromEnv()
 	if cfg.CookieName != defaultCookieName {
@@ -18,7 +19,7 @@ func TestLoadConfigFromEnv_Defaults(t *testing.T) {
 	if !cfg.CookieSecure {
 		t.Fatal("expected cookie secure default true")
 	}
-	if len(cfg.Scopes) != 2 || cfg.Scopes[0] != "public_repo" || cfg.Scopes[1] != "read:user" {
+	if len(cfg.Scopes) != 3 || cfg.Scopes[0] != "repo" || cfg.Scopes[1] != "read:org" || cfg.Scopes[2] != "read:user" {
 		t.Fatalf("unexpected scopes: %#v", cfg.Scopes)
 	}
 }
@@ -29,6 +30,17 @@ func TestLoadConfigFromEnv_ParsesCookieSecure(t *testing.T) {
 	cfg := LoadConfigFromEnv()
 	if cfg.CookieSecure {
 		t.Fatal("expected cookie secure false")
+	}
+}
+
+func TestLoadConfigFromEnv_ParsesCustomScopes(t *testing.T) {
+	t.Setenv("INGITDB_GITHUB_OAUTH_SCOPES", "read:user,repo read:org repo")
+	cfg := LoadConfigFromEnv()
+	if len(cfg.Scopes) != 3 {
+		t.Fatalf("unexpected scopes length: %#v", cfg.Scopes)
+	}
+	if cfg.Scopes[0] != "read:user" || cfg.Scopes[1] != "repo" || cfg.Scopes[2] != "read:org" {
+		t.Fatalf("unexpected scopes: %#v", cfg.Scopes)
 	}
 }
 

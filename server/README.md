@@ -52,6 +52,9 @@ Optional environment variables:
 
 - `INGITDB_AUTH_COOKIE_NAME` (default: `ingitdb_github_token`)
 - `INGITDB_AUTH_COOKIE_SECURE` (default: `true`)
+- `INGITDB_GITHUB_OAUTH_SCOPES` (default: `repo,read:org,read:user`; accepts comma and/or space separated scopes)
+
+> For organization repositories, the OAuth app may still require organization approval (if org third-party app restrictions are enabled).
 
 API-hosted auth endpoints:
 
