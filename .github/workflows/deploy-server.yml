@@ -66,7 +66,7 @@ jobs:
         name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v3
         with:
-          service_account: 'deployer-to-gae@${{ env.GCLOUD_PROJECT_ID }}.iam.gserviceaccount.com'
+          service_account: 'deployer2gcloud@${{ env.GCLOUD_PROJECT_ID }}.iam.gserviceaccount.com'
           workload_identity_provider: 'projects/152447355531/locations/global/workloadIdentityPools/github/providers/ingitdb'
 
       - name: Setup Cloud SDK
