@@ -1,8 +1,8 @@
-# inGitDB server
+# 🚀 inGitDB server
 
 `inGitDB` can be started to serve as an API and/or MCP serve.
 
-## MCP server
+## 🤖 MCP server
 
 To start an MCP server, run:
 
@@ -10,7 +10,7 @@ To start an MCP server, run:
 ingitdb serve --mcp [--mcp-port=8080] [--mcp-domains=mcp.ingitdb.com,localhost]
 ```
 
-## HTTP(s) server
+## 🌐 HTTP(s) server
 
 To start an HTTP server, run:
 
@@ -22,18 +22,18 @@ ingitdb serve --http [--api-port=8080] [--api-domains=api.ingitdb.com,localhost]
 - `--api-domain` – _optional_ paramer for domain names to be used for hosting API,
   if not defaults to `"localhost,api.ingitdb.com"`
 
-## Enabling HTTPS
+## 🌐 Enabling HTTPS
 
 **TODO**: _Needs instructions on how to enable HTTPS connections (_and probably implementation_)._
 
-## Public inGitDB servers
+## 🚀 Public inGitDB servers
 
 - [**api**.ingitdb.com](https://api.ingitdb.com) –
   query and modify inGitDBs in public and private GitHub repositories using REST API.
 - [**mcp**.ingitdb.com](https://mcp.ingitdb.com) –
   grant AI agents access to inGitDBs in public and private GitHub repositories. 
 
-## GitHub OAuth authentication
+## 🔒 GitHub OAuth authentication
 
 HTTP API and MCP HTTP endpoints now require a valid GitHub token (from `Authorization: Bearer ...` or shared auth cookie).
 
