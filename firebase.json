@@ -1,0 +1,62 @@
+{
+  "hosting": [
+    {
+      "target": "cloud-run",
+      "public": "server/static",
+      "ignore": [
+        "firebase.json",
+        "deploy.sh",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": {
+            "serviceId": "ingitdb-server",
+            "region": "europe-west3"
+          }
+        }
+      ],
+      "cleanUrls": true,
+      "trailingSlashBehavior": "REMOVE"
+    },
+    {
+      "target": "ingitdb-com",
+      "public": "ingitdb.com/public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(jpg|jpeg|gif|png|svg|webp|ico)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "max-age=31536000"
+            }
+          ]
+        },
+        {
+          "source": "**/*.@(css|js)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "max-age=31536000"
+            }
+          ]
+        }
+      ],
+      "cleanUrls": true,
+      "trailingSlash": false
+    }
+  ]
+}

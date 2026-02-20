@@ -7,9 +7,11 @@
       "hosting": {
         "cloud-run": [
           "ingitdb-cloud-run"
+        ],
+        "ingitdb-com": [
+          "ingitdb-com"
         ]
       }
     }
-  },
-  "etags": {}
+  }
 }

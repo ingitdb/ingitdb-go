@@ -1,0 +1,44 @@
+name: Deploy website to Firebase
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy website
+    runs-on: ubuntu-latest
+
+    env:
+      GCLOUD_PROJECT_ID: ingitdb
+      FIREBASE_TARGET: ingitdb-com
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - id: auth
+        name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          service_account: "deployer-to-gae@${{ env.GCLOUD_PROJECT_ID }}.iam.gserviceaccount.com"
+          workload_identity_provider: "projects/152447355531/locations/global/workloadIdentityPools/github/providers/ingitdb"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Deploy website hosting target
+        run: |
+          firebase deploy \
+            --project "${{ env.GCLOUD_PROJECT_ID }}" \
+            --only "hosting:${{ env.FIREBASE_TARGET }}" \
+            --config firebase.json \
+            --non-interactive
