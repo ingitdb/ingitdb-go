@@ -12,12 +12,44 @@ jobs:
       GCLOUD_PROJECT_ID: ingitdb
       GCLOUD_REGION: europe-west3
       SERVICE_NAME: ingitdb-server
+      INGITDB_GITHUB_OAUTH_CLIENT_ID: ${{ vars.INGITDB_GITHUB_OAUTH_CLIENT_ID }}
+      INGITDB_GITHUB_OAUTH_CALLBACK_URL: ${{ vars.INGITDB_GITHUB_OAUTH_CALLBACK_URL }}
+      INGITDB_AUTH_COOKIE_DOMAIN: ${{ vars.INGITDB_AUTH_COOKIE_DOMAIN }}
+      INGITDB_AUTH_API_BASE_URL: ${{ vars.INGITDB_AUTH_API_BASE_URL }}
+      INGITDB_AUTH_COOKIE_NAME: ${{ vars.INGITDB_AUTH_COOKIE_NAME }}
+      INGITDB_AUTH_COOKIE_SECURE: ${{ vars.INGITDB_AUTH_COOKIE_SECURE }}
+      GCP_OAUTH_CLIENT_SECRET_NAME: ${{ vars.GCP_OAUTH_CLIENT_SECRET_NAME }}
 
     permissions:
       contents: 'read'
       id-token: 'write'
 
     steps:
+      - name: Validate required env vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_vars=(
+            GCLOUD_PROJECT_ID
+            GCLOUD_REGION
+            SERVICE_NAME
+            INGITDB_GITHUB_OAUTH_CLIENT_ID
+            INGITDB_GITHUB_OAUTH_CALLBACK_URL
+            INGITDB_AUTH_COOKIE_DOMAIN
+            INGITDB_AUTH_API_BASE_URL
+            GCP_OAUTH_CLIENT_SECRET_NAME
+          )
+          missing=()
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name:-}" ]]; then
+              missing+=("$var_name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing required env vars: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -70,6 +102,8 @@ jobs:
             --memory=512Mi \
             --cpu=1 \
             --timeout=300 \
+            --set-env-vars=INGITDB_GITHUB_OAUTH_CLIENT_ID=${{ env.INGITDB_GITHUB_OAUTH_CLIENT_ID }},INGITDB_GITHUB_OAUTH_CALLBACK_URL=${{ env.INGITDB_GITHUB_OAUTH_CALLBACK_URL }},INGITDB_AUTH_COOKIE_DOMAIN=${{ env.INGITDB_AUTH_COOKIE_DOMAIN }},INGITDB_AUTH_API_BASE_URL=${{ env.INGITDB_AUTH_API_BASE_URL }},INGITDB_AUTH_COOKIE_NAME=${{ env.INGITDB_AUTH_COOKIE_NAME }},INGITDB_AUTH_COOKIE_SECURE=${{ env.INGITDB_AUTH_COOKIE_SECURE }} \
+            --set-secrets=INGITDB_GITHUB_OAUTH_CLIENT_SECRET=${{ env.GCP_OAUTH_CLIENT_SECRET_NAME }}:latest \
             --project=${{ env.GCLOUD_PROJECT_ID }}
 
       - name: Show service URL

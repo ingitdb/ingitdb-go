@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/ingitdb/ingitdb-cli/server/api"
 	"github.com/ingitdb/ingitdb-cli/server/auth"
@@ -15,8 +16,17 @@ import (
 // apiDomains specifies which hosts route to the API handler.
 // mcpDomains specifies which hosts route to the MCP handler.
 func newHTTPHandler(apiDomains, mcpDomains []string) http.Handler {
-	apiHandler := api.NewHandler()
-	mcpHandler := mcp.NewHandler()
+	authConfig := auth.LoadConfigFromEnv()
+	requireAuth := requiresAuth(apiDomains)
+	var apiHandler http.Handler
+	var mcpHandler http.Handler
+	if requireAuth {
+		apiHandler = api.NewHandler()
+		mcpHandler = mcp.NewHandler()
+	} else {
+		apiHandler = api.NewHandlerWithAuth(authConfig, false)
+		mcpHandler = mcp.NewHandlerWithAuth(authConfig, false)
+	}
 
 	apiDomainMap := make(map[string]bool)
 	for _, d := range apiDomains {
@@ -48,14 +58,26 @@ func newHTTPHandler(apiDomains, mcpDomains []string) http.Handler {
 	})
 }
 
+func requiresAuth(apiDomains []string) bool {
+	if len(apiDomains) == 0 {
+		return false
+	}
+	if len(apiDomains) == 1 && strings.EqualFold(strings.TrimSpace(apiDomains[0]), "localhost") {
+		return false
+	}
+	return true
+}
+
 // serveHTTP starts the HTTP API server on port and blocks until ctx is done.
 // apiDomains specifies which hosts route to the API handler.
 // mcpDomains specifies which hosts route to the MCP handler.
 func serveHTTP(ctx context.Context, port string, apiDomains, mcpDomains []string, logf func(...any)) error {
 	_ = logf
-	authConfig := auth.LoadConfigFromEnv()
-	if err := authConfig.ValidateForHTTPMode(); err != nil {
-		return fmt.Errorf("invalid auth config: %w", err)
+	if requiresAuth(apiDomains) {
+		authConfig := auth.LoadConfigFromEnv()
+		if err := authConfig.ValidateForHTTPMode(); err != nil {
+			return fmt.Errorf("invalid auth config: %w", err)
+		}
 	}
 	addr := ":" + port
 	srv := &http.Server{Addr: addr, Handler: newHTTPHandler(apiDomains, mcpDomains)}

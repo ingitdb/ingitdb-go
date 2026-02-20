@@ -45,6 +45,9 @@ Required environment variables for `ingitdb serve --http`:
 - `INGITDB_AUTH_COOKIE_DOMAIN`
 - `INGITDB_AUTH_API_BASE_URL`
 
+> These are required only when `--api-domains` is set to a non-`localhost` value.
+> Localhost mode (`--api-domains=localhost` or omitted `--api-domains`) allows unauthenticated API/MCP requests.
+
 Optional environment variables:
 
 - `INGITDB_AUTH_COOKIE_NAME` (default: `ingitdb_github_token`)

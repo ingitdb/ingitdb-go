@@ -44,6 +44,11 @@ type Handler struct {
 // NewHandler creates a Handler with the default (production) GitHub implementations.
 func NewHandler() *Handler {
 	cfg := auth.LoadConfigFromEnv()
+	return NewHandlerWithAuth(cfg, true)
+}
+
+// NewHandlerWithAuth creates a handler with provided auth configuration and mode.
+func NewHandlerWithAuth(cfg auth.Config, requireAuth bool) *Handler {
 	h := &Handler{
 		newGitHubFileReader: dalgo2ghingitdb.NewGitHubFileReader,
 		newGitHubDBWithDef:  dalgo2ghingitdb.NewGitHubDBWithDef,
@@ -54,7 +59,7 @@ func NewHandler() *Handler {
 		validateToken: func(ctx context.Context, token string) error {
 			return auth.ValidateGitHubToken(ctx, token, nil)
 		},
-		requireAuth: true,
+		requireAuth: requireAuth,
 	}
 	h.router = h.buildRouter()
 	return h
@@ -82,6 +87,7 @@ const oauthStateCookieName = "ingitdb_oauth_state"
 
 // serveIndex serves the API index.html file.
 func (h *Handler) serveIndex(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	_ = r
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(indexHTML)
