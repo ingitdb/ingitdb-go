@@ -126,7 +126,7 @@ ingitdb delete record --path=. --id=geo.nations/ie
 inGitDB can read and write records in a remote GitHub repository without cloning it. The
 `--github` flag replaces `--path` and points the CLI at a GitHub repository over the REST API.
 
-### Public repositories (no token required)
+### 🌐 Public repositories (no token required)
 
 ```shell
 # Read a record
