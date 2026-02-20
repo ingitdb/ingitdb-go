@@ -5,9 +5,9 @@ Thank you for your interest in contributing to inGitDB! We welcome contributions
 This document provides guidelines for contributing to the project. Following these guidelines helps ensure a smooth
 process for everyone involved.
 
-## 📂 How to Contribute
+## 🙌 How to Contribute
 
-### 🔹 Reporting Bugs
+### 🐛 Reporting Bugs
 
 If you find a bug, please check the [existing issues](https://github.com/ingitdb/ingitdb-cli/issues) to see if it has
 already been reported. If not, please open a new issue and include:
@@ -18,7 +18,7 @@ already been reported. If not, please open a new issue and include:
 - Your operating system and terminal emulator.
 - Any relevant logs or screenshots.
 
-### 🔹 Suggesting Enhancements
+### 💡 Suggesting Enhancements
 
 We're always looking for ways to improve ingitdb! If you have an idea for a new feature or an enhancement:
 
@@ -26,7 +26,7 @@ We're always looking for ways to improve ingitdb! If you have an idea for a new 
    suggested.
 2. If not, open a new issue and describe the proposed change, why it would be useful, and how you imagine it working.
 
-### 🔹 Pull Requests
+### 🔀 Pull Requests
 
 We welcome pull requests for bug fixes, new features, and improvements to documentation.
 
