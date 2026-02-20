@@ -1,4 +1,3 @@
-# Copyright 2026 Sneat Co
 FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
