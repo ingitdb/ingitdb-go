@@ -8,7 +8,8 @@
 
 <img src="https://github.com/ingitdb/.github/raw/main/inGitDB-full4.png" alt="inGitDB Logo" />
 
-[**in**Git**DB**](https://ingitdb.com) is a **developer-grade, schema-validated, AI-native database whose storage engine is a
+[**in**Git**DB**](https://ingitdb.com) is a **developer-grade, schema-validated, AI-native database whose storage engine
+is a
 Git
 repository**. Every record is a plain YAML or JSON file, every change is a commit, and every team
 workflow — branching, code review, pull requests — extends naturally to data. This makes inGitDB
@@ -178,27 +179,27 @@ languages:
 
 ## Commands
 
-| Command                            | Status             | Description                                                              |
-|------------------------------------|:-------------------|--------------------------------------------------------------------------|
-| `version`                          | ✅ implemented     | Print build version, commit hash, and date                               |
-| `validate`                         | ✅ implemented     | Check every record against its collection schema                         |
-| `read record`                      | ✅ implemented     | Read a single record by ID (local or GitHub)                             |
-| `create record`                    | ✅ implemented     | Create a new record (local or GitHub; `map[string]any` collections only) |
-| `update record`                    | ✅ implemented     | Update fields of an existing record (local or GitHub)                    |
-| `delete record`                    | ✅ implemented     | Delete a single record by ID (local or GitHub)                           |
-| `list collections`                 | ✅ implemented     | List collection IDs (local or GitHub)                                    |
-| `list view\|subscribers`           | 🟡 planned         | List view or subscriber definitions                                      |
-| `find`                             | 🟡 planned         | Search records by substring, regex, or exact value                       |
-| `delete collection\|view\|records` | 🟡 planned         | Remove a collection, view definition, or individual records              |
-| `truncate`                         | 🟡 planned         | Remove all records from a collection, keeping its schema                 |
-| `query`                            | 🟡 planned         | Query and format records from a collection                               |
-| `materialize`                      | 🟡 planned         | Build materialized views into `$views/`                                  |
-| `pull`                             | 🟡 planned         | Pull remote changes and rebuild views                                    |
-| `watch`                            | 🟡 planned         | Stream record change events to stdout                                    |
-| `serve`                            | 🟡 planned         | Start MCP, HTTP API, or file-watcher server                              |
-| `resolve`                          | 🟡 planned         | Interactive TUI for resolving data-file merge conflicts                  |
-| `setup`                            | 🟡 planned         | Initialise a new database directory                                      |
-| `migrate`                          | 🟡 planned         | Migrate records between schema versions                                  |
+| Command                            | Status     | Description                                                              |
+|------------------------------------|:-----------|--------------------------------------------------------------------------|
+| `version`                          | ✅ done     | Print build version, commit hash, and date                               |
+| `validate`                         | ✅ done     | Check every record against its collection schema                         |
+| `read record`                      | ✅ done     | Read a single record by ID (local or GitHub)                             |
+| `create record`                    | ✅ done     | Create a new record (local or GitHub; `map[string]any` collections only) |
+| `update record`                    | ✅ done     | Update fields of an existing record (local or GitHub)                    |
+| `delete record`                    | ✅ done     | Delete a single record by ID (local or GitHub)                           |
+| `list collections`                 | ✅ done     | List collection IDs (local or GitHub)                                    |
+| `list view\|subscribers`           | 🟡 planned | List view or subscriber definitions                                      |
+| `find`                             | 🟡 planned | Search records by substring, regex, or exact value                       |
+| `delete collection\|view\|records` | 🟡 planned | Remove a collection, view definition, or individual records              |
+| `truncate`                         | 🟡 planned | Remove all records from a collection, keeping its schema                 |
+| `query`                            | 🟡 planned | Query and format records from a collection                               |
+| `materialize`                      | 🟡 planned | Build materialized views into `$views/`                                  |
+| `pull`                             | 🟡 planned | Pull remote changes and rebuild views                                    |
+| `watch`                            | 🟡 planned | Stream record change events to stdout                                    |
+| `serve`                            | 🟡 planned | Start MCP, HTTP API, or file-watcher server                              |
+| `resolve`                          | 🟡 planned | Interactive TUI for resolving data-file merge conflicts                  |
+| `setup`                            | 🟡 planned | Initialise a new database directory                                      |
+| `migrate`                          | 🟡 planned | Migrate records between schema versions                                  |
 
 ### --id format
 
