@@ -335,6 +335,6 @@ Supply a token to raise the limit from 60 to 5,000 requests per hour.
 ## See also
 
 - [CLI reference](../CLI.md) — full flag reference for all commands
-- [DALGO2GHINGITDB adapter](../../DALGO2GHINGITDB.md) — Go package documentation for the
+- [DALGO2GHINGITDB adapter](../DALGO2GHINGITDB.md) — Go package documentation for the
   GitHub DALgo adapter used under the hood
 - [Transactions](transactions.md) — local read/write transaction model

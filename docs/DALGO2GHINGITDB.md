@@ -276,7 +276,7 @@ go test -timeout=10s ./pkg/dalgo2ghingitdb/...
 
 ## See also
 
-- [GitHub Direct Access](docs/features/github-direct-access.md) — CLI-level documentation with
+- [GitHub Direct Access](features/github-direct-access.md) — CLI-level documentation with
   command examples, auth setup, rate limits, and limitations
-- [Transactions](docs/features/transactions.md) — local read/write transaction model
+- [Transactions](features/transactions.md) — local read/write transaction model
 - [DALgo](https://github.com/dal-go/dalgo) — the database abstraction layer
