@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "ingitdb"
+  },
+  "targets": {
+    "cloud-run": {
+      "hosting": {
+        "cloud-run": "ingitdb-cloud-run"
+      }
+    }
+  }
+}

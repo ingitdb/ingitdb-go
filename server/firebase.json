@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "public": "static",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "ingitdb-server",
+          "region": "europe-west3"
+        }
+      }
+    ],
+    "cleanUrls": true,
+    "trailingSlashBehavior": "REMOVE"
+  }
+}
