@@ -22,7 +22,7 @@
     },
     {
       "target": "ingitdb-com",
-      "public": "ingitdb.com/public",
+      "public": "server/ingitdb.com/public",
       "ignore": [
         "firebase.json",
         "**/.*",

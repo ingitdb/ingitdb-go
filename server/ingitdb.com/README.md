@@ -1,6 +1,7 @@
 # ingitdb.com
 
-Static promotional website for [inGitDB](https://github.com/ingitdb/ingitdb-cli) - A developer-grade, schema-validated, AI-native database whose storage engine is a Git repository.
+Static promotional website for [inGitDB](https://github.com/ingitdb/ingitdb-cli) - A developer-grade, schema-validated,
+AI-native database whose storage engine is a Git repository.
 
 ## Features
 
@@ -64,9 +65,6 @@ firebase deploy --only hosting:ingitdb-com --config ../firebase.json
 ## Content
 
 The website content is extracted from the [ingitdb-cli repository](https://github.com/ingitdb/ingitdb-cli):
+
 - Main README for landing page content
 - Documentation from the docs/ directory
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.

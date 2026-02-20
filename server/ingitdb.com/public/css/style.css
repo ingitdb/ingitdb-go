@@ -60,7 +60,6 @@ body {
 .header {
     position: sticky;
     top: 0;
-    background-color: var(--bg-primary);
     border-bottom: 1px solid var(--border-color);
     padding: 1rem 0;
     z-index: 100;
