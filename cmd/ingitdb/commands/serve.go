@@ -34,9 +34,17 @@ func Serve(
 				Usage: "enable HTTP API server",
 			},
 			&cli.StringFlag{
-				Name:  "api-port",
+				Name:  "http-port",
 				Value: "8080",
-				Usage: "port for HTTP API server",
+				Usage: "port for HTTP server",
+			},
+			&cli.StringSliceFlag{
+				Name:  "api-domains",
+				Usage: "domains that route to the API handler",
+			},
+			&cli.StringSliceFlag{
+				Name:  "mcp-domains",
+				Usage: "domains that route to the MCP handler",
 			},
 			&cli.BoolFlag{
 				Name:  "watcher",
@@ -52,8 +60,10 @@ func Serve(
 				return serveMCP(ctx, dirPath, readDefinition, newDB, logf)
 			}
 			if cmd.Bool("http") {
-				port := cmd.String("api-port")
-				return serveHTTP(ctx, port, logf)
+				port := cmd.String("http-port")
+				apiDomains := cmd.StringSlice("api-domains")
+				mcpDomains := cmd.StringSlice("mcp-domains")
+				return serveHTTP(ctx, port, apiDomains, mcpDomains, logf)
 			}
 			return cli.Exit("no server mode specified; use --mcp, --http, or --watcher", 1)
 		},

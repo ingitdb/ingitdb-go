@@ -8,7 +8,7 @@ import (
 
 func TestNewHTTPHandler_DefaultHost_Returns404(t *testing.T) {
 	t.Parallel()
-	handler := newHTTPHandler()
+	handler := newHTTPHandler([]string{"api.ingitdb.com"}, []string{"mcp.ingitdb.com"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "www.example.com"
 	w := httptest.NewRecorder()
@@ -21,7 +21,7 @@ func TestNewHTTPHandler_DefaultHost_Returns404(t *testing.T) {
 
 func TestNewHTTPHandler_APIHost_RoutesAPI(t *testing.T) {
 	t.Parallel()
-	handler := newHTTPHandler()
+	handler := newHTTPHandler([]string{"api.ingitdb.com"}, []string{"mcp.ingitdb.com"})
 	// An invalid request to a valid API path without required params should
 	// return 400 (Bad Request), not 404, confirming routing works.
 	req := httptest.NewRequest(http.MethodGet, "/ingitdb/v0/collections", nil)
@@ -35,7 +35,7 @@ func TestNewHTTPHandler_APIHost_RoutesAPI(t *testing.T) {
 
 func TestNewHTTPHandler_MCPHost_RoutesMCP(t *testing.T) {
 	t.Parallel()
-	handler := newHTTPHandler()
+	handler := newHTTPHandler([]string{"api.ingitdb.com"}, []string{"mcp.ingitdb.com"})
 	// A GET to /mcp should return 405 Method Not Allowed (httprouter only allows
 	// POST for /mcp), confirming routing reaches the MCP handler.
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
@@ -49,7 +49,7 @@ func TestNewHTTPHandler_MCPHost_RoutesMCP(t *testing.T) {
 
 func TestNewHTTPHandler_APIHostWithPort(t *testing.T) {
 	t.Parallel()
-	handler := newHTTPHandler()
+	handler := newHTTPHandler([]string{"api.ingitdb.com"}, []string{"mcp.ingitdb.com"})
 	req := httptest.NewRequest(http.MethodGet, "/ingitdb/v0/collections", nil)
 	req.Host = "api.ingitdb.com:443"
 	w := httptest.NewRecorder()

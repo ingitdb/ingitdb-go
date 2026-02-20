@@ -6,14 +6,8 @@ WORKDIR /app
 # Copy pre-built binary from GitHub Actions
 COPY ingitdb .
 
-# Copy static files
-COPY server/static ./static
-
-# Set environment variable for port
-ENV PORT=8080
-
 # Expose the port
 EXPOSE 8080
 
-# Run the application
-CMD ["./ingitdb"]
+# Run the HTTP server with API and MCP handlers
+CMD ["./ingitdb", "serve", "--http", "--http-port=8080", "--api-domains=api.ingitdb.com", "--mcp-domains=mcp.ingitdb.com"]
