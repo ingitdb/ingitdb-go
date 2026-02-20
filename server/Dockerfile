@@ -4,10 +4,10 @@ FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 
 # Copy pre-built binary from GitHub Actions
-COPY ingitdb-gae .
+COPY ingitdb .
 
 # Copy static files
-COPY static ./static
+COPY server/static ./static
 
 # Set environment variable for port
 ENV PORT=8080
@@ -16,4 +16,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Run the application
-CMD ["./ingitdb-gae"]
+CMD ["./ingitdb"]
