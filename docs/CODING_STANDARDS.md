@@ -1,13 +1,13 @@
 # 📏 inGitDB Coding Standards
 
-## 📂 Generic and common sense
+## 🧭 Generic and common sense
 
 - Follow standard Go idioms and formatting (`go fmt`).
 - Ensure that tests cover new code for at least 90% of lines.
 - Keep commit focused on a single change.
 - If possible keep pull requests focused on a single change.
 
-## 📂 Code Style
+## 🧑‍💻 Code Style
 
 - Strictly follow standard Go idioms and formatting (`go fmt`).
 - always check or explicitly ignore returned errors
@@ -17,11 +17,11 @@
   `fmt.Println` or `fmt.Printf` to avoid interfering with the TUI output on `stdout`.
 - Prefer explicit error handling and avoid `panic` in production code.
 
-## 📂 Readability / Debuggability rules
+## 🔍 Readability / Debuggability rules
 
 - No nested calls: don’t write `f2(f1())`; assign the intermediate result in a variable first.
 
-## 📂 Standard for commit messages:
+## 📝 Standard for commit messages
 
 All commits MUST follow the Conventional Commits specification.
 
@@ -35,12 +35,12 @@ All commits MUST follow the Conventional Commits specification.
 - Commits that introduce breaking changes MUST include ! after the type or scope
 
 
-## 📂 Testability
+## 🧪 Testability
 
 - Code should avoid the usage of package level variables
     - Dependencies should be passed to type or a func
 
-## 📂 Tests
+## ✅ Tests
 
 - We aim for 100% test coverage.
 - Call `t.Parallel()` as the first statement of every top-level test.
@@ -51,7 +51,7 @@ All commits MUST follow the Conventional Commits specification.
     - The project uses the standard `testing` package.
 
 
-### 🔁 Unused arguments – explicitly mark function parameters as intentionally unused
+### ⚠️ Unused arguments – explicitly mark function parameters as intentionally unused
 
 - Assigns the parameters to the blank identifier(s) `_`
     - Prevents the Go compiler from complaining about unused variables
