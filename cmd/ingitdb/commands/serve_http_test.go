@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -22,14 +24,13 @@ func TestNewHTTPHandler_DefaultHost_RoutesAPI(t *testing.T) {
 func TestNewHTTPHandler_APIHost_RoutesAPI(t *testing.T) {
 	t.Parallel()
 	handler := newHTTPHandler([]string{"api.ingitdb.com"}, []string{"mcp.ingitdb.com"})
-	// An invalid request to a valid API path without required params should
-	// return 400 (Bad Request), not 404, confirming routing works.
+	// API paths now require auth, so requests without token should return 401.
 	req := httptest.NewRequest(http.MethodGet, "/ingitdb/v0/collections", nil)
 	req.Host = "api.ingitdb.com"
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 from API handler, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 from API handler, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -54,8 +55,26 @@ func TestNewHTTPHandler_APIHostWithPort(t *testing.T) {
 	req.Host = "api.ingitdb.com:443"
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	// The port should be stripped and routed to API (returning 400 for missing db param).
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 from API handler (host with port), got %d: %s", w.Code, w.Body.String())
+	// The port should be stripped and routed to API, then auth check should return 401.
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 from API handler (host with port), got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServeHTTP_RequiresAuthConfig(t *testing.T) {
+	t.Setenv("INGITDB_GITHUB_OAUTH_CLIENT_ID", "")
+	t.Setenv("INGITDB_GITHUB_OAUTH_CLIENT_SECRET", "")
+	t.Setenv("INGITDB_GITHUB_OAUTH_CALLBACK_URL", "")
+	t.Setenv("INGITDB_AUTH_COOKIE_DOMAIN", "")
+	t.Setenv("INGITDB_AUTH_API_BASE_URL", "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := serveHTTP(ctx, "0", []string{"api.ingitdb.com"}, []string{"mcp.ingitdb.com"}, func(...any) {})
+	if err == nil {
+		t.Fatal("expected error for missing auth config")
+	}
+	if !strings.Contains(err.Error(), "invalid auth config") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

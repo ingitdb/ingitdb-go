@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/ingitdb/ingitdb-cli/server/api"
+	"github.com/ingitdb/ingitdb-cli/server/auth"
 	"github.com/ingitdb/ingitdb-cli/server/mcp"
 )
 
@@ -52,6 +53,10 @@ func newHTTPHandler(apiDomains, mcpDomains []string) http.Handler {
 // mcpDomains specifies which hosts route to the MCP handler.
 func serveHTTP(ctx context.Context, port string, apiDomains, mcpDomains []string, logf func(...any)) error {
 	_ = logf
+	authConfig := auth.LoadConfigFromEnv()
+	if err := authConfig.ValidateForHTTPMode(); err != nil {
+		return fmt.Errorf("invalid auth config: %w", err)
+	}
 	addr := ":" + port
 	srv := &http.Server{Addr: addr, Handler: newHTTPHandler(apiDomains, mcpDomains)}
 	errCh := make(chan error, 1)

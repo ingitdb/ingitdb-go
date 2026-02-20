@@ -26,6 +26,7 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
+	"github.com/ingitdb/ingitdb-cli/server/auth"
 )
 
 //go:embed index.html
@@ -35,14 +36,23 @@ var indexHTML []byte
 type Handler struct {
 	newGitHubFileReader func(cfg dalgo2ghingitdb.Config) (dalgo2ghingitdb.FileReader, error)
 	newGitHubDBWithDef  func(cfg dalgo2ghingitdb.Config, def *ingitdb.Definition) (dal.DB, error)
+	authConfig          auth.Config
+	validateToken       func(ctx context.Context, token string) error
+	requireAuth         bool
 	router              *httprouter.Router
 }
 
 // NewHandler creates a Handler with the default (production) GitHub implementations.
 func NewHandler() *Handler {
+	cfg := auth.LoadConfigFromEnv()
 	h := &Handler{
 		newGitHubFileReader: dalgo2ghingitdb.NewGitHubFileReader,
 		newGitHubDBWithDef:  dalgo2ghingitdb.NewGitHubDBWithDef,
+		authConfig:          cfg,
+		validateToken: func(ctx context.Context, token string) error {
+			return auth.ValidateGitHubToken(ctx, token, nil)
+		},
+		requireAuth: true,
 	}
 	h.router = h.buildRouter()
 	return h
@@ -55,6 +65,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) buildRouter() *httprouter.Router {
 	r := httprouter.New()
 	r.GET("/", h.serveIndex)
+	r.GET("/auth/github/login", h.redirectToAPILogin)
 	r.POST("/mcp", h.handleMCP)
 	return r
 }
@@ -64,6 +75,11 @@ func (h *Handler) serveIndex(w http.ResponseWriter, r *http.Request, _ httproute
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(indexHTML)
+}
+
+func (h *Handler) redirectToAPILogin(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	loginURL := strings.TrimRight(h.authConfig.AuthAPIBaseURL, "/") + "/auth/github/login"
+	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
 // singleRequestTransport is a synchronous, in-memory MCP transport used for
@@ -385,6 +401,9 @@ func (h *Handler) registerMCPTools(server *mcp_golang.Server, token string) erro
 
 // handleMCP processes a single MCP JSON-RPC request over HTTP POST /mcp.
 func (h *Handler) handleMCP(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	if !h.authorize(w, r) {
+		return
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		http.Error(w, "failed to read request body", http.StatusBadRequest)
@@ -425,11 +444,23 @@ func (h *Handler) handleMCP(w http.ResponseWriter, r *http.Request, _ httprouter
 	}
 }
 
+func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) bool {
+	if !h.requireAuth {
+		return true
+	}
+	token := auth.ResolveTokenFromRequest(r, h.authConfig.CookieName)
+	if token == "" {
+		http.Error(w, "missing github token", http.StatusUnauthorized)
+		return false
+	}
+	if err := h.validateToken(r.Context(), token); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return false
+	}
+	return true
+}
+
 // githubToken extracts a bearer token from the Authorization header.
 func githubToken(r *http.Request) string {
-	auth := r.Header.Get("Authorization")
-	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
-		return strings.TrimSpace(after)
-	}
-	return ""
+	return auth.ResolveTokenFromRequest(r, auth.LoadConfigFromEnv().CookieName)
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/server/auth"
 )
 
 // --- fakes (shared with test) ---
@@ -169,6 +170,15 @@ func newTestHandler() (*Handler, *fakeStore) {
 		newGitHubDBWithDef: func(cfg dalgo2ghingitdb.Config, def *ingitdb.Definition) (dal.DB, error) {
 			return &fakeDB{s: s}, nil
 		},
+		authConfig: auth.Config{
+			AuthAPIBaseURL: "https://api.ingitdb.com",
+			CookieName:     "ingitdb_github_token",
+		},
+		validateToken: func(ctx context.Context, token string) error {
+			_, _ = ctx, token
+			return nil
+		},
+		requireAuth: false,
 	}
 	h.router = h.buildRouter()
 	return h, s
@@ -388,6 +398,33 @@ func TestHandleMCP_GithubToken(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer ghtoken")
 	if tok := githubToken(req); tok != "ghtoken" {
 		t.Errorf("expected ghtoken, got %q", tok)
+	}
+}
+
+func TestHandleMCP_RequiresAuth(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	h.requireAuth = true
+	body := buildMCPRequest(1, "tools/list", map[string]any{})
+	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestMCPAuthRedirectToAPI(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/login", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", w.Code)
+	}
+	if got := w.Header().Get("Location"); got != "https://api.ingitdb.com/auth/github/login" {
+		t.Fatalf("unexpected redirect location: %s", got)
 	}
 }
 

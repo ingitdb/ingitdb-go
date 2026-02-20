@@ -15,6 +15,7 @@ import (
 
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ghingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
+	"github.com/ingitdb/ingitdb-cli/server/auth"
 )
 
 // --- fakes ---
@@ -175,6 +176,25 @@ func newTestHandler() (*Handler, *fakeStore) {
 		newGitHubDBWithDef: func(cfg dalgo2ghingitdb.Config, def *ingitdb.Definition) (dal.DB, error) {
 			return &fakeDB{s: s}, nil
 		},
+		authConfig: auth.Config{
+			GitHubClientID:     "client-id",
+			GitHubClientSecret: "client-secret",
+			CallbackURL:        "https://api.ingitdb.com/auth/github/callback",
+			Scopes:             []string{"public_repo", "read:user"},
+			CookieDomain:       ".ingitdb.com",
+			CookieName:         "ingitdb_github_token",
+			CookieSecure:       true,
+			AuthAPIBaseURL:     "https://api.ingitdb.com",
+		},
+		exchangeCodeForToken: func(ctx context.Context, code string) (string, error) {
+			_, _ = ctx, code
+			return "oauth-token", nil
+		},
+		validateToken: func(ctx context.Context, token string) error {
+			_, _ = ctx, token
+			return nil
+		},
+		requireAuth: false,
 	}
 	h.router = h.buildRouter()
 	return h, s
@@ -380,6 +400,64 @@ func TestGithubToken(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer mytoken")
 	if tok := githubToken(req); tok != "mytoken" {
 		t.Errorf("expected mytoken, got %q", tok)
+	}
+}
+
+func TestGitHubLoginRedirect(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/login", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", w.Code)
+	}
+	location := w.Header().Get("Location")
+	if !strings.Contains(location, "github.com/login/oauth/authorize") {
+		t.Fatalf("unexpected redirect: %s", location)
+	}
+}
+
+func TestGitHubCallbackSetsCookie(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/callback?code=abc&state=state123", nil)
+	req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: "state123"})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	setCookie := w.Header().Get("Set-Cookie")
+	if !strings.Contains(setCookie, "ingitdb_github_token=") {
+		t.Fatalf("expected auth cookie to be set, got %q", setCookie)
+	}
+	if !strings.Contains(w.Body.String(), "Successfully authenticated") {
+		t.Fatalf("unexpected body: %s", w.Body.String())
+	}
+}
+
+func TestGitHubStatusWithCookie(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/status", nil)
+	req.AddCookie(&http.Cookie{Name: "ingitdb_github_token", Value: "oauth-token"})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestListCollections_RequiresAuth(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	h.requireAuth = true
+	req := httptest.NewRequest(http.MethodGet, "/ingitdb/v0/collections?db=owner/repo", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
 	}
 }
 

@@ -3,7 +3,9 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +23,7 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/dalgo2ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
+	"github.com/ingitdb/ingitdb-cli/server/auth"
 )
 
 //go:embed index.html
@@ -29,16 +32,29 @@ var indexHTML []byte
 // Handler is the HTTP handler for the API server. Fields can be replaced in
 // tests to inject mock implementations.
 type Handler struct {
-	newGitHubFileReader func(cfg dalgo2ghingitdb.Config) (dalgo2ghingitdb.FileReader, error)
-	newGitHubDBWithDef  func(cfg dalgo2ghingitdb.Config, def *ingitdb.Definition) (dal.DB, error)
-	router              *httprouter.Router
+	newGitHubFileReader  func(cfg dalgo2ghingitdb.Config) (dalgo2ghingitdb.FileReader, error)
+	newGitHubDBWithDef   func(cfg dalgo2ghingitdb.Config, def *ingitdb.Definition) (dal.DB, error)
+	authConfig           auth.Config
+	exchangeCodeForToken func(ctx context.Context, code string) (string, error)
+	validateToken        func(ctx context.Context, token string) error
+	requireAuth          bool
+	router               *httprouter.Router
 }
 
 // NewHandler creates a Handler with the default (production) GitHub implementations.
 func NewHandler() *Handler {
+	cfg := auth.LoadConfigFromEnv()
 	h := &Handler{
 		newGitHubFileReader: dalgo2ghingitdb.NewGitHubFileReader,
 		newGitHubDBWithDef:  dalgo2ghingitdb.NewGitHubDBWithDef,
+		authConfig:          cfg,
+		exchangeCodeForToken: func(ctx context.Context, code string) (string, error) {
+			return cfg.ExchangeCodeForToken(ctx, code, nil)
+		},
+		validateToken: func(ctx context.Context, token string) error {
+			return auth.ValidateGitHubToken(ctx, token, nil)
+		},
+		requireAuth: true,
 	}
 	h.router = h.buildRouter()
 	return h
@@ -51,6 +67,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) buildRouter() *httprouter.Router {
 	r := httprouter.New()
 	r.GET("/", h.serveIndex)
+	r.GET("/auth/github/login", h.githubLogin)
+	r.GET("/auth/github/callback", h.githubCallback)
+	r.GET("/auth/github/status", h.githubStatus)
 	r.GET("/ingitdb/v0/collections", h.listCollections)
 	r.GET("/ingitdb/v0/record", h.readRecord)
 	r.POST("/ingitdb/v0/record", h.createRecord)
@@ -58,6 +77,8 @@ func (h *Handler) buildRouter() *httprouter.Router {
 	r.DELETE("/ingitdb/v0/record", h.deleteRecord)
 	return r
 }
+
+const oauthStateCookieName = "ingitdb_oauth_state"
 
 // serveIndex serves the API index.html file.
 func (h *Handler) serveIndex(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -79,13 +100,9 @@ func parseDBParam(r *http.Request) (owner, repo string, err error) {
 	return parts[0], parts[1], nil
 }
 
-// githubToken extracts a bearer token from the Authorization header.
+// githubToken extracts token from the Authorization header or auth cookie.
 func githubToken(r *http.Request) string {
-	auth := r.Header.Get("Authorization")
-	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
-		return strings.TrimSpace(after)
-	}
-	return ""
+	return auth.ResolveTokenFromRequest(r, auth.LoadConfigFromEnv().CookieName)
 }
 
 // writeJSON writes v as a JSON response.
@@ -98,6 +115,121 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writeError writes an error response as JSON.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func randomOAuthState() (string, error) {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate oauth state: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func (h *Handler) githubLogin(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	if err := h.authConfig.ValidateForHTTPMode(); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	state, err := randomOAuthState()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	stateCookie := &http.Cookie{
+		Name:     oauthStateCookieName,
+		Value:    state,
+		Path:     "/",
+		Domain:   h.authConfig.CookieDomain,
+		HttpOnly: true,
+		Secure:   h.authConfig.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   600,
+	}
+	http.SetCookie(w, stateCookie)
+	http.Redirect(w, r, h.authConfig.AuthorizeURL(state), http.StatusFound)
+}
+
+func (h *Handler) githubCallback(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	if err := h.authConfig.ValidateForHTTPMode(); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	if code == "" || state == "" {
+		writeError(w, http.StatusBadRequest, "missing code or state")
+		return
+	}
+	stateCookie, err := r.Cookie(oauthStateCookieName)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "missing oauth state cookie")
+		return
+	}
+	if state != stateCookie.Value {
+		writeError(w, http.StatusBadRequest, "invalid oauth state")
+		return
+	}
+	token, err := h.exchangeCodeForToken(r.Context(), code)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("oauth token exchange failed: %v", err))
+		return
+	}
+	tokenCookie := &http.Cookie{
+		Name:     h.authConfig.CookieName,
+		Value:    token,
+		Path:     "/",
+		Domain:   h.authConfig.CookieDomain,
+		HttpOnly: true,
+		Secure:   h.authConfig.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400 * 30,
+	}
+	http.SetCookie(w, tokenCookie)
+	clearStateCookie := &http.Cookie{
+		Name:     oauthStateCookieName,
+		Value:    "",
+		Path:     "/",
+		Domain:   h.authConfig.CookieDomain,
+		HttpOnly: true,
+		Secure:   h.authConfig.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	}
+	http.SetCookie(w, clearStateCookie)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<html><body><h1>Successfully authenticated</h1><p><a href="/auth/github/status">Check authentication status</a></p></body></html>`))
+}
+
+func (h *Handler) githubStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	token := auth.ResolveTokenFromRequest(r, h.authConfig.CookieName)
+	if token == "" {
+		writeError(w, http.StatusUnauthorized, "missing github token")
+		return
+	}
+	if err := h.validateToken(r.Context(), token); err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true})
+}
+
+func (h *Handler) authenticatedToken(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if !h.requireAuth {
+		token := auth.ResolveTokenFromRequest(r, h.authConfig.CookieName)
+		return token, true
+	}
+	token := auth.ResolveTokenFromRequest(r, h.authConfig.CookieName)
+	if token == "" {
+		writeError(w, http.StatusUnauthorized, "missing github token")
+		return "", false
+	}
+	if err := h.validateToken(r.Context(), token); err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return "", false
+	}
+	return token, true
 }
 
 // readDefinitionFromGitHub reads the inGitDB definition from a GitHub repository.
@@ -136,12 +268,16 @@ func readDefinitionFromGitHub(ctx context.Context, fileReader dalgo2ghingitdb.Fi
 
 // listCollections handles GET /ingitdb/v0/collections?db=owner/repo
 func (h *Handler) listCollections(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	token, ok := h.authenticatedToken(w, r)
+	if !ok {
+		return
+	}
 	owner, repo, err := parseDBParam(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: githubToken(r)}
+	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: token}
 	fileReader, err := h.newGitHubFileReader(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create file reader: %v", err))
@@ -162,6 +298,10 @@ func (h *Handler) listCollections(w http.ResponseWriter, r *http.Request, _ http
 
 // readRecord handles GET /v0/record?db=owner/repo&key=col/record_id
 func (h *Handler) readRecord(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	token, ok := h.authenticatedToken(w, r)
+	if !ok {
+		return
+	}
 	owner, repo, err := parseDBParam(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -172,7 +312,7 @@ func (h *Handler) readRecord(w http.ResponseWriter, r *http.Request, _ httproute
 		writeError(w, http.StatusBadRequest, "missing required query parameter: key")
 		return
 	}
-	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: githubToken(r)}
+	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: token}
 	fileReader, err := h.newGitHubFileReader(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create file reader: %v", err))
@@ -211,6 +351,10 @@ func (h *Handler) readRecord(w http.ResponseWriter, r *http.Request, _ httproute
 
 // createRecord handles POST /v0/record?db=owner/repo&key=col/record_id
 func (h *Handler) createRecord(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	token, ok := h.authenticatedToken(w, r)
+	if !ok {
+		return
+	}
 	owner, repo, err := parseDBParam(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -231,7 +375,7 @@ func (h *Handler) createRecord(w http.ResponseWriter, r *http.Request, _ httprou
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON body: %v", err))
 		return
 	}
-	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: githubToken(r)}
+	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: token}
 	fileReader, err := h.newGitHubFileReader(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create file reader: %v", err))
@@ -265,6 +409,10 @@ func (h *Handler) createRecord(w http.ResponseWriter, r *http.Request, _ httprou
 
 // updateRecord handles PUT /v0/record?db=owner/repo&key=col/record_id
 func (h *Handler) updateRecord(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	token, ok := h.authenticatedToken(w, r)
+	if !ok {
+		return
+	}
 	owner, repo, err := parseDBParam(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -285,7 +433,7 @@ func (h *Handler) updateRecord(w http.ResponseWriter, r *http.Request, _ httprou
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON body: %v", err))
 		return
 	}
-	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: githubToken(r)}
+	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: token}
 	fileReader, err := h.newGitHubFileReader(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create file reader: %v", err))
@@ -331,6 +479,10 @@ func (h *Handler) updateRecord(w http.ResponseWriter, r *http.Request, _ httprou
 
 // deleteRecord handles DELETE /v0/record?db=owner/repo&key=col/record_id
 func (h *Handler) deleteRecord(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	token, ok := h.authenticatedToken(w, r)
+	if !ok {
+		return
+	}
 	owner, repo, err := parseDBParam(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -341,7 +493,7 @@ func (h *Handler) deleteRecord(w http.ResponseWriter, r *http.Request, _ httprou
 		writeError(w, http.StatusBadRequest, "missing required query parameter: key")
 		return
 	}
-	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: githubToken(r)}
+	cfg := dalgo2ghingitdb.Config{Owner: owner, Repo: repo, Token: token}
 	fileReader, err := h.newGitHubFileReader(cfg)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create file reader: %v", err))
