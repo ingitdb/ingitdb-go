@@ -1,5 +1,10 @@
+# Copyright 2026 Sneat Co
 FROM gcr.io/distroless/static-debian12:nonroot
 
+# WORKDIR /app is a conventional directory for application code.
+# Cloud Run has no specific requirements for the working directory,
+# but /app is widely used and clear in purpose. The binary and its
+# dependencies will be placed here for execution.
 WORKDIR /app
 
 # Copy pre-built binary from GitHub Actions
