@@ -416,6 +416,12 @@ func TestGitHubLoginRedirect(t *testing.T) {
 	if !strings.Contains(location, "github.com/login/oauth/authorize") {
 		t.Fatalf("unexpected redirect: %s", location)
 	}
+	cookies := w.Result().Cookies()
+	for _, cookie := range cookies {
+		if cookie.Name == oauthStateCookieName && cookie.Domain != "" {
+			t.Fatalf("expected host-only oauth state cookie, got domain=%q", cookie.Domain)
+		}
+	}
 }
 
 func TestGitHubCallbackSetsCookie(t *testing.T) {
