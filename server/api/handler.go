@@ -11,8 +11,10 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/dal-go/dalgo/dal"
@@ -84,7 +86,10 @@ func (h *Handler) buildRouter() *httprouter.Router {
 	return r
 }
 
-const oauthStateCookieName = "ingitdb_oauth_state"
+const (
+	oauthStateCookieName       = "__Host-ingitdb_oauth_state"
+	legacyOAuthStateCookieName = "ingitdb_oauth_state"
+)
 
 // serveIndex serves the API index.html file.
 func (h *Handler) serveIndex(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -133,6 +138,43 @@ func randomOAuthState() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+func oauthStateCookieNameForConfig(cfg auth.Config) string {
+	if cfg.CookieSecure {
+		return oauthStateCookieName
+	}
+	return legacyOAuthStateCookieName
+}
+
+func oauthStateCookieFromRequest(r *http.Request) (*http.Cookie, string, error) {
+	names := []string{oauthStateCookieName, legacyOAuthStateCookieName}
+	for _, name := range names {
+		cookie, err := r.Cookie(name)
+		if err == nil {
+			return cookie, name, nil
+		}
+		if err != http.ErrNoCookie {
+			return nil, "", err
+		}
+	}
+	return nil, "", http.ErrNoCookie
+}
+
+func cookieNames(r *http.Request) string {
+	cookies := r.Cookies()
+	if len(cookies) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(cookies))
+	for _, cookie := range cookies {
+		names = append(names, cookie.Name)
+	}
+	return strings.Join(names, ",")
+}
+
+func logOAuthEvent(r *http.Request, event, details string) {
+	_, _ = fmt.Fprintf(os.Stderr, "oauth event=%s host=%s path=%s details=%s\n", event, r.Host, r.URL.Path, details)
+}
+
 func (h *Handler) githubLogin(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	if err := h.authConfig.ValidateForHTTPMode(); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -143,8 +185,9 @@ func (h *Handler) githubLogin(w http.ResponseWriter, r *http.Request, _ httprout
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	stateCookieName := oauthStateCookieNameForConfig(h.authConfig)
 	stateCookie := &http.Cookie{
-		Name:     oauthStateCookieName,
+		Name:     stateCookieName,
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
@@ -153,6 +196,8 @@ func (h *Handler) githubLogin(w http.ResponseWriter, r *http.Request, _ httprout
 		MaxAge:   600,
 	}
 	http.SetCookie(w, stateCookie)
+	stateLen := strconv.Itoa(len(state))
+	logOAuthEvent(r, "login_set_state", "cookie="+stateCookieName+" state_len="+stateLen)
 	http.Redirect(w, r, h.authConfig.AuthorizeURL(state), http.StatusFound)
 }
 
@@ -163,24 +208,33 @@ func (h *Handler) githubCallback(w http.ResponseWriter, r *http.Request, _ httpr
 	}
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	codeLen := strconv.Itoa(len(code))
+	stateLen := strconv.Itoa(len(state))
+	logOAuthEvent(r, "callback_received", "code_len="+codeLen+" state_len="+stateLen)
 	if code == "" || state == "" {
+		logOAuthEvent(r, "callback_missing_query", "code_or_state_missing=true")
 		writeError(w, http.StatusBadRequest, "missing code or state")
 		return
 	}
-	stateCookie, err := r.Cookie(oauthStateCookieName)
+	stateCookie, stateCookieSource, err := oauthStateCookieFromRequest(r)
 	if err != nil {
+		logOAuthEvent(r, "callback_missing_state_cookie", "cookies="+cookieNames(r))
 		writeError(w, http.StatusBadRequest, "missing oauth state cookie")
 		return
 	}
 	if state != stateCookie.Value {
+		cookieStateLen := strconv.Itoa(len(stateCookie.Value))
+		logOAuthEvent(r, "callback_state_mismatch", "cookie="+stateCookieSource+" query_state_len="+stateLen+" cookie_state_len="+cookieStateLen)
 		writeError(w, http.StatusBadRequest, "invalid oauth state")
 		return
 	}
 	token, err := h.exchangeCodeForToken(r.Context(), code)
 	if err != nil {
+		logOAuthEvent(r, "callback_token_exchange_failed", err.Error())
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("oauth token exchange failed: %v", err))
 		return
 	}
+	logOAuthEvent(r, "callback_token_exchange_success", "cookie="+stateCookieSource)
 	tokenCookie := &http.Cookie{
 		Name:     h.authConfig.CookieName,
 		Value:    token,
@@ -193,7 +247,7 @@ func (h *Handler) githubCallback(w http.ResponseWriter, r *http.Request, _ httpr
 	}
 	http.SetCookie(w, tokenCookie)
 	clearStateCookie := &http.Cookie{
-		Name:     oauthStateCookieName,
+		Name:     stateCookieSource,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
@@ -202,9 +256,9 @@ func (h *Handler) githubCallback(w http.ResponseWriter, r *http.Request, _ httpr
 		MaxAge:   -1,
 	}
 	http.SetCookie(w, clearStateCookie)
-	// Backward compatibility for previously issued domain-scoped state cookies.
+	// Backward compatibility for previously issued domain-scoped legacy state cookie.
 	clearLegacyStateCookie := &http.Cookie{
-		Name:     oauthStateCookieName,
+		Name:     legacyOAuthStateCookieName,
 		Value:    "",
 		Path:     "/",
 		Domain:   h.authConfig.CookieDomain,
@@ -219,7 +273,7 @@ func (h *Handler) githubCallback(w http.ResponseWriter, r *http.Request, _ httpr
 	_, _ = w.Write([]byte(`<html><body><h1>Successfully authenticated</h1><p><a href="/auth/github/status">Check authentication status</a></p></body></html>`))
 }
 
-func (h *Handler) githubLogout(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+func (h *Handler) githubLogout(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	clearTokenCookie := &http.Cookie{
 		Name:     h.authConfig.CookieName,
 		Value:    "",
@@ -241,8 +295,18 @@ func (h *Handler) githubLogout(w http.ResponseWriter, _ *http.Request, _ httprou
 		MaxAge:   -1,
 	}
 	http.SetCookie(w, clearStateCookie)
+	clearLegacyHostOnlyStateCookie := &http.Cookie{
+		Name:     legacyOAuthStateCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   h.authConfig.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	}
+	http.SetCookie(w, clearLegacyHostOnlyStateCookie)
 	clearLegacyStateCookie := &http.Cookie{
-		Name:     oauthStateCookieName,
+		Name:     legacyOAuthStateCookieName,
 		Value:    "",
 		Path:     "/",
 		Domain:   h.authConfig.CookieDomain,
@@ -252,6 +316,7 @@ func (h *Handler) githubLogout(w http.ResponseWriter, _ *http.Request, _ httprou
 		MaxAge:   -1,
 	}
 	http.SetCookie(w, clearLegacyStateCookie)
+	logOAuthEvent(r, "logout_cleared_cookies", "token_cookie="+h.authConfig.CookieName)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`<html><body><h1>Successfully logged out</h1><p><a href="/auth/github/login">Authenticate again</a></p></body></html>`))

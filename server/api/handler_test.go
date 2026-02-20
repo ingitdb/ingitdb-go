@@ -443,6 +443,18 @@ func TestGitHubCallbackSetsCookie(t *testing.T) {
 	}
 }
 
+func TestGitHubCallbackAcceptsLegacyStateCookie(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/callback?code=abc&state=legacy123", nil)
+	req.AddCookie(&http.Cookie{Name: legacyOAuthStateCookieName, Value: "legacy123"})
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestGitHubStatusWithCookie(t *testing.T) {
 	t.Parallel()
 	h, _ := newTestHandler()
