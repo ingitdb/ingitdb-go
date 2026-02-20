@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,6 +27,9 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
 )
+
+//go:embed index.html
+var indexHTML []byte
 
 // Handler is the HTTP handler for the MCP server.
 type Handler struct {
@@ -50,8 +54,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) buildRouter() *httprouter.Router {
 	r := httprouter.New()
+	r.GET("/", h.serveIndex)
 	r.POST("/mcp", h.handleMCP)
 	return r
+}
+
+// serveIndex serves the MCP index.html file.
+func (h *Handler) serveIndex(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(indexHTML)
 }
 
 // singleRequestTransport is a synchronous, in-memory MCP transport used for

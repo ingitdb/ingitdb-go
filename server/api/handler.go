@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +22,9 @@ import (
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb"
 	"github.com/ingitdb/ingitdb-cli/pkg/ingitdb/config"
 )
+
+//go:embed index.html
+var indexHTML []byte
 
 // Handler is the HTTP handler for the API server. Fields can be replaced in
 // tests to inject mock implementations.
@@ -46,12 +50,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) buildRouter() *httprouter.Router {
 	r := httprouter.New()
+	r.GET("/", h.serveIndex)
 	r.GET("/ingitdb/v0/collections", h.listCollections)
 	r.GET("/ingitdb/v0/record", h.readRecord)
 	r.POST("/ingitdb/v0/record", h.createRecord)
 	r.PUT("/ingitdb/v0/record", h.updateRecord)
 	r.DELETE("/ingitdb/v0/record", h.deleteRecord)
 	return r
+}
+
+// serveIndex serves the API index.html file.
+func (h *Handler) serveIndex(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(indexHTML)
 }
 
 // parseDBParam parses the "db" query parameter as "owner/repo".

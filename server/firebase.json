@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "target": "cloud-run",
     "public": "static",
     "ignore": [
       "firebase.json",
