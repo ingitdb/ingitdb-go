@@ -1,4 +1,4 @@
-name: Deploy website to Firebase
+name: Deploy website
 
 on:
   workflow_dispatch:
