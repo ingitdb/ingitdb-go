@@ -73,6 +73,7 @@ func (h *Handler) buildRouter() *httprouter.Router {
 	r := httprouter.New()
 	r.GET("/", h.serveIndex)
 	r.GET("/auth/github/login", h.githubLogin)
+	r.GET("/auth/github/logout", h.githubLogout)
 	r.GET("/auth/github/callback", h.githubCallback)
 	r.GET("/auth/github/status", h.githubStatus)
 	r.GET("/ingitdb/v0/collections", h.listCollections)
@@ -206,6 +207,34 @@ func (h *Handler) githubCallback(w http.ResponseWriter, r *http.Request, _ httpr
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`<html><body><h1>Successfully authenticated</h1><p><a href="/auth/github/status">Check authentication status</a></p></body></html>`))
+}
+
+func (h *Handler) githubLogout(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	clearTokenCookie := &http.Cookie{
+		Name:     h.authConfig.CookieName,
+		Value:    "",
+		Path:     "/",
+		Domain:   h.authConfig.CookieDomain,
+		HttpOnly: true,
+		Secure:   h.authConfig.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	}
+	http.SetCookie(w, clearTokenCookie)
+	clearStateCookie := &http.Cookie{
+		Name:     oauthStateCookieName,
+		Value:    "",
+		Path:     "/",
+		Domain:   h.authConfig.CookieDomain,
+		HttpOnly: true,
+		Secure:   h.authConfig.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	}
+	http.SetCookie(w, clearStateCookie)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<html><body><h1>Successfully logged out</h1><p><a href="/auth/github/login">Authenticate again</a></p></body></html>`))
 }
 
 func (h *Handler) githubStatus(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

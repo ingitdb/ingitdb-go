@@ -449,6 +449,33 @@ func TestGitHubStatusWithCookie(t *testing.T) {
 	}
 }
 
+func TestGitHubLogoutClearsCookie(t *testing.T) {
+	t.Parallel()
+	h, _ := newTestHandler()
+	req := httptest.NewRequest(http.MethodGet, "/auth/github/logout", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	cookies := w.Result().Cookies()
+	var found bool
+	for _, cookie := range cookies {
+		if cookie.Name == "ingitdb_github_token" {
+			found = true
+			if cookie.MaxAge != -1 {
+				t.Fatalf("expected token cookie MaxAge=-1, got %d", cookie.MaxAge)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected cleared auth cookie in response")
+	}
+	if !strings.Contains(w.Body.String(), "Successfully logged out") {
+		t.Fatalf("unexpected body: %s", w.Body.String())
+	}
+}
+
 func TestListCollections_RequiresAuth(t *testing.T) {
 	t.Parallel()
 	h, _ := newTestHandler()

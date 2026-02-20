@@ -59,6 +59,7 @@ Optional environment variables:
 API-hosted auth endpoints:
 
 - `GET /auth/github/login` — redirects to GitHub OAuth authorize page.
+- `GET /auth/github/logout` — clears auth cookies and unauthenticates current browser session.
 - `GET /auth/github/callback` — exchanges code for token, stores shared-domain cookie, renders success page.
 - `GET /auth/github/status` — validates current token and returns auth status.
 
