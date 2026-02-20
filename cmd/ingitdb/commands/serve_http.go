@@ -33,13 +33,11 @@ func newHTTPHandler(apiDomains, mcpDomains []string) http.Handler {
 			host = h
 		}
 
-		if apiDomainMap[host] {
-			apiHandler.ServeHTTP(w, r)
-		} else if mcpDomainMap[host] {
+		if mcpDomainMap[host] {
 			mcpHandler.ServeHTTP(w, r)
 		} else {
-			// Static files will be served by Firebase hosting
-			http.NotFound(w, r)
+			// Route to API handler for all other requests (including Firebase Hosting rewrites)
+			apiHandler.ServeHTTP(w, r)
 		}
 	})
 }
