@@ -1,10 +1,10 @@
-# 📘 inGitDB Development Guidelines for AI Agents & Humans
+# 📚 inGitDB Development Guidelines for AI Agents & Humans
 
 This document provides project-specific information for developers and AI agents working on inGitDB.
 
 Refer to [documentation](.) to learn about architecture, features, components, etc. of the `ingitdb` CLI.
 
-## 📂 1. Build and Configuration
+## ⚙️ 1. Build and Configuration
 
 - **Go Version**: Ensure you are using the Go version specified in `go.mod` (or later).
 - **Dependencies**: Managed via Go modules. Run `go mod download` to fetch them.

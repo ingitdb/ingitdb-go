@@ -1,4 +1,4 @@
-# 📘 dalgo2ghingitdb — GitHub DALgo Adapter
+# 🐙 dalgo2ghingitdb — GitHub DALgo Adapter
 
 ## 📂 Overview
 
@@ -10,7 +10,7 @@ The package is consumed by the `ingitdb` CLI when `--github=owner/repo` is suppl
 also be used as a Go library by any program that needs database access to a remote inGitDB
 repository.
 
-## 📂 Features
+## ✨ Features
 
 - Read-only access to public repositories (no token required)
 - Authenticated reads and writes for public and private repositories
@@ -21,7 +21,7 @@ repository.
 - Token supplied via `Config.Token` field or `GITHUB_TOKEN` environment variable (CLI only)
 - Comprehensive error handling: rate limits, 404s, forbidden, and other API errors
 
-## 📂 Architecture
+## 🏗️ Architecture
 
 ```mermaid
 flowchart LR
@@ -61,9 +61,9 @@ This ensures identical record semantics whether data comes from disk or from Git
 
 ---
 
-## 📂 Components
+## 🧩 Components
 
-### `Config`
+### ⚙️ Config`
 
 ```go
 type Config struct {
@@ -81,7 +81,7 @@ type Config struct {
 - `APIBaseURL` overrides `https://api.github.com/` — needed only for GitHub Enterprise Server
   installations.
 
-### `FileReader` interface
+### 🔹 FileReader` interface
 
 ```go
 type FileReader interface {
@@ -98,7 +98,7 @@ type FileReader interface {
 
 `NewGitHubFileReader(cfg Config) (FileReader, error)` is the public constructor.
 
-### `githubDB`
+### 🐙 githubDB`
 
 Implements `dal.DB`. Constructors:
 
@@ -122,14 +122,14 @@ Supported `dal.DB` methods:
 | `ExecuteQueryToRecordsReader` | Not implemented |
 | `ExecuteQueryToRecordsetReader` | Not implemented |
 
-### `readonlyTx`
+### 🔹 readonlyTx`
 
 Implements `dal.ReadTransaction`. Supports:
 
 - `Get(ctx, record)` — fetches a single record by key. Supports `SingleRecord` and
   `MapOfIDRecords` collection types.
 
-### `readwriteTx`
+### 🔹 readwriteTx`
 
 Implements `dal.ReadwriteTransaction`. Extends `readonlyTx` and adds:
 
@@ -247,7 +247,7 @@ go test -timeout=10s ./pkg/dalgo2ghingitdb/...
 
 ---
 
-## 📂 Dependencies
+## 🔁 Dependencies
 
 | Package | Purpose |
 |---|---|
@@ -258,7 +258,7 @@ go test -timeout=10s ./pkg/dalgo2ghingitdb/...
 
 ---
 
-## 📂 Design principles
+## 🔁 Design principles
 
 1. **Consistency with `dalgo2ingitdb`**: both adapters implement the same `dal.DB` interface and
    share record parsing from `pkg/dalgo2ingitdb`, so switching between local and remote access

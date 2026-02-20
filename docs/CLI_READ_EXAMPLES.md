@@ -1,4 +1,4 @@
-# 📘 Reading Records: Local vs GitHub
+# 🐙 Reading Records: Local vs GitHub
 
 This document shows how to read the same record using the ingitdb CLI from two different sources:
 1. Local file system (using `dalgo2ingitdb`)
@@ -8,7 +8,7 @@ This document shows how to read the same record using the ingitdb CLI from two d
 
 Both commands read the same record: `todo/tags/active` from the test-ingitdb repository.
 
-### 🔹 Command 1: Read from Local Repository
+### 🖥️ Command 1: Read from Local Repository
 
 ```bash
 ingitdb read record --path test-ingitdb --id todo.tags/active
@@ -32,7 +32,7 @@ ingitdb read record --id todo.tags/active
 title: Active
 ```
 
-### 🔹 Command 2: Read from GitHub Repository
+### 🖥️ Command 2: Read from GitHub Repository
 
 ```bash
 ingitdb read record --github ingitdb/ingitdb-cli@main --id todo.tags/active
@@ -127,7 +127,7 @@ error: failed to resolve remote definition: github api error status 404
 error: failed to resolve remote definition: .ingitdb file not found in repository
 ```
 
-## 📂 Quick Comparison Table
+## ⚡ Quick Comparison Table
 
 | Aspect | Local | GitHub |
 |--------|-------|--------|

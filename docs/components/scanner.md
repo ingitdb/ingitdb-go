@@ -1,4 +1,4 @@
-# 📘 inGitDB Scanner
+# 🧩 inGitDB Scanner
 
 Walks over file system objects and invokes components like [validator](validator/schema-validator.md) and [views builder](views-builder.md).
 

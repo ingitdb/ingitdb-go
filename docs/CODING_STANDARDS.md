@@ -1,4 +1,4 @@
-# 📘 inGitDB Coding Standards
+# 📏 inGitDB Coding Standards
 
 ## 📂 Generic and common sense
 
@@ -51,7 +51,7 @@ All commits MUST follow the Conventional Commits specification.
     - The project uses the standard `testing` package.
 
 
-### 🔹 Unused arguments – explicitly mark function parameters as intentionally unused
+### 🔁 Unused arguments – explicitly mark function parameters as intentionally unused
 
 - Assigns the parameters to the blank identifier(s) `_`
     - Prevents the Go compiler from complaining about unused variables

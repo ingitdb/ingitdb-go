@@ -1,11 +1,11 @@
-# 📘 inGitDB Configuration
+# ⚙️ inGitDB Configuration
 
-# 📘 User config - `~/.ingitdb/.ingitdb-user.yaml`
+# ⚙️ User config - `~/.ingitdb/.ingitdb-user.yaml`
 
 List inGitDB often open by user – used to improve user experience in the interactive mode.
 This is not required as `ingitdb` CLI will autodetect repository config when started in a dir under Git repo.
 
-# 📘 Repository config
+# ⚙️ Repository config
 
 At the root of the repository you should have a `.ingitdb.yaml` file that defines:
 

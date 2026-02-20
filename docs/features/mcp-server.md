@@ -1,4 +1,4 @@
-# 📘 MCP server for inGitDB
+# 🤖 MCP server for inGitDB
 
 ## 📂 Skills
 

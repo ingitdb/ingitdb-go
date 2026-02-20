@@ -1,4 +1,4 @@
-# 📘 inGitDB Triggers
+# 🧩 inGitDB Triggers
 
 Triggers are pluggable scripts, executable and webhooks
 that can be called when data change.

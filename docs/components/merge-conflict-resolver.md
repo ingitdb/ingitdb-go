@@ -47,7 +47,7 @@ Collection: todo.tasks  |  File: $records/2025-12-20T23-34-56.json
 
 After the user resolves all fields, the merged record is written back to the result path. Exits 0 on save, 1 if the user aborts.
 
-## `ingitdb resolve` command
+## 🖥️ ingitdb resolve` command
 
 Scans the database root for all files with conflict markers (using `git status --porcelain`). Delegates each to the appropriate resolver. Generated files are processed first (silently), then data files are presented one at a time in the TUI.
 

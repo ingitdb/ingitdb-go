@@ -1,4 +1,4 @@
-# 📘 inGitDB Documentation
+# 📂 inGitDB Documentation
 
 inGitDB turns a Git repository into a schema-validated, queryable database where every record is
 a plain YAML or JSON file. There is no server to run and no binary format to decode — the data
@@ -8,13 +8,13 @@ trade-off for your project, read on — and consider contributing.
 
 ## 📂 Index
 
-### 👥 User docs
+### 📂 User docs
 
 - [CLI](CLI.md) — command reference: flags, subcommands, exit codes
 - [Configuration](configuration/README.md) — `.ingitdb.yaml` and collection config files
 - [Features](features/README.md) — what inGitDB can do (and what is coming)
 
-### 🧑‍💻 Developer docs
+### 📂 Developer docs
 
 - [Architecture](ARCHITECTURE.md) — data model, package map, key design decisions
 - [Components](components/README.md) — building blocks: Scanner, Validator, Views Builder, Watcher, and more
@@ -23,7 +23,7 @@ trade-off for your project, read on — and consider contributing.
 - [Guidelines](GUIDELINES.md) — broader design and process guidelines
 - [CI](CI.md) — continuous integration setup and checks
 
-### 📦 Project docs
+### 📂 Project docs
 
 - [Roadmap](ROADMAP.md) — nine delivery phases from Validator to GraphQL
 - [Backlog](BACKLOG.md) — concrete tasks with acceptance criteria, ordered by dependency
@@ -31,11 +31,11 @@ trade-off for your project, read on — and consider contributing.
 
 ---
 
-## 🗺️ Documentation Map
+## 📂 Documentation Map
 
 A one-line description of each document, grouped by purpose.
 
-### 👥 User docs
+### 📂 User docs
 
 | Document | What it covers |
 |---|---|
@@ -44,7 +44,7 @@ A one-line description of each document, grouped by purpose.
 | [Features](features/README.md) | Full feature list with status (WIP / pending) and links to detail pages |
 | [GitHub Direct Access](features/github-direct-access.md) | Read and write records in remote GitHub repositories without cloning |
 
-### 🧑‍💻 Developer docs
+### 📂 Developer docs
 
 | Document | What it covers |
 |---|---|
@@ -55,7 +55,7 @@ A one-line description of each document, grouped by purpose.
 | [Guidelines](GUIDELINES.md) | Design and process guidelines that apply project-wide |
 | [CI](CI.md) | What the CI pipeline runs and how to satisfy it locally |
 
-### 📦 Project docs
+### 📂 Project docs
 
 | Document | What it covers |
 |---|---|
@@ -65,7 +65,7 @@ A one-line description of each document, grouped by purpose.
 
 ---
 
-## ⚡ CLI Commands at a Glance
+## 🖥️ CLI Commands at a Glance
 
 | Command | Subcommands | Status | Description |
 |---|---|---|---|
@@ -114,7 +114,7 @@ in `pkg/dalgo2ingitdb`.
 
 ---
 
-## 🤝 Get Involved
+## 🙋 Get Involved
 
 The best way to understand inGitDB is to point it at a directory of YAML files and run
 `ingitdb validate`. From there, check the [Roadmap](ROADMAP.md) to see what is being built and

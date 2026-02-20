@@ -1,4 +1,4 @@
-# 📘 Continuous integration for inGitDB
+# 🔁 Continuous integration for inGitDB
 
 ## 📂 GoReleaser
 

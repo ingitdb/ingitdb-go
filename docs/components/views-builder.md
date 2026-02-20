@@ -1,4 +1,4 @@
-# 📘 inGitDB Views Builder
+# 🧾 inGitDB Views Builder
 
 Responsible for creating and updating materialized views. The views builder runs as part of the `ingitdb validate` command, after successful validation.
 
@@ -14,7 +14,7 @@ Example: `.ingitdb-view.status_{status}.yaml` → output in `$views/status_{stat
 
 ```yaml
 # 📘 titles: i18n display names for the view.
-# {field} placeholders are substituted with the partition value.
+# 📘 field} placeholders are substituted with the partition value.
 titles:
   en: "Status: {status}"
   fr: "Statut: {status}"
@@ -28,7 +28,7 @@ formats:
   - md
 
 # 📘 columns: ordered list of column IDs to include in the output.
-# 📘 Must match column IDs defined in .ingitdb-collection.yaml.
+# ⚙️ Must match column IDs defined in .ingitdb-collection.yaml.
 columns:
   - title
   - status

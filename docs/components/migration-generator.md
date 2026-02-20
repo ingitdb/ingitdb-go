@@ -1,4 +1,4 @@
-# 📘 Migration Generator
+# 🔁 Migration Generator
 
 The Migration Generator diffs two versions of an inGitDB database and produces a forward migration script and a rollback script for a target database.
 
@@ -15,7 +15,7 @@ The Migration Generator diffs two versions of an inGitDB database and produces a
    - Type changes → handled per target database dialect
 4. **Write output** — render statements into the chosen format and write both files.
 
-## 📂 Collection filtering
+## ⚙️ Collection filtering
 
 When `--collections` is provided, only the listed collection IDs are included in the diff. Schema changes in excluded collections are ignored.
 

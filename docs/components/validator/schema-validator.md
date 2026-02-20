@@ -1,4 +1,4 @@
-# 📘 inGitDB Schema Validator
+# 🧩 inGitDB Schema Validator
 
 Validate inGitDB schema.
 

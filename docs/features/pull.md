@@ -18,7 +18,7 @@ Pending (Phase 3).
 
 Running `git pull` + `ingitdb resolve` + `ingitdb materialize` manually is repetitive and error-prone. `ingitdb pull` automates the full cycle in one command.
 
-## 📂 CLI
+## 🖥️ CLI
 
 ```
 ingitdb pull [--path=PATH] [--strategy=rebase|merge] [--remote=REMOTE] [--branch=BRANCH]

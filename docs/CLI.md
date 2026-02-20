@@ -1,4 +1,4 @@
-# 📘 ingitdb Command Line Interface
+# 🖥️ ingitdb Command Line Interface
 
 `--path` defaults to the current working directory when omitted. `~` in paths is expanded to the user's home directory.
 
@@ -8,13 +8,13 @@
 |------|-------------|
 | `--help`, `-h` | Print usage information and exit. |
 
-## 📂 Commands
+## 🖥️ Commands
 
 Each command is implemented in its own file under `cmd/ingitdb/commands/`
 (e.g. `validate.go`, `list.go`). `cmd/ingitdb/main.go` assembles them and
 injects process-level dependencies. See [Architecture](ARCHITECTURE.md) for details.
 
-### `version` — print build information
+### 🔹 version` — print build information
 
 ```
 ingitdb version
@@ -24,7 +24,7 @@ Prints build version, commit hash, and build date.
 
 ---
 
-### `validate` — validate database schema and data
+### 🔹 validate` — validate database schema and data
 
 ```
 ingitdb validate [--path=PATH] [--from-commit=SHA] [--to-commit=SHA]
@@ -46,16 +46,16 @@ Exit code is `0` on success, non-zero on any validation error.
 # 📘 Validate the current directory
 ingitdb validate
 
-# 📘 Validate a specific path
+# 🔁 Validate a specific path
 ingitdb validate --path=/path/to/your/db
 
-# 📘 Fast CI mode: validate only records changed between two commits
+# 🔁 Fast CI mode: validate only records changed between two commits
 ingitdb validate --from-commit=abc1234 --to-commit=def5678
 ```
 
 ---
 
-### `read record` — read a single record
+### 🔹 read record` — read a single record
 
 ```
 ingitdb read record --id=ID [--path=PATH] [--format=yaml|json]
@@ -78,16 +78,16 @@ Reads a single record by ID and writes it to stdout.
 # 📘 Read from the current directory
 ingitdb read record --id=countries/ie
 
-# 📘 Read from a specific local path
+# 🔁 Read from a specific local path
 ingitdb read record --path=/var/db/myapp --id=countries/ie
 
-# 📘 Read from a public GitHub repository
+# 🐙 Read from a public GitHub repository
 ingitdb read record --github=ingitdb/ingitdb-cli --id=todo.tags/active
 
-# 📘 Read from a specific branch on GitHub, output as JSON
+# 🔁 Read from a specific branch on GitHub, output as JSON
 ingitdb read record --github=ingitdb/ingitdb-cli@main --id=todo.tags/active --format=json
 
-# 📘 Read from a private GitHub repository
+# 🐙 Read from a private GitHub repository
 export GITHUB_TOKEN=ghp_...
 ingitdb read record --github=myorg/private-db --id=users/alice
 ```
@@ -96,7 +96,7 @@ See [GitHub Direct Access](features/github-direct-access.md) for more detail.
 
 ---
 
-### `create record` — create a new record
+### 🔹 create record` — create a new record
 
 ```
 ingitdb create record --id=ID --data=YAML [--path=PATH]
@@ -119,7 +119,7 @@ Creates a new record. Fails if a record with the same key already exists in the 
 # 📘 Create a record locally
 ingitdb create record --id=countries/ie --data='{name: Ireland}'
 
-# 📘 Create a record in a GitHub repository
+# 🐙 Create a record in a GitHub repository
 export GITHUB_TOKEN=ghp_...
 ingitdb create record --github=myorg/mydb --id=countries/ie \
   --data='{name: Ireland, capital: Dublin, population: 5000000}'
@@ -127,7 +127,7 @@ ingitdb create record --github=myorg/mydb --id=countries/ie \
 
 ---
 
-### `update record` — update fields of an existing record
+### 🔹 update record` — update fields of an existing record
 
 ```
 ingitdb update record --id=ID --set=YAML [--path=PATH]
@@ -151,7 +151,7 @@ are changed; all other fields are preserved.
 # 📘 Patch a record locally
 ingitdb update record --id=countries/ie --set='{capital: Dublin}'
 
-# 📘 Patch a record in a GitHub repository
+# 🐙 Patch a record in a GitHub repository
 export GITHUB_TOKEN=ghp_...
 ingitdb update record --github=myorg/mydb --id=countries/ie \
   --set='{capital: Dublin, population: 5100000}'
@@ -159,7 +159,7 @@ ingitdb update record --github=myorg/mydb --id=countries/ie \
 
 ---
 
-### `query` — query records from a collection *(not yet implemented)*
+### ⚙️ query` — query records from a collection *(not yet implemented)*
 
 ```
 ingitdb query --collection=KEY [--path=PATH] [--format=json|yaml]
@@ -174,19 +174,19 @@ ingitdb query --collection=KEY [--path=PATH] [--format=json|yaml]
 **Examples:**
 
 ```shell
-# 📘 Query all records from a collection (JSON output)
+# ⚙️ Query all records from a collection (JSON output)
 ingitdb query --collection=countries.counties
 
 # 📘 Query with YAML output
 ingitdb query --collection=tasks --format=yaml
 
-# 📘 Query from a specific database path
+# 🔁 Query from a specific database path
 ingitdb query --collection=users --path=/var/db/myapp
 ```
 
 ---
 
-### `materialize` — build materialized views *(not yet implemented)*
+### 🧾 materialize` — build materialized views *(not yet implemented)*
 
 ```
 ingitdb materialize [--path=PATH] [--views=VIEW1,VIEW2,...]
@@ -202,19 +202,19 @@ Output is written into the `$views/` directory defined in `.ingitdb.yaml`.
 **Examples:**
 
 ```shell
-# 📘 Rebuild all views
+# 🧾 Rebuild all views
 ingitdb materialize
 
-# 📘 Rebuild specific views only
+# 🔁 Rebuild specific views only
 ingitdb materialize --views=by_status,by_assignee
 
-# 📘 Rebuild views for a database at a specific path
+# 🔁 Rebuild views for a database at a specific path
 ingitdb materialize --path=/var/db/myapp
 ```
 
 ---
 
-### `pull` — pull latest changes, resolve conflicts, and rebuild views *(not yet implemented)*
+### 🧾 pull` — pull latest changes, resolve conflicts, and rebuild views *(not yet implemented)*
 
 ```
 ingitdb pull [--path=PATH] [--strategy=rebase|merge] [--remote=REMOTE] [--branch=BRANCH]
@@ -246,13 +246,13 @@ ingitdb pull
 # 📘 Pull using merge instead of rebase
 ingitdb pull --strategy=merge
 
-# 📘 Pull from a specific remote and branch
+# 🔁 Pull from a specific remote and branch
 ingitdb pull --remote=upstream --branch=main
 ```
 
 ---
 
-### `setup` — initialise a new database directory *(not yet implemented)*
+### 🔹 setup` — initialise a new database directory *(not yet implemented)*
 
 ```
 ingitdb setup [--path=PATH]
@@ -268,13 +268,13 @@ ingitdb setup [--path=PATH]
 # 📘 Initialise a database in the current directory
 ingitdb setup
 
-# 📘 Initialise a database at a specific path
+# 🔁 Initialise a database at a specific path
 ingitdb setup --path=/var/db/myapp
 ```
 
 ---
 
-### `resolve` — resolve merge conflicts in database files *(not yet implemented)*
+### 🔹 resolve` — resolve merge conflicts in database files *(not yet implemented)*
 
 ```
 ingitdb resolve [--path=PATH] [--file=FILE]
@@ -297,7 +297,7 @@ ingitdb resolve --file=countries/ie/counties/dublin.yaml
 
 ---
 
-### `watch` — watch database for changes *(not yet implemented)*
+### 🔹 watch` — watch database for changes *(not yet implemented)*
 
 ```
 ingitdb watch [--path=PATH] [--format=text|json]
@@ -316,7 +316,7 @@ Watches the database directory for file-system changes and writes a structured e
 # 📘 Watch the current directory, text output
 ingitdb watch
 
-# 📘 Watch a specific database path with JSON output (pipe-friendly)
+# 🔁 Watch a specific database path with JSON output (pipe-friendly)
 ingitdb watch --path=/var/db/myapp --format=json
 ```
 
@@ -338,7 +338,7 @@ Record /countries/gb/cities/london: deleted
 
 ---
 
-### `serve` — start one or more servers *(not yet implemented)*
+### 🔹 serve` — start one or more servers *(not yet implemented)*
 
 ```
 ingitdb serve [--path=PATH] [--mcp] [--http] [--watcher]
@@ -356,22 +356,22 @@ At least one service flag must be provided. Multiple flags may be combined to ru
 **Examples:**
 
 ```shell
-# 📘 Start the MCP server for AI agent access
+# 🤖 Start the MCP server for AI agent access
 ingitdb serve --mcp
 
 # 📘 Start the HTTP API server
 ingitdb serve --http
 
-# 📘 Start MCP and the file watcher together in one process
+# 🧩 Start MCP and the file watcher together in one process
 ingitdb serve --mcp --watcher
 
-# 📘 Start all services for a specific database path
+# 🔁 Start all services for a specific database path
 ingitdb serve --mcp --http --watcher --path=/var/db/myapp
 ```
 
 ---
 
-### `list` — list database objects
+### 🔹 list` — list database objects
 
 Top-level command with three subcommands. Shared flags on every subcommand:
 
@@ -381,7 +381,7 @@ Top-level command with three subcommands. Shared flags on every subcommand:
 | `--in=REGEXP` | Regular expression that matches the starting-point path. Only objects under matching paths are listed. |
 | `--filter-name=PATTERN` | Glob-style pattern to filter by name (e.g. `*substr*`). |
 
-#### `list collections`
+#### ⚙️ list collections`
 
 ```
 ingitdb list collections [--path=PATH] [--in=REGEXP] [--filter-name=PATTERN]
@@ -401,27 +401,27 @@ Lists all collection IDs defined in the database.
 **Examples:**
 
 ```shell
-# 📘 List all collections in the current directory
+# ⚙️ List all collections in the current directory
 ingitdb list collections
 
-# 📘 List collections from a GitHub repository (no token needed for public repos)
+# ⚙️ List collections from a GitHub repository (no token needed for public repos)
 ingitdb list collections --github=ingitdb/ingitdb-cli
 
-# 📘 Pin to a specific branch or tag
+# 🔁 Pin to a specific branch or tag
 ingitdb list collections --github=ingitdb/ingitdb-cli@main
 
 # 📘 Private repository
 export GITHUB_TOKEN=ghp_...
 ingitdb list collections --github=myorg/private-db
 
-# 📘 Local: list collections nested under a matching path
+# ⚙️ Local: list collections nested under a matching path
 ingitdb list collections --in='countries/(ie|gb)'
 
-# 📘 Local: list collections whose name contains "city"
+# ⚙️ Local: list collections whose name contains "city"
 ingitdb list collections --filter-name='*city*'
 ```
 
-#### `list view`
+#### 🔸 list view`
 
 ```
 ingitdb list view [--path=PATH] [--in=REGEXP] [--filter-name=PATTERN]
@@ -432,14 +432,14 @@ Lists all view definitions in the database.
 **Examples:**
 
 ```shell
-# 📘 List all views
+# 🧾 List all views
 ingitdb list view
 
-# 📘 List views under a specific path
+# 🔁 List views under a specific path
 ingitdb list view --in='countries/.*'
 ```
 
-#### `list subscribers`
+#### 🔸 list subscribers`
 
 ```
 ingitdb list subscribers [--path=PATH] [--in=REGEXP] [--filter-name=PATTERN]
@@ -459,7 +459,7 @@ ingitdb list subscribers --filter-name='*webhook*'
 
 ---
 
-### `find` — search records by value *(not yet implemented)*
+### 🔹 find` — search records by value *(not yet implemented)*
 
 ```
 ingitdb find [--path=PATH] [--in=REGEXP] [--substr=TEXT] [--re=REGEXP] [--exact=VALUE] [--fields=FIELDS] [--limit=N]
@@ -487,20 +487,20 @@ ingitdb find --substr=Dublin
 # 📘 Regex search with a result cap
 ingitdb find --re='pop.*[0-9]{6,}' --limit=10
 
-# 📘 Search specific fields only
+# 🔁 Search specific fields only
 ingitdb find --substr=Dublin --fields=name,capital
 
-# 📘 Scope search to a sub-path and match a specific field value exactly
+# 🔁 Scope search to a sub-path and match a specific field value exactly
 ingitdb find --exact=Ireland --in='countries/.*' --fields=country
 ```
 
 ---
 
-### `delete` — delete database objects
+### 🔹 delete` — delete database objects
 
 Top-level command with four subcommands. `delete record` is implemented; the rest are planned.
 
-#### `delete record`
+#### 🔸 delete record`
 
 ```
 ingitdb delete record --id=ID [--path=PATH]
@@ -523,14 +523,14 @@ Deletes a single record by ID. For `SingleRecord` collections, the record file i
 # 📘 Delete a record locally
 ingitdb delete record --id=countries/ie
 
-# 📘 Delete a record in a GitHub repository
+# 🐙 Delete a record in a GitHub repository
 export GITHUB_TOKEN=ghp_...
 ingitdb delete record --github=myorg/mydb --id=countries/ie
 ```
 
 The following subcommands are planned but not yet implemented:
 
-#### `delete collection`
+#### ⚙️ delete collection`
 
 ```
 ingitdb delete collection --collection=ID [--path=PATH]
@@ -549,7 +549,7 @@ Deletes a collection definition and all of its record files.
 ingitdb delete collection --collection=countries.counties.dublin
 ```
 
-#### `delete view`
+#### 🔸 delete view`
 
 ```
 ingitdb delete view --view=ID [--path=PATH]
@@ -568,7 +568,7 @@ Deletes a view definition and removes its materialised output files.
 ingitdb delete view --view=by_status
 ```
 
-#### `delete records`
+#### 🔸 delete records`
 
 ```
 ingitdb delete records --collection=ID [--path=PATH] [--in=REGEXP] [--filter-name=PATTERN]
@@ -591,7 +591,7 @@ ingitdb delete records --collection=countries.counties --filter-name='*old*'
 
 ---
 
-### `truncate` — remove all records from a collection *(not yet implemented)*
+### ⚙️ truncate` — remove all records from a collection *(not yet implemented)*
 
 ```
 ingitdb truncate --collection=ID [--path=PATH]
@@ -612,7 +612,7 @@ ingitdb truncate --collection=countries.counties
 
 ---
 
-### `migrate` — migrate data between schema versions *(not yet implemented)*
+### 🔁 migrate` — migrate data between schema versions *(not yet implemented)*
 
 ```
 ingitdb migrate --from=VERSION --to=VERSION --target=TARGET \
@@ -632,12 +632,12 @@ ingitdb migrate --from=VERSION --to=VERSION --target=TARGET \
 **Examples:**
 
 ```shell
-# 📘 Migrate all collections from v1 to v2
+# ⚙️ Migrate all collections from v1 to v2
 ingitdb migrate --from=v1 --to=v2 --target=production
 
-# 📘 Migrate specific collections only
+# ⚙️ Migrate specific collections only
 ingitdb migrate --from=v1 --to=v2 --target=production --collections=tasks,users
 
-# 📘 Write migrated records to a staging directory
+# 🔁 Write migrated records to a staging directory
 ingitdb migrate --from=v1 --to=v2 --target=production --output-dir=/tmp/migration
 ```

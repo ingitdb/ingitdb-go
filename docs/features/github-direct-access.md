@@ -1,4 +1,4 @@
-# 📘 GitHub Direct Access
+# 🐙 GitHub Direct Access
 
 inGitDB can read and write records stored in any GitHub repository without requiring a local
 clone. A single flag — `--github=owner/repo` — replaces `--path` and routes all file I/O
@@ -15,7 +15,7 @@ remote repository automatically.
 
 ---
 
-## 📂 The `--github` flag format
+## 🐙 The `--github` flag format
 
 ```
 --github=owner/repo
@@ -72,7 +72,7 @@ ingitdb read record --github=owner/repo --token=ghp_... --id=countries/ie
 
 When both are set, `--token` takes precedence over `GITHUB_TOKEN`.
 
-### 🔹 Creating a GitHub Personal Access Token
+### 🐙 Creating a GitHub Personal Access Token
 
 1. Go to **GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens**.
 2. Click **Generate new token**.
@@ -86,7 +86,7 @@ Classic tokens with the `repo` scope also work but grant broader access than fin
 
 ---
 
-## 📂 Supported commands
+## 🖥️ Supported commands
 
 | Command | `--github` | `--token` | Auth required? |
 |---------|-----------|-----------|----------------|
@@ -102,7 +102,7 @@ Classic tokens with the `repo` scope also work but grant broader access than fin
 
 ## 📂 Read operations
 
-### `read record`
+### 🔹 read record`
 
 ```shell
 ingitdb read record --github=owner/repo[@ref] --id=collection/key [--format=yaml|json] [--token=TOKEN]
@@ -143,7 +143,7 @@ title: Active
 }
 ```
 
-### `list collections`
+### ⚙️ list collections`
 
 ```shell
 ingitdb list collections --github=owner/repo[@ref] [--token=TOKEN]
@@ -181,7 +181,7 @@ from the remote repository, then calls the GitHub Contents API to create, update
 record file. Every successful write lands as a single commit on the target branch (the `@ref`
 specified in `--github`, or the repository's default branch).
 
-### `create record`
+### 🔹 create record`
 
 Creates a new record. Fails if a record with the same key already exists.
 
@@ -210,11 +210,11 @@ ingitdb create record --github=myorg/mydb --id=countries/ie --data='{name: Irela
 ingitdb create record --github=myorg/mydb --id=countries/ie \
   --data='{name: Ireland, capital: Dublin, population: 5000000}'
 
-# 📘 Target a specific branch
+# 🔁 Target a specific branch
 ingitdb create record --github=myorg/mydb@staging --id=countries/ie --data='{name: Ireland}'
 ```
 
-### `update record`
+### 🔹 update record`
 
 Updates fields of an existing record. Uses patch semantics: only the fields supplied in `--set`
 are changed; all other fields in the record are preserved.
@@ -243,7 +243,7 @@ ingitdb update record --github=myorg/mydb --id=countries/ie \
   --set='{capital: Dublin, population: 5100000}'
 ```
 
-### `delete record`
+### 🔹 delete record`
 
 Deletes a record. For `SingleRecord` collections, the record file is removed. For
 `MapOfIDRecords` collections, the key is removed from the shared map file.

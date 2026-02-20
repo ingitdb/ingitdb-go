@@ -1,4 +1,4 @@
-# 📘 Contributing to inGitDB
+# 🤝 Contributing to inGitDB
 
 Thank you for your interest in contributing to inGitDB! We welcome contributions from everyone.
 
@@ -78,7 +78,7 @@ To build the executable:
 go build -o ingitdb ./cmd/ingitdb
 ```
 
-## 📂 Coding Standards
+## 📏 Coding Standards
 
 Please read [our guidelines](GUIDELINES.md) and follow our [coding standards](CODING_STANDARDS.md).
 

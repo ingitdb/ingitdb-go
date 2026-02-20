@@ -1,4 +1,4 @@
-# 📘 inGitDB Watcher Component
+# 🧩 inGitDB Watcher Component
 
 Watches an inGitDB directory for file-system changes, maps each changed path to a record event, and delivers those events to registered handlers.
 

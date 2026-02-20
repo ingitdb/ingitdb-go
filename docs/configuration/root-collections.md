@@ -1,7 +1,7 @@
-# 📘 inGitDB Repository Configuration - Root Collections
+# ⚙️ inGitDB Repository Configuration - Root Collections
 
 ```yaml
-# 📘 Each entry maps exactly one collection ID to one collection directory.
+# ⚙️ Each entry maps exactly one collection ID to one collection directory.
 rootCollections:
   countries: geo/countries
   todo.tags: todo/tags

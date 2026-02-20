@@ -1,4 +1,4 @@
-# 📘 inGitDB CLI Roadmap
+# 🖥️ inGitDB CLI Roadmap
 
 ## 📂 Vision
 
@@ -20,7 +20,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## 📂 Phase 1: Validator + Materialized Views
+## 🧩 Phase 1: Validator + Materialized Views
 
 **Goal:** Reliable, fast schema and data validation with materialized views rebuilt as part of the same pass.
 
@@ -60,7 +60,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## 📂 Phase 4: Watcher
+## 🧩 Phase 4: Watcher
 
 **Goal:** Real-time visibility into record changes as they happen on the file system.
 
@@ -84,7 +84,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## 📂 Phase 6: MCP Server
+## 🤖 Phase 6: MCP Server
 
 **Goal:** Expose inGitDB to AI agents via the Model Context Protocol (MCP).
 
@@ -119,7 +119,7 @@ A CLI tool that turns a Git repository into a fully-featured, AI-friendly databa
 
 ---
 
-## 📂 Phase 9: Migration Script Generator
+## 🔁 Phase 9: Migration Script Generator
 
 **Goal:** Generate forward and rollback migration scripts to sync a target database with a desired inGitDB version.
 

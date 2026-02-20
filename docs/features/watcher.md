@@ -1,4 +1,4 @@
-# 📘 inGitDB Watcher
+# 🧩 inGitDB Watcher
 
 The watcher monitors an inGitDB directory for file-system changes and emits structured events describing what changed and how.
 
@@ -32,7 +32,7 @@ Record /countries/gb/cities/london: deleted
 {"type":"deleted","record":"/countries/gb/cities/london"}
 ```
 
-## 📂 CLI
+## 🖥️ CLI
 
 ```
 ingitdb watch [--path=PATH] [--format=text|json]

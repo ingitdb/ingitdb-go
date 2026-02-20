@@ -1,4 +1,4 @@
-# 📘 Collection Definition File (`.ingitdb-collection.yaml`)
+# ⚙️ Collection Definition File (`.ingitdb-collection.yaml`)
 
 Each collection directory contains an `.ingitdb-collection.yaml` file that describes
 how records are stored and what columns (fields) they have.
@@ -16,7 +16,7 @@ how records are stored and what columns (fields) they have.
 
 ---
 
-## `record_file`
+## 📂 record_file`
 
 Controls how records are physically stored.
 
@@ -26,9 +26,9 @@ Controls how records are physically stored.
 | `format` | `string`       | File format: `json`, `yaml`, or `yml` |
 | `type`   | `RecordType`   | Layout of records within the file (see below) |
 
-### `record_file.type` values
+### 🔹 record_file.type` values
 
-#### `map[string]any` — one record per file
+#### 🔸 map[string]any` — one record per file
 
 Each record is a separate file. The file name typically contains `{key}`.
 
@@ -47,7 +47,7 @@ File `$records/ireland.json`:
 }
 ```
 
-#### `[]map[string]any` — list of records in one file
+#### 🔸 map[string]any` — list of records in one file
 
 All records are stored as an array (or YAML list) in a single file.
 
@@ -66,7 +66,7 @@ File `statuses.yaml`:
   title: In Progress
 ```
 
-#### `map[string]map[string]any` — dictionary of records
+#### 🔸 map[string]map[string]any` — dictionary of records
 
 All records are stored in one file as a dictionary where the top-level key is
 the record ID.
@@ -86,7 +86,7 @@ in_progress:
   titles: {en: In Progress, ru: В работе}
 ```
 
-#### `map[id]map[field]any` — all records in one file keyed by ID
+#### 🔸 map[id]map[field]any` — all records in one file keyed by ID
 
 Similar to `map[string]map[string]any` but used when the file name is static
 (no `{key}` placeholder). Top-level keys are record IDs, second-level keys are
@@ -116,7 +116,7 @@ File `tags.json`:
 
 ---
 
-## `columns`
+## 📂 columns`
 
 Each entry under `columns` is a **ColumnDef** keyed by the field name.
 

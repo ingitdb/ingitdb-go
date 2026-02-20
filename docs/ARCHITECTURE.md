@@ -1,4 +1,4 @@
-# 📘 Architecture of ingitdb CLI
+# 🖥️ Architecture of ingitdb CLI
 
 ## 📂 Overview
 
@@ -65,7 +65,7 @@ columns:
 
 **View definitions** (`.ingitdb-view.<name>.yaml`) declare how to partition and render records into materialized view files under `$views/`.
 
-## 📂 Component Architecture
+## 🏗️ Component Architecture
 
 ```
 CLI (cmd/ingitdb)
@@ -109,7 +109,7 @@ The **Scanner** (see `docs/components/scanner.md`) orchestrates the full pipelin
 | `cmd/ingitdb/commands` | One file per CLI command. Each exports a single `*cli.Command` constructor. Subcommands are unexported functions named after the subcommand (parent-prefixed on name collisions). |
 | `cmd/ingitdb` | CLI entry point only: assembles the `commands` slice, injects dependencies, and handles process exit. |
 
-## 📂 Key Design Decisions
+## 🔁 Key Design Decisions
 
 **Commands package.** Each top-level CLI command lives in its own file under `cmd/ingitdb/commands/` and exposes a single exported constructor (e.g. `Validate(...)`, `List()`, `Find()`). Subcommands are unexported functions whose names match the subcommand name; when the same subcommand name appears under multiple parents (e.g. `view` in both `list` and `delete`), the function is prefixed with the parent name (`listView`, `deleteView`). `cmd/ingitdb/main.go` is reduced to wiring and process-level concerns.
 

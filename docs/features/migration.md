@@ -1,4 +1,4 @@
-# 📘 Data Migration Script Generator
+# 🔁 Data Migration Script Generator
 
 Generates migration scripts to bring a target database in sync with a desired version of an inGitDB database. Also generates a rollback script.
 
@@ -6,7 +6,7 @@ Generates migration scripts to bring a target database in sync with a desired ve
 
 When inGitDB data is the source of truth and a target database (e.g. PostgreSQL, MySQL) must be kept in sync, the migration generator computes the diff between two inGitDB versions and produces the scripts needed to apply or revert that change.
 
-## 📂 CLI
+## 🖥️ CLI
 
 ```
 ingitdb migrate [--path=PATH] --from=<git-sha> --to=<git-sha> --target=<connection-string> [--format=SQL] [--collections=<col1,col2>] [--output-dir=./migrations/]
