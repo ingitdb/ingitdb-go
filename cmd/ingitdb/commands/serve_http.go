@@ -28,7 +28,12 @@ func newHTTPHandler(apiDomains, mcpDomains []string) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := r.Host
+		// Try to get the original host from X-Forwarded-Host header (set by Firebase Hosting)
+		// Fall back to Host header if X-Forwarded-Host is not present
+		host := r.Header.Get("X-Forwarded-Host")
+		if host == "" {
+			host = r.Host
+		}
 		if h, _, err := net.SplitHostPort(host); err == nil {
 			host = h
 		}
@@ -36,7 +41,7 @@ func newHTTPHandler(apiDomains, mcpDomains []string) http.Handler {
 		if mcpDomainMap[host] {
 			mcpHandler.ServeHTTP(w, r)
 		} else {
-			// Route to API handler for all other requests (including Firebase Hosting rewrites)
+			// Route to API handler for all other requests (API domains and Firebase rewrites)
 			apiHandler.ServeHTTP(w, r)
 		}
 	})

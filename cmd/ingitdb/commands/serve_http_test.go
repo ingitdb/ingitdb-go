@@ -6,16 +6,16 @@ import (
 	"testing"
 )
 
-func TestNewHTTPHandler_DefaultHost_Returns404(t *testing.T) {
+func TestNewHTTPHandler_DefaultHost_RoutesAPI(t *testing.T) {
 	t.Parallel()
 	handler := newHTTPHandler([]string{"api.ingitdb.com"}, []string{"mcp.ingitdb.com"})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "www.example.com"
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	// Static files are served by Firebase hosting, so default host should return 404.
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 for default host, got %d", w.Code)
+	// Unknown hosts are routed to API handler, which serves index.html (200).
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for default host (routed to API), got %d", w.Code)
 	}
 }
 
