@@ -4,7 +4,7 @@ This document provides project-specific information for developers and AI agents
 
 Refer to [documentation](.) to learn about architecture, features, components, etc. of the `ingitdb` CLI.
 
-## ⚙️ 1. Build and Configuration
+## 📂 1. Build and Configuration
 
 - **Go Version**: Ensure you are using the Go version specified in `go.mod` (or later).
 - **Dependencies**: Managed via Go modules. Run `go mod download` to fetch them.
@@ -18,12 +18,12 @@ Refer to [documentation](.) to learn about architecture, features, components, e
   go run ./cmd/ingitdb
   ```
 
-## 📂 2. Development Information
+## 🧑‍💻 2. Development Information
 
 - All code must follow our [coding standards](CODING_STANDARDS.md).
 - See [Architecture](ARCHITECTURE.md) for the package map and design decisions.
 
-## 📂 3. Testing Information
+## 🧪 3. Testing Information
 
 inGitDB aims for 100% test coverage.
 
