@@ -5,7 +5,6 @@
       "public": "server/static",
       "ignore": [
         "firebase.json",
-        "deploy.sh",
         "**/.*",
         "**/node_modules/**"
       ],
@@ -19,7 +18,7 @@
         }
       ],
       "cleanUrls": true,
-      "trailingSlashBehavior": "REMOVE"
+      "trailingSlash": false
     },
     {
       "target": "ingitdb-com",
