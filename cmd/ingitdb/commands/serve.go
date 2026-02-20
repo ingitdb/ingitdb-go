@@ -33,6 +33,11 @@ func Serve(
 				Name:  "http",
 				Usage: "enable HTTP API server",
 			},
+			&cli.StringFlag{
+				Name:  "api-port",
+				Value: "8080",
+				Usage: "port for HTTP API server",
+			},
 			&cli.BoolFlag{
 				Name:  "watcher",
 				Usage: "enable file watcher",
@@ -45,6 +50,10 @@ func Serve(
 					return err
 				}
 				return serveMCP(ctx, dirPath, readDefinition, newDB, logf)
+			}
+			if cmd.Bool("http") {
+				port := cmd.String("api-port")
+				return serveHTTP(ctx, port, logf)
 			}
 			return cli.Exit("no server mode specified; use --mcp, --http, or --watcher", 1)
 		},

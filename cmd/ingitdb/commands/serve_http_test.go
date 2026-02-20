@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"net/http"
@@ -6,23 +6,22 @@ import (
 	"testing"
 )
 
-func TestNewHandler_DefaultHost_ServesStatic(t *testing.T) {
+func TestNewHTTPHandler_DefaultHost_Returns404(t *testing.T) {
 	t.Parallel()
-	handler := newHandler()
+	handler := newHTTPHandler()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "www.example.com"
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	// ServeFile redirects for "/" to "/index.html" with a 301 or sends 200.
-	// Either way the handler should not return 404.
-	if w.Code == http.StatusNotFound {
-		t.Fatalf("expected non-404 for default host, got %d", w.Code)
+	// Static files are served by Firebase hosting, so default host should return 404.
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for default host, got %d", w.Code)
 	}
 }
 
-func TestNewHandler_APIHost_RoutesAPI(t *testing.T) {
+func TestNewHTTPHandler_APIHost_RoutesAPI(t *testing.T) {
 	t.Parallel()
-	handler := newHandler()
+	handler := newHTTPHandler()
 	// An invalid request to a valid API path without required params should
 	// return 400 (Bad Request), not 404, confirming routing works.
 	req := httptest.NewRequest(http.MethodGet, "/ingitdb/v0/collections", nil)
@@ -34,9 +33,9 @@ func TestNewHandler_APIHost_RoutesAPI(t *testing.T) {
 	}
 }
 
-func TestNewHandler_MCPHost_RoutesMCP(t *testing.T) {
+func TestNewHTTPHandler_MCPHost_RoutesMCP(t *testing.T) {
 	t.Parallel()
-	handler := newHandler()
+	handler := newHTTPHandler()
 	// A GET to /mcp should return 405 Method Not Allowed (httprouter only allows
 	// POST for /mcp), confirming routing reaches the MCP handler.
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
@@ -48,9 +47,9 @@ func TestNewHandler_MCPHost_RoutesMCP(t *testing.T) {
 	}
 }
 
-func TestNewHandler_APIHostWithPort(t *testing.T) {
+func TestNewHTTPHandler_APIHostWithPort(t *testing.T) {
 	t.Parallel()
-	handler := newHandler()
+	handler := newHTTPHandler()
 	req := httptest.NewRequest(http.MethodGet, "/ingitdb/v0/collections", nil)
 	req.Host = "api.ingitdb.com:443"
 	w := httptest.NewRecorder()
