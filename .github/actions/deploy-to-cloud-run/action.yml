@@ -68,12 +68,6 @@ runs:
           exit 1
         fi
 
-    - name: Checkout
-      uses: actions/checkout@v6
-      with:
-        sparse-checkout: server/Dockerfile
-        sparse-checkout-cone-mode: false
-
     - name: Download latest release binary
       id: release
       shell: bash
