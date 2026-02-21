@@ -88,26 +88,43 @@ Apple Developer Portal
 
 ## Phase 2: Prepare Secrets for CI
 
-### [CLI] 2.1 Encode and store the 5 GitHub Secrets ⏱ ~15 min
+### [CLI] 2.1 Strip the CA chain from the .p12 ⏱ ~5 min
 
-Run the following commands from your Mac (requires `gh` CLI authenticated to the ingitdb org):
+Go's x509 parser rejects Apple Developer ID certificates that embed the CA chain because they
+contain Apple-proprietary critical extensions. Strip the chain before encoding:
 
 ```bash
-# Encode the p12 certificate to base64
-base64 -i cert.p12 | tr -d '\n' > cert_p12_b64.txt
+# Extract leaf cert only — prompts for your Keychain export password
+openssl pkcs12 -in cert.p12 -clcerts -nokeys -out cert_leaf.pem -legacy
+
+# Extract private key — prompts again
+openssl pkcs12 -in cert.p12 -nocerts -nodes -out private_key.pem -legacy
+
+# Re-package without chain — prompts for a new export password (save this one!)
+openssl pkcs12 -export -in cert_leaf.pem -inkey private_key.pem -out cert_clean.p12 -legacy
+
+# Clean up intermediates
+rm cert_leaf.pem private_key.pem
+```
+
+> **Why no `-passin`/`-passout` flags?** Passing passwords via flags writes them to shell
+> history and exposes them in `ps` output. Letting openssl prompt interactively is safer.
+
+### [CLI] 2.2 Encode and store the 5 GitHub Secrets ⏱ ~10 min
+
+```bash
+# Encode the cleaned p12 certificate to base64
+base64 -i cert_clean.p12 | tr -d '\n' | \
+  gh secret set MACOS_SIGN_P12 --repo ingitdb/ingitdb-cli
+
+# Set remaining secrets — each prompts for input
+gh secret set MACOS_SIGN_PASSWORD --repo ingitdb/ingitdb-cli  # password set above
+gh secret set NOTARIZE_ISSUER_ID  --repo ingitdb/ingitdb-cli
+gh secret set NOTARIZE_KEY_ID     --repo ingitdb/ingitdb-cli
 
 # Encode the .p8 API key to base64
-base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' > key_p8_b64.txt
-
-# Set GitHub Secrets (replace placeholders with real values)
-gh secret set MACOS_SIGN_P12      --repo ingitdb/ingitdb-cli < cert_p12_b64.txt
-gh secret set MACOS_SIGN_PASSWORD --repo ingitdb/ingitdb-cli  # prompts for input
-gh secret set NOTARIZE_ISSUER_ID  --repo ingitdb/ingitdb-cli  # prompts for input
-gh secret set NOTARIZE_KEY_ID     --repo ingitdb/ingitdb-cli  # prompts for input
-gh secret set NOTARIZE_KEY        --repo ingitdb/ingitdb-cli < key_p8_b64.txt
-
-# Clean up temporary files
-rm cert_p12_b64.txt key_p8_b64.txt
+base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' | \
+  gh secret set NOTARIZE_KEY --repo ingitdb/ingitdb-cli
 ```
 
 | Secret name | Value |
@@ -255,6 +272,13 @@ After `brew upgrade ingitdb`, the new version should also open without a Gatekee
 ---
 
 ## Troubleshooting
+
+### "failed to verify certificate chain: x509: unhandled critical extension"
+
+Apple Developer ID certificates embed the CA chain, which contains Apple-proprietary critical
+extensions that Go's x509 parser rejects per RFC 5280. Strip the chain before encoding the `.p12`
+(see Phase 2.1). Do not use `-passin pass:...` flags — let openssl prompt interactively to avoid
+writing passwords to shell history.
 
 ### "errSecInternalComponent" during signing
 
