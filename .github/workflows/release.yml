@@ -1,14 +1,33 @@
 name: Release
 
 on:
-  workflow_dispatch:
-
+  workflow_dispatch: # Allows manual trigger from Actions tab
   push:
-    tags:
-      - 'v*'
+    tags: [ 'v*' ]
+  workflow_run:
+    workflows: [ "CI (build, lint, test)" ]
+    types: [ completed ]
+    branches: [ 'v*' ]
 
 jobs:
+  bump_version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and push tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.INGITDB_GORELEASER_GITHUB_TOKEN }}
+          default_bump: false
+
   release:
+    needs:
+      - bump_version
     runs-on: ubuntu-latest
     permissions:
       contents: write

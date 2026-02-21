@@ -2,10 +2,10 @@ name: Deploy server
 
 on:
   workflow_dispatch: # Allows manual trigger from Actions tab
-  workflow_run:
-    workflows: ["Release"]
-    types: [completed]
-    branches: ['v*']
+#  workflow_run:
+#    workflows: ["Release"]
+#    types: [completed]
+#    branches: ['v*']
 
 jobs:
   deploy:
