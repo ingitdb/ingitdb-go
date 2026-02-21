@@ -57,15 +57,25 @@ Apple Developer Portal
 
 ### [MANUAL] 1.1 Create Developer ID Application Certificate ⏱ ~30 min
 
+> **Important:** You need a **Developer ID Application** certificate — not "Apple Development"
+> (used for Xcode device testing). Using the wrong type causes a signing failure.
+
 1. Open **Keychain Access** on your Mac → **Keychain Access** menu → **Certificate Assistant** →
    **Request a Certificate from a Certificate Authority**.
 2. Enter your email, select **Saved to disk**, click **Continue**. Save `CertificateSigningRequest.certSigningRequest`.
 3. Go to [https://developer.apple.com/account/resources/certificates/list](https://developer.apple.com/account/resources/certificates/list).
 4. Click **+** → choose **Developer ID Application** → **Continue**.
 5. Upload the `.certSigningRequest` file → **Continue** → **Download** the `.cer` file.
-6. Double-click the downloaded `.cer` to install it into Keychain Access.
-7. Verify it appears in **Keychain Access → My Certificates** as
-   `Developer ID Application: <Your Name> (<TEAM_ID>)`.
+6. Install the `.cer` into your login keychain — do **not** double-click (macOS may reject it as a
+   root cert). Use the terminal instead:
+   ```bash
+   security import developerID_application.cer -k ~/Library/Keychains/login.keychain-db
+   ```
+7. Verify it appears correctly:
+   ```bash
+   security find-identity -v -p codesigning
+   # expect: "Developer ID Application: <Your Name> (<TEAM_ID>)"
+   ```
 
 ### [MANUAL] 1.2 Export Certificate as .p12 from Keychain Access ⏱ ~10 min
 
@@ -88,37 +98,39 @@ Apple Developer Portal
 
 ## Phase 2: Prepare Secrets for CI
 
-### [CLI] 2.1 Strip the CA chain from the .p12 ⏱ ~5 min
+### [CLI] 2.1 Attach the Apple certificate chain using quill ⏱ ~10 min
 
-Go's x509 parser rejects Apple Developer ID certificates that embed the CA chain because they
-contain Apple-proprietary critical extensions. Strip the chain before encoding:
+GoReleaser uses [Quill](https://github.com/anchore/quill) to sign macOS binaries. Quill requires
+the full Apple certificate chain to be embedded in the `.p12` file. The Keychain export only
+includes the leaf certificate, so run `quill p12 attach-chain` to embed the chain:
 
 ```bash
-# Extract leaf cert only — prompts for your Keychain export password
-openssl pkcs12 -in cert.p12 -clcerts -nokeys -out cert_leaf.pem -legacy
+# Install quill (no Homebrew tap — download directly)
+curl -L https://github.com/anchore/quill/releases/download/v0.5.1/quill_0.5.1_darwin_arm64.tar.gz \
+  | tar -xz quill
+sudo mv quill /usr/local/bin/quill
 
-# Extract private key — prompts again
-openssl pkcs12 -in cert.p12 -nocerts -nodes -out private_key.pem -legacy
+# Set the p12 password without it touching shell history
+read -s QUILL_P12_PASSWORD && export QUILL_P12_PASSWORD
 
-# Re-package without chain — prompts for a new export password (save this one!)
-openssl pkcs12 -export -in cert_leaf.pem -inkey private_key.pem -out cert_clean.p12 -legacy
-
-# Clean up intermediates
-rm cert_leaf.pem private_key.pem
+# Attach the chain — creates cert-with-chain.p12
+quill p12 attach-chain cert.p12
+# Output should show Signing Certificate + Certificate Chain (2 certs)
+# and end with: Wrote new p12 file ... to "cert-with-chain.p12"
 ```
 
-> **Why no `-passin`/`-passout` flags?** Passing passwords via flags writes them to shell
-> history and exposes them in `ps` output. Letting openssl prompt interactively is safer.
+> **Why not `-passin pass:...`?** Passing passwords via CLI flags writes them to shell history
+> and exposes them in `ps` output. Using `read -s` + env var is safer.
 
 ### [CLI] 2.2 Encode and store the 5 GitHub Secrets ⏱ ~10 min
 
 ```bash
-# Encode the cleaned p12 certificate to base64
-base64 -i cert_clean.p12 | tr -d '\n' | \
+# Encode the chain-attached p12 to base64
+base64 -i cert-with-chain.p12 | tr -d '\n' | \
   gh secret set MACOS_SIGN_P12 --repo ingitdb/ingitdb-cli
 
 # Set remaining secrets — each prompts for input
-gh secret set MACOS_SIGN_PASSWORD --repo ingitdb/ingitdb-cli  # password set above
+gh secret set MACOS_SIGN_PASSWORD --repo ingitdb/ingitdb-cli  # password from export step
 gh secret set NOTARIZE_ISSUER_ID  --repo ingitdb/ingitdb-cli
 gh secret set NOTARIZE_KEY_ID     --repo ingitdb/ingitdb-cli
 
@@ -275,10 +287,19 @@ After `brew upgrade ingitdb`, the new version should also open without a Gatekee
 
 ### "failed to verify certificate chain: x509: unhandled critical extension"
 
-Apple Developer ID certificates embed the CA chain, which contains Apple-proprietary critical
-extensions that Go's x509 parser rejects per RFC 5280. Strip the chain before encoding the `.p12`
-(see Phase 2.1). Do not use `-passin pass:...` flags — let openssl prompt interactively to avoid
-writing passwords to shell history.
+Two possible causes:
+
+1. **Wrong certificate type** — the `.p12` contains an "Apple Development" cert (for Xcode device
+   testing) instead of a "Developer ID Application" cert (for distribution). Check with:
+   ```bash
+   openssl pkcs12 -in cert.p12 -clcerts -nokeys -legacy | openssl x509 -noout -subject
+   # Must show: CN="Developer ID Application: ..."
+   # Not:       CN="Apple Development: ..."
+   ```
+   If wrong, create the correct cert in the Apple Developer Portal (see Phase 1.1).
+
+2. **Missing certificate chain** — the `.p12` was exported without the Apple intermediate certs
+   that Quill needs to verify the chain. Run `quill p12 attach-chain` (see Phase 2.1).
 
 ### "errSecInternalComponent" during signing
 
@@ -325,5 +346,6 @@ binaries, which is expected.
 - [Apple: Notarizing macOS Software Before Distribution](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)
 - [Apple: Creating Distribution-Ready Apps](https://developer.apple.com/documentation/xcode/notarizing_macos_software_before_distribution)
 - [GoReleaser: macOS Notarization](https://goreleaser.com/customization/notarize/)
+- [Anchore Quill: cross-platform macOS code signing](https://github.com/anchore/quill)
 - [xcrun notarytool man page](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution/customizing_the_notarization_workflow)
 - [App Store Connect API Keys](https://developer.apple.com/documentation/appstoreconnectapi/creating_api_keys_for_app_store_connect_api)
