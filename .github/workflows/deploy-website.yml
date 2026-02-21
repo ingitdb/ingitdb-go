@@ -17,43 +17,11 @@ jobs:
       id-token: "write"
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - id: auth
-        name: Authenticate with Google Cloud
-        uses: google-github-actions/auth@v3
+      - name: Deploy website
+        uses: ./.github/actions/deploy-website
         with:
-          service_account: "deployer2gcloud@${{ env.GCLOUD_PROJECT_ID }}.iam.gserviceaccount.com"
-          workload_identity_provider: "projects/152447355531/locations/global/workloadIdentityPools/github/providers/ingitdb"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.2.0
-        with:
-          node-version: "20"
-
-      - name: Get latest Firebase CLI version
-        id: firebase-version
-        run: echo "version=$(npm show firebase-tools version)" >> $GITHUB_OUTPUT
-
-      - name: Cache Firebase CLI
-        id: cache-firebase
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm-firebase
-          key: firebase-tools-${{ steps.firebase-version.outputs.version }}
-
-      - name: Install Firebase CLI
-        if: steps.cache-firebase.outputs.cache-hit != 'true'
-        run: npm install -g --prefix ~/.npm-firebase firebase-tools@${{ steps.firebase-version.outputs.version }}
-
-      - name: Add Firebase CLI to PATH
-        run: echo "$HOME/.npm-firebase/bin" >> $GITHUB_PATH
-
-      - name: Deploy website hosting target
-        run: |
-          firebase deploy \
-            --project "${{ env.GCLOUD_PROJECT_ID }}" \
-            --only "hosting:${{ env.FIREBASE_TARGET }}" \
-            --config server/firebase.json \
-            --non-interactive
+          gcloud_project_id: ${{ env.GCLOUD_PROJECT_ID }}
+          firebase_target: ${{ env.FIREBASE_TARGET }}
+          firebase_config_path: server/firebase.json
+          workload_identity_provider: projects/152447355531/locations/global/workloadIdentityPools/github/providers/ingitdb
+          node_version: "20"

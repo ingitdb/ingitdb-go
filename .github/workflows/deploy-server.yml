@@ -31,115 +31,17 @@ jobs:
       packages: 'read'
 
     steps:
-      - name: Validate required env vars
-        shell: bash
-        run: |
-          set -euo pipefail
-          required_vars=(
-            GCLOUD_PROJECT_ID
-            GCLOUD_REGION
-            SERVICE_NAME
-            INGITDB_GITHUB_OAUTH_CLIENT_ID
-            INGITDB_GITHUB_OAUTH_CALLBACK_URL
-            INGITDB_AUTH_COOKIE_DOMAIN
-            INGITDB_AUTH_API_BASE_URL
-            GCP_OAUTH_CLIENT_SECRET_NAME
-          )
-          missing=()
-          for var_name in "${required_vars[@]}"; do
-            if [[ -z "${!var_name:-}" ]]; then
-              missing+=("$var_name")
-            fi
-          done
-          if (( ${#missing[@]} > 0 )); then
-            echo "::error::Missing required env vars: ${missing[*]}"
-            exit 1
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          sparse-checkout: server/Dockerfile
-          sparse-checkout-cone-mode: false
-
-      - name: Download latest release binary
-        id: release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION=$(gh release view --repo ${{ github.repository }} --json tagName --jq '.tagName')
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          ASSET="ingitdb_${VERSION#v}_linux_amd64.tar.gz"
-          echo "asset=${ASSET}" >> $GITHUB_OUTPUT
-          echo "Deploying ${ASSET} (${VERSION})"
-          gh release download "${VERSION}" \
-            --repo ${{ github.repository }} \
-            --pattern "ingitdb_*_linux_amd64.tar.gz" \
-            --output ingitdb_linux_amd64.tar.gz
-          tar -xzf ingitdb_linux_amd64.tar.gz ingitdb
-          chmod +x ingitdb
-
-      - id: auth
-        name: Authenticate with Google Cloud
-        uses: google-github-actions/auth@v3
-        with:
-          service_account: 'deployer2gcloud@${{ env.GCLOUD_PROJECT_ID }}.iam.gserviceaccount.com'
-          workload_identity_provider: 'projects/152447355531/locations/global/workloadIdentityPools/github/providers/ingitdb'
-
-      - name: Setup Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
-        with:
-          project_id: ${{ env.GCLOUD_PROJECT_ID }}
-
-      - name: Check if image already exists
-        id: image-check
-        run: |
-          IMAGE=${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ steps.release.outputs.version }}
-          if gcloud artifacts docker images describe "${IMAGE}" --project=${{ env.GCLOUD_PROJECT_ID }} > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Image ${IMAGE} already exists — skipping build/push/deploy"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Image ${IMAGE} not found — will build and deploy"
-          fi
-
-      - name: Configure Docker for Artifact Registry
-        if: steps.image-check.outputs.exists != 'true'
-        run: gcloud auth configure-docker ${{ env.GCLOUD_REGION }}-docker.pkg.dev
-
-      - name: Build Docker image
-        if: steps.image-check.outputs.exists != 'true'
-        run: |
-          docker build \
-            -f server/Dockerfile \
-            -t ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ steps.release.outputs.version }} \
-            -t ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:latest \
-            .
-
-      - name: Push Docker image
-        if: steps.image-check.outputs.exists != 'true'
-        run: |
-          docker push ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ steps.release.outputs.version }}
-          docker push ${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:latest
-
       - name: Deploy to Cloud Run
-        if: steps.image-check.outputs.exists != 'true'
-        run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image=${{ env.GCLOUD_REGION }}-docker.pkg.dev/${{ env.GCLOUD_PROJECT_ID }}/cloud-run/${{ env.SERVICE_NAME }}:${{ steps.release.outputs.version }} \
-            --platform=managed \
-            --region=${{ env.GCLOUD_REGION }} \
-            --allow-unauthenticated \
-            --min-instances=0 \
-            --max-instances=2 \
-            --memory=512Mi \
-            --cpu=1 \
-            --timeout=300 \
-            --set-env-vars=INGITDB_GITHUB_OAUTH_CLIENT_ID=${{ env.INGITDB_GITHUB_OAUTH_CLIENT_ID }},INGITDB_GITHUB_OAUTH_CALLBACK_URL=${{ env.INGITDB_GITHUB_OAUTH_CALLBACK_URL }},INGITDB_AUTH_COOKIE_DOMAIN=${{ env.INGITDB_AUTH_COOKIE_DOMAIN }},INGITDB_AUTH_API_BASE_URL=${{ env.INGITDB_AUTH_API_BASE_URL }},INGITDB_AUTH_COOKIE_NAME=${{ env.INGITDB_AUTH_COOKIE_NAME }},INGITDB_AUTH_COOKIE_SECURE=${{ env.INGITDB_AUTH_COOKIE_SECURE }} \
-            --set-secrets=INGITDB_GITHUB_OAUTH_CLIENT_SECRET=${{ env.GCP_OAUTH_CLIENT_SECRET_NAME }}:latest \
-            --project=${{ env.GCLOUD_PROJECT_ID }}
-
-      - name: Show service URL
-        run: |
-          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.GCLOUD_REGION }} --format='value(status.url)')
-          echo "Service deployed to: $SERVICE_URL"
+        uses: ./.github/actions/deploy-to-cloud-run
+        with:
+          gcloud_project_id: ${{ env.GCLOUD_PROJECT_ID }}
+          gcloud_region: ${{ env.GCLOUD_REGION }}
+          service_name: ${{ env.SERVICE_NAME }}
+          ingitdb_github_oauth_client_id: ${{ env.INGITDB_GITHUB_OAUTH_CLIENT_ID }}
+          ingitdb_github_oauth_callback_url: ${{ env.INGITDB_GITHUB_OAUTH_CALLBACK_URL }}
+          ingitdb_auth_cookie_domain: ${{ env.INGITDB_AUTH_COOKIE_DOMAIN }}
+          ingitdb_auth_api_base_url: ${{ env.INGITDB_AUTH_API_BASE_URL }}
+          ingitdb_auth_cookie_name: ${{ env.INGITDB_AUTH_COOKIE_NAME }}
+          ingitdb_auth_cookie_secure: ${{ env.INGITDB_AUTH_COOKIE_SECURE }}
+          gcp_oauth_client_secret_name: ${{ env.GCP_OAUTH_CLIENT_SECRET_NAME }}
+          workload_identity_provider: projects/152447355531/locations/global/workloadIdentityPools/github/providers/ingitdb

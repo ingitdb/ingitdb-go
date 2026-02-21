@@ -1,0 +1,90 @@
+name: Deploy Website
+description: Deploy inGitDB website to Firebase Hosting
+
+inputs:
+  gcloud_project_id:
+    description: Google Cloud project ID
+    required: true
+  firebase_target:
+    description: Firebase hosting target name
+    required: true
+  firebase_config_path:
+    description: Path to firebase.json configuration file
+    required: false
+    default: server/firebase.json
+  workload_identity_provider:
+    description: Workload identity provider URI
+    required: true
+  node_version:
+    description: Node.js version to use
+    required: false
+    default: "20"
+
+runs:
+  using: composite
+  steps:
+    - name: Validate required inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        required_inputs=(
+          "gcloud_project_id"
+          "firebase_target"
+          "workload_identity_provider"
+        )
+        missing=()
+        for input_name in "${required_inputs[@]}"; do
+          input_var="INPUT_${input_name^^}"
+          if [[ -z "${!input_var:-}" ]]; then
+            missing+=("$input_name")
+          fi
+        done
+        if (( ${#missing[@]} > 0 )); then
+          echo "::error::Missing required inputs: ${missing[*]}"
+          exit 1
+        fi
+
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - id: auth
+      name: Authenticate with Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        service_account: "deployer2gcloud@${{ inputs.gcloud_project_id }}.iam.gserviceaccount.com"
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6.2.0
+      with:
+        node-version: ${{ inputs.node_version }}
+
+    - name: Get latest Firebase CLI version
+      id: firebase-version
+      shell: bash
+      run: echo "version=$(npm show firebase-tools version)" >> $GITHUB_OUTPUT
+
+    - name: Cache Firebase CLI
+      id: cache-firebase
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm-firebase
+        key: firebase-tools-${{ steps.firebase-version.outputs.version }}
+
+    - name: Install Firebase CLI
+      if: steps.cache-firebase.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm install -g --prefix ~/.npm-firebase firebase-tools@${{ steps.firebase-version.outputs.version }}
+
+    - name: Add Firebase CLI to PATH
+      shell: bash
+      run: echo "$HOME/.npm-firebase/bin" >> $GITHUB_PATH
+
+    - name: Deploy website hosting target
+      shell: bash
+      run: |
+        firebase deploy \
+          --project "${{ inputs.gcloud_project_id }}" \
+          --only "hosting:${{ inputs.firebase_target }}" \
+          --config ${{ inputs.firebase_config_path }} \
+          --non-interactive
