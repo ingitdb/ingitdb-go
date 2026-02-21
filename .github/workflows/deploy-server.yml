@@ -31,6 +31,8 @@ jobs:
       packages: 'read'
 
     steps:
+      - uses: actions/checkout@v6
+        
       - name: Deploy to Cloud Run
         uses: ./.github/actions/deploy-to-cloud-run
         with:

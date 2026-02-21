@@ -17,6 +17,8 @@ jobs:
       id-token: "write"
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: Deploy website
         uses: ./.github/actions/deploy-website
         with:
