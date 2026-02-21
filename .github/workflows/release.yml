@@ -71,6 +71,8 @@ jobs:
       packages: 'read'
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: Deploy to Cloud Run
         uses: ./.github/actions/deploy-to-cloud-run
         with:
@@ -101,6 +103,8 @@ jobs:
       id-token: 'write'
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: Deploy website
         uses: ./.github/actions/deploy-website
         with:
