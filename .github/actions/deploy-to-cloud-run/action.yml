@@ -43,6 +43,16 @@ runs:
   steps:
     - name: Validate required inputs
       shell: bash
+      env:
+        INPUT_GCLOUD_PROJECT_ID: ${{ inputs.gcloud_project_id }}
+        INPUT_GCLOUD_REGION: ${{ inputs.gcloud_region }}
+        INPUT_SERVICE_NAME: ${{ inputs.service_name }}
+        INPUT_INGITDB_GITHUB_OAUTH_CLIENT_ID: ${{ inputs.ingitdb_github_oauth_client_id }}
+        INPUT_INGITDB_GITHUB_OAUTH_CALLBACK_URL: ${{ inputs.ingitdb_github_oauth_callback_url }}
+        INPUT_INGITDB_AUTH_COOKIE_DOMAIN: ${{ inputs.ingitdb_auth_cookie_domain }}
+        INPUT_INGITDB_AUTH_API_BASE_URL: ${{ inputs.ingitdb_auth_api_base_url }}
+        INPUT_GCP_OAUTH_CLIENT_SECRET_NAME: ${{ inputs.gcp_oauth_client_secret_name }}
+        INPUT_WORKLOAD_IDENTITY_PROVIDER: ${{ inputs.workload_identity_provider }}
       run: |
         set -euo pipefail
         required_inputs=(

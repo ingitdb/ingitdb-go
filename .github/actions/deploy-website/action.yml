@@ -25,6 +25,10 @@ runs:
   steps:
     - name: Validate required inputs
       shell: bash
+      env:
+        INPUT_GCLOUD_PROJECT_ID: ${{ inputs.gcloud_project_id }}
+        INPUT_FIREBASE_TARGET: ${{ inputs.firebase_target }}
+        INPUT_WORKLOAD_IDENTITY_PROVIDER: ${{ inputs.workload_identity_provider }}
       run: |
         set -euo pipefail
         required_inputs=(
