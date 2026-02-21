@@ -52,7 +52,6 @@ jobs:
     needs:
       - goreleaser
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
     env:
       GCLOUD_PROJECT_ID: ingitdb
@@ -92,7 +91,6 @@ jobs:
     needs:
       - goreleaser
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
     env:
       GCLOUD_PROJECT_ID: ingitdb
