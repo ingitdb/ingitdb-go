@@ -271,15 +271,32 @@ On a Mac that has never run ingitdb before (or after clearing quarantine attribu
 brew tap ingitdb/cli
 brew install ingitdb
 ingitdb version   # should open without any Gatekeeper dialog
+```
 
-# Or download the binary directly and verify:
+For existing installs, always run `brew update` first to refresh the tap index before upgrading:
+
+```bash
+brew update && brew upgrade ingitdb
+ingitdb version
+```
+
+To verify the binary directly:
+
+```bash
+# Download and extract
 tar -xzf ingitdb_*_darwin_arm64.tar.gz
-spctl --assess --verbose ./ingitdb   # expect "accepted"
-codesign --verify --deep --verbose ./ingitdb
+
+# Check Gatekeeper (expect "source=Notarized Developer ID")
+spctl --assess --verbose ./ingitdb
+
+# Verify code signature
+codesign --verify --deep --verbose=2 ./ingitdb
 ./ingitdb version
 ```
 
-After `brew upgrade ingitdb`, the new version should also open without a Gatekeeper dialog.
+> If macOS still shows "Apple could not verify..." on first launch after upgrade, go to
+> **System Settings → Privacy & Security** and click **Open Anyway**. This only happens
+> once per binary — subsequent launches are silent.
 
 ---
 
