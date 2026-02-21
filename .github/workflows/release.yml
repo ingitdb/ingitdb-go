@@ -12,6 +12,7 @@ on:
 jobs:
   bump_version:
     runs-on: ubuntu-latest
+    if: github.ref_type != 'tag'
     permissions:
       contents: write
     steps:
@@ -28,6 +29,7 @@ jobs:
   goreleaser:
     needs:
       - bump_version
+    if: always() && !failure() && !cancelled()
     runs-on: macos-latest
     permissions:
       contents: write
