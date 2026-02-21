@@ -74,11 +74,32 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        VERSION=$(gh release view --repo ${{ github.repository }} --json tagName --jq '.tagName')
+        set -euo pipefail
+
+        # Retry logic to handle timing issues where release isn't available yet
+        MAX_ATTEMPTS=30
+        ATTEMPT=0
+        while (( ATTEMPT < MAX_ATTEMPTS )); do
+          if VERSION=$(gh release view --repo ${{ github.repository }} --json tagName --jq '.tagName' 2>/dev/null); then
+            break
+          fi
+          ATTEMPT=$((ATTEMPT + 1))
+          if (( ATTEMPT < MAX_ATTEMPTS )); then
+            echo "Release not available yet, waiting... (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+            sleep 2
+          fi
+        done
+
+        if (( ATTEMPT == MAX_ATTEMPTS )); then
+          echo "::error::Failed to get latest release after $MAX_ATTEMPTS attempts"
+          exit 1
+        fi
+
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         ASSET="ingitdb_${VERSION#v}_linux_amd64.tar.gz"
         echo "asset=${ASSET}" >> $GITHUB_OUTPUT
         echo "Deploying ${ASSET} (${VERSION})"
+
         gh release download "${VERSION}" \
           --repo ${{ github.repository }} \
           --pattern "ingitdb_*_linux_amd64.tar.gz" \
