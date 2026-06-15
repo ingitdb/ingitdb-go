@@ -3,7 +3,7 @@ package ingitdb
 import (
 	"testing"
 
-	"github.com/ingitdb/ingitdb-go/internal/testutil"
+	"github.com/ingitdb/ingitdb-go/ingitdb/internal/testutil"
 )
 
 func TestParseRecordContent_YAML(t *testing.T) {
