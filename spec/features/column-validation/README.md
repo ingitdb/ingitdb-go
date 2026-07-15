@@ -71,9 +71,15 @@ A column MAY declare `required_when` as a **Starlark expression over sibling fie
 
 **Identifier resolution MUST be specified, because `Formula`'s existing check is narrower than it appears.** `column_formula.go:45-50` rejects a reference to a *computed* column but lets an **undeclared** identifier pass silently (`sibling, exists := columns[ident.Name]; if exists && sibling.Formula != ""`), and `column_formula_eval.go:55-56,164-169` deliberately predeclares `starlark.Universe` plus `abs`/`round`/`floor`/`ceil` — so `len`, `True` and `abs` are all `*syntax.Ident` under `syntax.Walk`. A rule of "every identifier must be a declared column" would therefore reject `required_when: 'len(tags) > 0'`.
 
-An identifier MUST resolve, in order, as: (1) a declared non-computed sibling column, or (2) a predeclared builtin in the evaluator's universe. An identifier that is neither MUST be rejected at definition-load time. A reference to a computed column MUST be rejected, as it already is.
+A free identifier MUST resolve as either a declared non-computed sibling column or a predeclared builtin; one that is neither MUST be rejected at definition-load time. A reference to a computed column MUST be rejected, as it already is.
 
-This resolution rule MUST be implemented as a **shared** check used by both `Formula` and `required_when`, which is a deliberate behaviour change to `Formula`: an undeclared identifier in a `Formula` becomes a load-time error where today it passes load and fails at evaluation. That is a bug fix, not a regression — but it is a change to shipped behaviour and MUST be stated in the release notes. Sharing is the point; a private walk for `required_when` would break the "one evaluator" rationale above.
+**This MUST be enforced via Starlark's own resolver, NOT a hand-rolled walk over `*syntax.Ident` nodes.** `compileFormula` (`column_formula_eval.go:92`) currently passes `func(string) bool { return true }` as its is-predeclared predicate, which is why undeclared identifiers survive load today. Supplying a real predicate — stored siblings ∪ the evaluator's universe — makes the resolver reject `nosuchfield == 1` with `undefined: nosuchfield` at load, for both `Formula` and `required_when`, with no bespoke traversal.
+
+A manual `syntax.Walk` over every `Ident` is expressly forbidden, because it over-rejects: `walk.go:131-133` visits `DotExpr.Name` and `walk.go:110-112` visits `ForClause.Vars`, so `name.startswith("x")` and `[c for c in counties]` would be rejected on the identifiers `startswith` and `c` — neither a sibling nor a universe entry (string methods resolve dynamically via `Attr()`). That would break capabilities the evaluator documents as intentional: `column_formula_eval.go:52-54` advertises "native string methods", and the `maxFormulaSteps` ceiling (`column_formula_eval.go:13-19`) exists precisely because comprehensions are expected to be usable. The resolver distinguishes free from bound variables and ignores attribute names by construction; a walk cannot.
+
+The computed-column check keeps the existing `syntax.Walk` (`column_formula.go:45-50`), since the resolver has no notion of computed columns — but that walk MUST skip `DotExpr.Name`, otherwise `x.total` is wrongly rejected whenever a computed column happens to be named `total`. That is a latent false positive in the shipped code today and MUST be fixed here.
+
+Supplying the predicate is a deliberate behaviour change to `Formula`: an undeclared identifier becomes a load-time error where today it passes load and fails at evaluation. That is a bug fix rather than a regression — no database in this workspace declares any `formula:` — but it is a change to shipped behaviour and MUST be stated in the release notes.
 
 An expression evaluating to anything other than Starlark `True`/`False` MUST produce a validation error rather than a silent truthiness coercion — `starlarkToGo` (`column_formula_eval.go:139-158`) can return `bool`, `string`, `int64` or `float64`, so `required_when: 'name'` is an error, not "required when name is non-empty".
 
@@ -238,6 +244,22 @@ This Feature is a deliberate breaking change with no deprecation window, so ever
 **When** the definition is loaded
 **Then** loading succeeds — `len` resolves as a predeclared builtin, not as an undeclared sibling
 
+### AC: required-when-method-call-and-comprehension-allowed
+
+**Requirements:** column-validation#req:conditional-required
+
+**Given** a collection with `string` column `name`, `[]string` column `counties`, and a column declaring `required_when: 'name.startswith("x") or [c for c in counties if c]'`
+**When** the definition is loaded
+**Then** loading succeeds — the method name `startswith` and the comprehension variable `c` are neither siblings nor builtins, and MUST NOT be mistaken for undeclared identifiers
+
+### AC: formula-undeclared-identifier-rejected-at-load
+
+**Requirements:** column-validation#req:conditional-required
+
+**Given** a collection where column `total` declares `formula: 'nosuchfield * 2'`
+**When** the definition is loaded
+**Then** loading fails with `undefined: nosuchfield` — the shared predeclared predicate applies to `formula`, not only to `required_when`
+
 ### AC: required-when-non-boolean-rejected
 
 **Requirements:** column-validation#req:conditional-required
@@ -378,6 +400,7 @@ Making `Length`/`MinLength`/`MaxLength` pointer-typed is a Go API break. One kno
 - How should `enum` interact with a `[]string` column — membership per element, or over the whole list? `geo-ingitdb`'s `counties: "[]string"` is exactly this shape, so the question is live rather than theoretical. Per-element is the intuitive reading; unresolved until an author asks for it.
 - How should length and value-range constraints behave on a `type: any` column, where the runtime value could be a string, a list, or a number? Load-time rejection is undecidable, so the choice is runtime-check-if-applicable or forbid the combination.
 - `column_type.go:45-47` has a latent slice-bounds panic: for `ct == "map["`, `strings.Index` returns `-1`, yielding `ct[4:3]`. `reject-unknown-column-type` puts an implementer directly in this function; fix in scope or file separately?
+- `*float64` cannot exactly represent integer bounds above 2^53. `geo-ingitdb`'s bounds (`0`, `99000000`) are orders of magnitude below that, so it does not block — but an `int` column with a bound near `math.MaxInt64` would round. Accept the limit, or carry the bound as a decimal/`json.Number`?
 - `foreign-key-enforced` moves an existing check's timing — `view_builder.go:413` already reports a missing FK collection at materialize time. Should the load-time check replace it, or both fire?
 
 ---
