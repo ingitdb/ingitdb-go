@@ -75,9 +75,19 @@ A free identifier MUST resolve as either a declared non-computed sibling column 
 
 **This MUST be enforced via Starlark's own resolver, NOT a hand-rolled walk over `*syntax.Ident` nodes.** `compileFormula` (`column_formula_eval.go:92`) currently passes `func(string) bool { return true }` as its is-predeclared predicate, which is why undeclared identifiers survive load today. Supplying a real predicate — stored siblings ∪ the evaluator's universe — makes the resolver reject `nosuchfield == 1` with `undefined: nosuchfield` at load, for both `Formula` and `required_when`, with no bespoke traversal.
 
-A manual `syntax.Walk` over every `Ident` is expressly forbidden, because it over-rejects: `walk.go:131-133` visits `DotExpr.Name` and `walk.go:110-112` visits `ForClause.Vars`, so `name.startswith("x")` and `[c for c in counties]` would be rejected on the identifiers `startswith` and `c` — neither a sibling nor a universe entry (string methods resolve dynamically via `Attr()`). That would break capabilities the evaluator documents as intentional: `column_formula_eval.go:52-54` advertises "native string methods", and the `maxFormulaSteps` ceiling (`column_formula_eval.go:13-19`) exists precisely because comprehensions are expected to be usable. The resolver distinguishes free from bound variables and ignores attribute names by construction; a walk cannot.
+A manual `syntax.Walk` over `*syntax.Ident` nodes is expressly forbidden, because it over-rejects: `Walk` visits `DotExpr.Name` and `ForClause.Vars` as well as free variables, so `name.startswith("x")` and `[c for c in counties]` would be rejected on `startswith` and `c` — neither a sibling nor a universe entry (string methods resolve dynamically via `Attr()`). That would break capabilities the evaluator documents as intentional: `column_formula_eval.go:52-54` advertises "native string methods", and the `maxFormulaSteps` ceiling (`column_formula_eval.go:13-19`) exists precisely because comprehensions are expected to be usable. The resolver distinguishes free from bound variables and ignores attribute names by construction; a walk cannot. (Cited by AST node name deliberately — line numbers in a third-party module shift between releases.)
 
-The computed-column check keeps the existing `syntax.Walk` (`column_formula.go:45-50`), since the resolver has no notion of computed columns — but that walk MUST skip `DotExpr.Name`, otherwise `x.total` is wrongly rejected whenever a computed column happens to be named `total`. That is a latent false positive in the shipped code today and MUST be fixed here.
+The **computed-column check MUST also come from the resolver**, and the existing `syntax.Walk` (`column_formula.go:45-50`) MUST be deleted rather than patched. Because the predeclared set contains only *stored* siblings, a reference to a computed column is already undefined to the resolver: it reports `undefined: total`, which MUST be mapped to the computed-column error message when `columns[total]` is computed. This is strictly better than the walk, which reports a false positive on `[total for total in tags]` — a bound variable that merely shares a computed column's name. Deleting the walk also removes the `DotExpr.Name` false positive (`x.total`), the identical `ForClause.Vars`/`LambdaExpr.Params` cases, and any question of walk-vs-compile ordering.
+
+#### REQ: formula-cache-key-includes-predeclared-set
+
+`compileFormula` (`column_formula_eval.go:83-98`) memoises compiled programs on **formula source alone** (`formulaProgramCache.Load(formula)`, `LoadOrStore(formula, prog)`), and `column_formula_eval.go:83-85` justifies that key explicitly: *"Every free identifier is treated as predeclared, making the compiled program independent of any particular record's fields and therefore safe to cache by source."*
+
+`conditional-required` voids that invariant: once the predicate depends on the collection's column set, the compiled program is no longer independent of it, while the cache key still is. Only successes are cached (an error returns before `LoadOrStore`), so a collection that MUST fail can take a cache hit from a *different* collection that compiled the same formula text successfully — silently, and dependent on load order.
+
+The memo key MUST therefore incorporate the resolved predeclared set (formula source plus a column-set fingerprint), or load-time resolution MUST bypass the memo entirely. The comment at `column_formula_eval.go:83-85` MUST be updated in the same change, since its stated invariant no longer holds.
+
+#### REQ: formula-load-time-resolution
 
 Supplying the predicate is a deliberate behaviour change to `Formula`: an undeclared identifier becomes a load-time error where today it passes load and fails at evaluation. That is a bug fix rather than a regression — no database in this workspace declares any `formula:` — but it is a change to shipped behaviour and MUST be stated in the release notes.
 
@@ -254,11 +264,11 @@ This Feature is a deliberate breaking change with no deprecation window, so ever
 
 ### AC: formula-undeclared-identifier-rejected-at-load
 
-**Requirements:** column-validation#req:conditional-required
+**Requirements:** column-validation#req:formula-load-time-resolution, column-validation#req:conditional-required
 
 **Given** a collection where column `total` declares `formula: 'nosuchfield * 2'`
 **When** the definition is loaded
-**Then** loading fails with `undefined: nosuchfield` — the shared predeclared predicate applies to `formula`, not only to `required_when`
+**Then** loading fails with `undefined: nosuchfield` — the shared predeclared predicate applies to `formula`, not only to `required_when`, where today it would pass load and fail only at evaluation
 
 ### AC: required-when-non-boolean-rejected
 
@@ -275,6 +285,22 @@ This Feature is a deliberate breaking change with no deprecation window, so ever
 **Given** a collection where column `total` declares a `formula` and column `note` declares `required_when: 'total > 0'`
 **When** the definition is loaded
 **Then** loading fails stating that `required_when` may not reference a computed column
+
+### AC: bound-variable-shadowing-computed-column-allowed
+
+**Requirements:** column-validation#req:conditional-required
+
+**Given** a collection with a computed column `total` and a `[]string` column `tags`, where another column declares `required_when: '[total for total in tags]'`
+**When** the definition is loaded
+**Then** loading succeeds — `total` here is a comprehension-bound variable, not a reference to the computed column
+
+### AC: formula-cache-does-not-leak-across-collections
+
+**Requirements:** column-validation#req:formula-cache-key-includes-predeclared-set, column-validation#req:conditional-required
+
+**Given** collection A declaring a stored column `population` with a computed column using `formula: 'population * 2'`, and collection B declaring no `population` column but the identical formula text
+**When** collection A is loaded first (compiling and caching that formula successfully), then collection B is loaded
+**Then** collection B still fails with `undefined: population` — the memoised program from A MUST NOT satisfy B, and the outcome MUST NOT depend on load order
 
 ### AC: list-any-still-requires-a-list
 
