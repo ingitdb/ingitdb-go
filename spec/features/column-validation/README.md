@@ -1,12 +1,12 @@
 ---
 format: https://specscore.md/feature-specification
-status: Draft
+status: In Review
 ---
 
 # Feature: Column validation primitives
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=explore) | [Edit](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=edit) | [Ask question](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=ask) | [Request change](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=request-change) |
-**Status:** Draft
+**Status:** In Review
 **Source Ideas:** —
 
 ## Summary
@@ -17,17 +17,19 @@ Enforce the validation constraints a collection definition already declares, add
 
 A collection definition can declare validation constraints that inGitDB accepts, reports as valid, and then never enforces. This is worse than not offering the constraint at all: a missing feature is discoverable, but config that silently does nothing actively convinces the author their data is guarded when it is not.
 
-Verified against v1.31.12:
+Verified at commit `ee5aa30` of this repo (the `ingitdb` module; note `v1.31.x` tags belong to `ingitdb-cli`, not here):
 
-- `min_length`, `max_length` and `length` exist on `ColumnDef` (`ingitdb/column_def.go`) and have **zero readers** anywhere outside their own declaration and tests. Declaring them changes nothing.
-- `foreign_key` is read only by `materializer/view_builder.go` to build FK views. `ForeignKeyIndex` (`datavalidator/interfaces.go`) is declared as "a pre-built read-only lookup for FK validation" and is referenced by no other code. Referential integrity is never checked.
-- Unknown keys in a column definition are accepted and discarded — adding `enum:`, `values:` or `one_of:` still reports *"Definition of collection is valid"*, so an author reasonably concludes the constraint is live.
-- `validateRecordData` (`datavalidator/validator.go:273`) iterates `colDef.Columns`, never the record's own keys, so a record may carry arbitrary undeclared fields that are never examined.
-- `valueMatchesColumnType`'s `default:` branch returns `true`, so any column type the validator does not recognise matches every value.
+- `min_length`, `max_length` and `length` exist on `ColumnDef` (`ingitdb/column_def.go:11-13`) and have **zero readers** anywhere in the repo, including tests. Declaring them changes nothing.
+- `foreign_key` is read by `materializer/view_builder.go:407` (to build FK views) and `docsbuilder/collection_readme.go:124` (to render docs) — but by no validation code. `ForeignKeyIndex` (`datavalidator/interfaces.go:11`) is declared as "a pre-built read-only lookup for FK validation" and is its own only occurrence: no implementation, no caller. Referential integrity is never checked.
+- Unknown keys in a column definition are accepted and discarded — `validator/def_validator.go:122,204` use bare `yaml.Unmarshal` without `KnownFields`. Adding `enum:`, `values:` or `one_of:` still reports *"Definition of collection is valid"*, so an author reasonably concludes the constraint is live.
+- `validateRecordData` (`datavalidator/validator.go:281`) iterates `colDef.Columns`, never the record's own keys, so a record may carry arbitrary undeclared fields that are never examined.
+- `valueMatchesColumnType`'s `default:` branch returns `true` (`datavalidator/validator.go:330`), so any column type the validator does not recognise matches every value.
 
-The practical result: a definition declaring `state` with `enum`, and `docs` with `min_length: 1`, validates a record with `state: emulatable` and `docs: []` as clean. Unconditional `required` is currently the only column constraint that genuinely works.
+Type checking works for recognised types, and the computed-column "must not be stored" rule works. What does not work is every *constraint* beyond unconditional `required`: a definition declaring `state` with `enum`, and `docs` with `min_length: 1`, validates a record with `state: emulatable` and `docs: []` as clean.
 
-Beyond enforcing what is declared, three primitives are missing outright: there is no enum, no list column type at all (`knownColumnTypes` has none), and `Required` is a plain `bool` with no way to condition it on another field.
+This is not hypothetical drift — authors are already writing constraints that do nothing. `geo-ingitdb/countries/.ingitdb-subcol.states.yaml:27-28` declares `min_value: 0` / `max_value: 99 000 000` on `population`, silently inert because no such field exists. `demo-ingitdb`'s `order_details/definition.yaml:21-22,26-27` carries literal `# TODO: min value constraint needs implementation in ColumnDef`. `geo-ingitdb/countries/.ingitdb-subcol.provinces.yaml:10` declares `counties: "[]string"`, a type the validator does not know and therefore accepts unconditionally.
+
+Beyond enforcing what is declared, primitives are missing outright: no enum, no list column type (`knownColumnTypes`, `column_type.go:24-34`, has none), no value-range constraint, and `Required` is a plain `bool` with no way to condition it on a sibling.
 
 ## Behavior
 
@@ -35,7 +37,15 @@ Beyond enforcing what is declared, three primitives are missing outright: there 
 
 #### REQ: length-constraints-enforced
 
-`min_length`, `max_length` and `length` MUST be enforced during record validation. For a string value they constrain character count; for a list value they constrain element count; for a map value they constrain entry count. A value violating any of them MUST produce a validation error naming the field, the constraint, and the actual length. Declaring a length constraint on a column type where length is undefined (e.g. `bool`) MUST be rejected at definition-load time rather than silently ignored.
+`min_length`, `max_length` and `length` MUST be enforced during record validation. For a string value they constrain character count (Unicode code points, not bytes); for a list value they constrain element count; for a map value they constrain entry count. A value violating any of them MUST produce a validation error naming the field, the constraint, and the actual length. Declaring a length constraint on a column type where length is undefined (`bool`, `int`, `float`, the temporal types) MUST be rejected at definition-load time rather than silently ignored.
+
+Because `Length`, `MinLength` and `MaxLength` are `int` with `omitempty` (`column_def.go:11-13`), a declared `0` is today indistinguishable from absent. These fields MUST become pointer-typed (`*int`) so "declared zero" and "not declared" are distinguishable — `min_length: 0` is meaningless but `max_length: 0` (forbid any content) is not, and load-time rejection of a length constraint on `bool` cannot otherwise detect `length: 0`.
+
+#### REQ: value-range-constraints
+
+A column MAY declare `min_value` and/or `max_value`, constraining a numeric value inclusively. A value outside the range MUST produce a validation error naming the field, the bound, and the actual value. Both MUST be rejected at definition-load time on a non-numeric column type, and when `min_value` exceeds `max_value`.
+
+This is the one constraint with demonstrated demand: `geo-ingitdb` already declares it (silently inert), and `demo-ingitdb` carries TODO comments requesting it. Implementing it also converts `geo-ingitdb`'s existing declaration from a lie into an enforced constraint, rather than breaking it under `reject-unknown-column-keys`.
 
 #### REQ: foreign-key-enforced
 
@@ -49,25 +59,44 @@ A column MAY declare `enum` as a non-empty list of permitted values. A record va
 
 #### REQ: list-column-type
 
-The column type grammar MUST support lists, spelled `[]<element-type>` where `<element-type>` is any existing scalar type (e.g. `[]string`). A value that is not a list, or whose elements do not all match `<element-type>`, MUST produce a validation error. `min_length`/`max_length` on a list column constrain element count per `length-constraints-enforced`, which is what makes "at least one entry" expressible.
+The column type grammar MUST support lists, spelled `[]<element-type>` where `<element-type>` is exactly one of `string`, `int`, `float`, `bool`, `date`, `time`, `datetime`, or `any`. `map[...]` and nested list element types are out of scope. A value that is not a list, or whose elements do not all match `<element-type>`, MUST produce a validation error; `[]any` accepts any element but still requires the value to be a list. `min_length`/`max_length` on a list column constrain element count per `length-constraints-enforced`, which is what makes "at least one entry" expressible.
+
+`[]string` is already declared in the wild (`geo-ingitdb/.../provinces.yaml:10`) and currently validates nothing, so this REQ retrofits enforcement onto existing data. That data MUST be verified against the new rule as part of this Feature.
 
 #### REQ: conditional-required
 
-A column MAY declare `required_when` as a single condition over sibling fields, making the column required only when the condition holds. When `required_when` is present, `required` MUST NOT also be set on the same column — declaring both is a definition-load error, since they would contradict each other. A `required_when` referencing an undeclared sibling MUST be rejected at definition-load time.
+A column MAY declare `required_when` as a **Starlark expression over sibling fields**, making the column required only when the expression evaluates truthy. The expression MUST reuse the parsing, sibling-reference validation, and evaluation already implemented for `ColumnDef.Formula` (`ingitdb/column_formula.go`) — `go.starlark.net` is already a dependency and `Formula` is already specified as "a single Starlark expression that references only stored (non-computed) sibling fields". Introducing a second expression dialect is expressly rejected: one grammar, one evaluator, one set of edge cases.
+
+An expression referencing an undeclared sibling, referencing a computed column, or failing to parse MUST be rejected at definition-load time. An expression that evaluates to a non-boolean MUST produce a validation error rather than a silent coercion. When `required_when` is present, `required` MUST NOT also be set on the same column — declaring both is a definition-load error.
 
 ### Failing loudly instead of silently
 
 #### REQ: reject-unknown-column-keys
 
-An unrecognised key in a column definition MUST be rejected at definition-load time, naming the key and the column. Silently discarding unknown keys is what allows a plausible-looking `enum:` or `one_of:` to appear enforced while doing nothing.
+An unrecognised key in a column definition MUST be rejected at definition-load time, naming the key and the column. Silently discarding unknown keys is what allows a plausible-looking `enum:` or `one_of:` to appear enforced while doing nothing. The implementation MUST use `decoder.KnownFields(true)`, already the house pattern at `config/root_config.go:331,393` and `validator/subscribers_validator.go:44`; `validator/def_validator.go` simply diverged from it.
 
 #### REQ: reject-undeclared-record-fields
 
 A record field with no corresponding column in the collection definition MUST produce a validation error naming the field. Validation MUST examine the record's keys, not only the schema's columns.
 
+Synthetic keys injected by the library itself are exempt: `datavalidator/validator.go:254` sets `record["$ID"] = key` for INGR input and `parse.go:186` sets `row["$ID"] = id` for CSV. Any key prefixed `$` MUST be treated as library-reserved and skipped by this check, whether or not the definition declares it — otherwise every list/INGR collection fails validation on a field the library added. A definition MAY still declare a `$`-prefixed column (as `demo-ingitdb/.../order_details/definition.yaml:10` declares `"$ID"`), and doing so MUST NOT change the outcome.
+
 #### REQ: reject-unknown-column-type
 
 A column type that is not recognised MUST be rejected at definition-load time and MUST NOT fall through to matching every value. The validator MUST NOT treat an unrecognised type as permissive.
+
+`number` is currently accepted as a map *key* type (`column_type.go:51`) but is not a column type, which is a live grammar inconsistency: `e2e-test-ingitdb/countries/.collection/definition.yaml:12,14` declares `type: number` and passes today only because unknown types match everything. This Feature does NOT add `number` as a column-type alias — `int` and `float` already cover it, and two spellings for one type is how the inconsistency started. The fixture is migrated instead, per `migrate-known-databases`.
+
+### Migration
+
+#### REQ: migrate-known-databases
+
+This Feature is a deliberate breaking change with no deprecation window, so every database in this workspace MUST load and validate cleanly against the new rules before it ships. Two are known to break today and MUST be migrated as part of this Feature:
+
+- `e2e-test-ingitdb/countries/.collection/definition.yaml:12,14` — `type: number` becomes `int` or `float` per the column's actual data.
+- `geo-ingitdb` — `min_value`/`max_value` become enforced rather than unknown, so their declared values MUST be checked to be well-formed numbers. `max_value: 99 000 000` (`.ingitdb-subcol.states.yaml:28`) is not a YAML number and MUST be corrected.
+
+`demo-ingitdb`, `demo-commerce-ingitdb` and any other database in the workspace MUST be verified against the new rules, and their TODO comments requesting value constraints resolved. Databases outside this workspace are out of scope and are addressed by the release notes, not by code.
 
 ## Acceptance Criteria
 
@@ -147,7 +176,7 @@ A column type that is not recognised MUST be rejected at definition-load time an
 
 **Requirements:** column-validation#req:conditional-required
 
-**Given** a collection where column `name` declares `required_when` a condition on sibling `state` not being `absent`
+**Given** a collection where column `name` declares `required_when: 'state != "absent"'`
 **When** a record is validated with `state: "native"` and no `name`
 **Then** validation fails naming `name` as required
 
@@ -158,6 +187,86 @@ A column type that is not recognised MUST be rejected at definition-load time an
 **Given** the same collection
 **When** a record is validated with `state: "absent"` and no `name`
 **Then** validation passes
+
+### AC: required-when-unknown-sibling-rejected-at-load
+
+**Requirements:** column-validation#req:conditional-required
+
+**Given** a collection definition where column `name` declares `required_when: 'nosuchfield == 1'`
+**When** the definition is loaded
+**Then** loading fails naming the undeclared sibling `nosuchfield`
+
+### AC: min-value-rejects-below-bound
+
+**Requirements:** column-validation#req:value-range-constraints
+
+**Given** a collection with column `population` of type `int` and `min_value: 0`
+**When** a record is validated with `population: -5`
+**Then** validation fails with an error naming `population`, the `min_value` bound, and the value `-5`
+
+### AC: value-range-on-string-rejected-at-load
+
+**Requirements:** column-validation#req:value-range-constraints
+
+**Given** a collection definition with column `title` of type `string` and `min_value: 0`
+**When** the definition is loaded
+**Then** loading fails stating that value-range constraints require a numeric column type
+
+### AC: exact-length-enforced
+
+**Requirements:** column-validation#req:length-constraints-enforced
+
+**Given** a collection with column `code` of type `string` and `length: 3`
+**When** a record is validated with `code: "ab"`
+**Then** validation fails naming `code`, the `length` constraint, and the actual length `2`
+
+### AC: declared-zero-max-length-distinguishable-from-absent
+
+**Requirements:** column-validation#req:length-constraints-enforced
+
+**Given** a collection with column `note` of type `string` and `max_length: 0`
+**When** a record is validated with `note: "x"`
+**Then** validation fails — the declared zero is enforced rather than read as unset
+
+### AC: foreign-key-to-absent-collection-rejected-at-load
+
+**Requirements:** column-validation#req:foreign-key-enforced
+
+**Given** a collection definition whose column `status` declares `foreign_key: nosuchcollection`
+**When** the definition is loaded
+**Then** loading fails naming the missing collection `nosuchcollection`
+
+### AC: duplicate-enum-members-rejected-at-load
+
+**Requirements:** column-validation#req:enum-membership
+
+**Given** a collection definition with column `state` declaring `enum: [native, native, absent]`
+**When** the definition is loaded
+**Then** loading fails naming the duplicated member `native`
+
+### AC: enum-member-type-mismatch-rejected-at-load
+
+**Requirements:** column-validation#req:enum-membership
+
+**Given** a collection definition with column `count` of type `int` declaring `enum: [1, "two"]`
+**When** the definition is loaded
+**Then** loading fails naming the member `"two"` as not assignable to type `int`
+
+### AC: synthetic-id-field-not-rejected
+
+**Requirements:** column-validation#req:reject-undeclared-record-fields
+
+**Given** an INGR or CSV collection that does not declare a `$ID` column
+**When** a record is validated after the library injects `$ID`
+**Then** validation passes — the injected `$` -prefixed key is exempt, not reported as undeclared
+
+### AC: known-databases-validate-clean
+
+**Requirements:** column-validation#req:migrate-known-databases, column-validation#req:reject-unknown-column-type, column-validation#req:value-range-constraints
+
+**Given** the migrated `e2e-test-ingitdb` and `geo-ingitdb` databases
+**When** each is loaded and validated with the new rules
+**Then** both report zero violations, and `e2e-test-ingitdb` declares no `type: number`
 
 ### AC: required-and-required-when-together-rejected
 
@@ -189,11 +298,21 @@ A column type that is not recognised MUST be rejected at definition-load time an
 
 **Given** a collection definition with column `state` of type `strng`
 **When** the definition is loaded
-**Then** loading fails naming the unrecognised type, and no record validates against it
+**Then** loading fails with an error naming the unrecognised type `strng` and listing the recognised types
+
+## Not Doing (and Why)
+
+- **A deprecation window for the strictness rules** — the owner chose a hard break with the two known-broken fixtures migrated in the same change (see `migrate-known-databases`). A warn-then-error cycle was considered and rejected as ceremony for a pre-1.0 module whose only known consumers are in this workspace. Databases outside it are covered by release notes.
+- **Splitting into three Features** (enforce-declared / new-primitives / fail-loudly) — the reviewer's decomposition is sound in principle, but the hard-break decision couples them: strictness lands with the fixture migration, and `value-range-constraints` must land with `reject-unknown-column-keys` or `geo-ingitdb` breaks instead of being fixed. Kept as one Feature by owner decision.
+- **`number` as a column-type alias** — `int` and `float` already cover it; two spellings for one type is what produced the grammar inconsistency in the first place.
+- **Nested and `map[...]` list element types** — `[]<scalar>` only; nested lists have no demonstrated demand.
 
 ## Open Questions
 
-None at this time.
+- How should `enum` interact with a `[]string` column — membership per element, or over the whole list? `geo-ingitdb`'s `counties: "[]string"` is exactly this shape, so the question is live rather than theoretical. Per-element is the intuitive reading; unresolved until an author asks for it.
+- How should length and value-range constraints behave on a `type: any` column, where the runtime value could be a string, a list, or a number? Load-time rejection is undecidable, so the choice is runtime-check-if-applicable or forbid the combination.
+- `column_type.go:45-47` has a latent slice-bounds panic: for `ct == "map["`, `strings.Index` returns `-1`, yielding `ct[4:3]`. `reject-unknown-column-type` puts an implementer directly in this function; fix in scope or file separately?
+- `foreign-key-enforced` moves an existing check's timing — `view_builder.go:413` already reports a missing FK collection at materialize time. Should the load-time check replace it, or both fire?
 
 ---
 *This document follows the https://specscore.md/feature-specification*
