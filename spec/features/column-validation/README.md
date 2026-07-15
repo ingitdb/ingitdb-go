@@ -79,13 +79,25 @@ A manual `syntax.Walk` over `*syntax.Ident` nodes is expressly forbidden, becaus
 
 The **computed-column check MUST also come from the resolver**, and the existing `syntax.Walk` (`column_formula.go:45-50`) MUST be deleted rather than patched. Because the predeclared set contains only *stored* siblings, a reference to a computed column is already undefined to the resolver: it reports `undefined: total`, which MUST be mapped to the computed-column error message when `columns[total]` is computed. This is strictly better than the walk, which reports a false positive on `[total for total in tags]` — a bound variable that merely shares a computed column's name. Deleting the walk also removes the `DotExpr.Name` false positive (`x.total`), the identical `ForClause.Vars`/`LambdaExpr.Params` cases, and any question of walk-vs-compile ordering.
 
+#### REQ: computed-column-name-not-builtin
+
+A **computed** column (one declaring `formula`) whose name collides with a predeclared builtin — any entry in `starlark.Universe`, plus the evaluator's own `abs`/`round`/`floor`/`ceil` (`column_formula_eval.go:164-169`) — MUST be rejected at definition-load time. `type`, `len`, `min`, `max`, `list`, `str`, `int`, `float`, `bool`, `range`, `hash`, `sorted`, `any` and `all` are all universe entries, and a computed column named `type` is entirely ordinary.
+
+This rule is what keeps `conditional-required`'s resolver-only approach sound. That approach detects a computed-column reference by the resolver reporting `undefined: X` — but a name that lives in the universe is never undefined, so the check silently never fires. It cannot be fixed by tightening the is-predeclared predicate: `starlark.FileProgram` (`eval.go:401-402`) hardwires `resolve.File(f, isPredeclared, Universe.Has)`, and `resolve.go:132-134` states the `isUniversal` parameter exists "to avoid a cyclic dependency upon starlark.Universe, not because users should ever need to redefine it".
+
+The failure it prevents is silent, which is why it is a load-time error rather than a lint: `EvaluateFormula` binds only *stored* fields (`column_formula_eval.go:57-63`), so a computed `type` is never bound, and `type == "x"` compares the Starlark builtin *function* to a string and yields `False` — a wrong value, never an error.
+
+The restriction costs nothing real: such a column is unreferenceable anyway, since computed columns are never bound into `fields`, so every reference to it already resolves silently to the builtin instead. **Stored** columns need no such rule — they are predeclared via the stored half of the predicate, and `fields` shadows the builtin at evaluation.
+
 #### REQ: formula-cache-key-includes-predeclared-set
 
 `compileFormula` (`column_formula_eval.go:83-98`) memoises compiled programs on **formula source alone** (`formulaProgramCache.Load(formula)`, `LoadOrStore(formula, prog)`), and `column_formula_eval.go:83-85` justifies that key explicitly: *"Every free identifier is treated as predeclared, making the compiled program independent of any particular record's fields and therefore safe to cache by source."*
 
 `conditional-required` voids that invariant: once the predicate depends on the collection's column set, the compiled program is no longer independent of it, while the cache key still is. Only successes are cached (an error returns before `LoadOrStore`), so a collection that MUST fail can take a cache hit from a *different* collection that compiled the same formula text successfully — silently, and dependent on load order.
 
-The memo key MUST therefore incorporate the resolved predeclared set (formula source plus a column-set fingerprint), or load-time resolution MUST bypass the memo entirely. The comment at `column_formula_eval.go:83-85` MUST be updated in the same change, since its stated invariant no longer holds.
+The memo key MUST therefore incorporate the resolved predeclared set (formula source plus a column-set fingerprint), or load-time resolution MUST bypass the memo entirely.
+
+Under the **fingerprint** option, the comment at `column_formula_eval.go:83-85` MUST be updated in the same change, since its stated invariant no longer holds. Under the **bypass** option it still holds and MUST be left alone: `compileFormula` keeps `func(string) bool { return true }` for the evaluation path, so its program remains genuinely independent of any collection's column set and the source-only key stays sound, while strict per-collection resolution happens separately at load, uncached.
 
 #### REQ: formula-load-time-resolution
 
@@ -293,6 +305,22 @@ This Feature is a deliberate breaking change with no deprecation window, so ever
 **Given** a collection with a computed column `total` and a `[]string` column `tags`, where another column declares `required_when: '[total for total in tags]'`
 **When** the definition is loaded
 **Then** loading succeeds — `total` here is a comprehension-bound variable, not a reference to the computed column
+
+### AC: computed-column-named-after-builtin-rejected-at-load
+
+**Requirements:** column-validation#req:computed-column-name-not-builtin, column-validation#req:conditional-required
+
+**Given** a collection declaring a computed column named `type` (a `starlark.Universe` entry) with any `formula`
+**When** the definition is loaded
+**Then** loading fails naming `type` as colliding with a predeclared builtin — without this, `required_when: 'type == "x"'` would resolve `type` to the builtin function, compare it to a string, and silently yield `False` instead of being rejected
+
+### AC: stored-column-named-after-builtin-allowed
+
+**Requirements:** column-validation#req:computed-column-name-not-builtin
+
+**Given** a collection declaring a **stored** (non-computed) column named `type`, and another column declaring `required_when: 'type == "x"'`
+**When** the definition is loaded and a record is validated
+**Then** loading succeeds and `type` resolves to the record's stored field, not the builtin — the restriction applies only to computed columns
 
 ### AC: formula-cache-does-not-leak-across-collections
 
