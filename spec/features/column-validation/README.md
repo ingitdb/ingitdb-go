@@ -45,6 +45,8 @@ Because `Length`, `MinLength` and `MaxLength` are `int` with `omitempty` (`colum
 
 A column MAY declare `min_value` and/or `max_value`, constraining a numeric value inclusively. A value outside the range MUST produce a validation error naming the field, the bound, and the actual value. Both MUST be rejected at definition-load time on a non-numeric column type, and when `min_value` exceeds `max_value`.
 
+Both MUST be pointer-typed (`*float64`) for the same reason `length-constraints-enforced` requires `*int`: `min_value: 0` is not a hypothetical — it is exactly what `geo-ingitdb` declares on `population` and `area` (`states.yaml:27,32`). With a plain numeric and the natural `!= 0` guard, that declared zero reads as unset, the constraint silently vanishes, and the Feature's own flagship migration fixture keeps lying — the precise harm this Feature exists to end. `*float64` (rather than `*int`) is required so `min_value: 0.5` is expressible on a `float` column; on an `int` column a bound with a fractional part MUST be rejected at definition-load time.
+
 This is the one constraint with demonstrated demand: `geo-ingitdb` already declares it (silently inert), and `demo-ingitdb` carries TODO comments requesting it. Implementing it also converts `geo-ingitdb`'s existing declaration from a lie into an enforced constraint, rather than breaking it under `reject-unknown-column-keys`.
 
 #### REQ: foreign-key-enforced
@@ -65,9 +67,17 @@ The column type grammar MUST support lists, spelled `[]<element-type>` where `<e
 
 #### REQ: conditional-required
 
-A column MAY declare `required_when` as a **Starlark expression over sibling fields**, making the column required only when the expression evaluates truthy. The expression MUST reuse the parsing, sibling-reference validation, and evaluation already implemented for `ColumnDef.Formula` (`ingitdb/column_formula.go`) — `go.starlark.net` is already a dependency and `Formula` is already specified as "a single Starlark expression that references only stored (non-computed) sibling fields". Introducing a second expression dialect is expressly rejected: one grammar, one evaluator, one set of edge cases.
+A column MAY declare `required_when` as a **Starlark expression over sibling fields**, making the column required only when the expression evaluates to Starlark `True`. It MUST reuse the parsing and evaluation already implemented for `ColumnDef.Formula` (`ingitdb/column_formula.go`, `column_formula_eval.go`) — `go.starlark.net` is already a dependency. Introducing a second expression dialect is expressly rejected: one grammar, one evaluator, one set of edge cases.
 
-An expression referencing an undeclared sibling, referencing a computed column, or failing to parse MUST be rejected at definition-load time. An expression that evaluates to a non-boolean MUST produce a validation error rather than a silent coercion. When `required_when` is present, `required` MUST NOT also be set on the same column — declaring both is a definition-load error.
+**Identifier resolution MUST be specified, because `Formula`'s existing check is narrower than it appears.** `column_formula.go:45-50` rejects a reference to a *computed* column but lets an **undeclared** identifier pass silently (`sibling, exists := columns[ident.Name]; if exists && sibling.Formula != ""`), and `column_formula_eval.go:55-56,164-169` deliberately predeclares `starlark.Universe` plus `abs`/`round`/`floor`/`ceil` — so `len`, `True` and `abs` are all `*syntax.Ident` under `syntax.Walk`. A rule of "every identifier must be a declared column" would therefore reject `required_when: 'len(tags) > 0'`.
+
+An identifier MUST resolve, in order, as: (1) a declared non-computed sibling column, or (2) a predeclared builtin in the evaluator's universe. An identifier that is neither MUST be rejected at definition-load time. A reference to a computed column MUST be rejected, as it already is.
+
+This resolution rule MUST be implemented as a **shared** check used by both `Formula` and `required_when`, which is a deliberate behaviour change to `Formula`: an undeclared identifier in a `Formula` becomes a load-time error where today it passes load and fails at evaluation. That is a bug fix, not a regression — but it is a change to shipped behaviour and MUST be stated in the release notes. Sharing is the point; a private walk for `required_when` would break the "one evaluator" rationale above.
+
+An expression evaluating to anything other than Starlark `True`/`False` MUST produce a validation error rather than a silent truthiness coercion — `starlarkToGo` (`column_formula_eval.go:139-158`) can return `bool`, `string`, `int64` or `float64`, so `required_when: 'name'` is an error, not "required when name is non-empty".
+
+When `required_when` is present, `required` MUST NOT also be set on the same column — declaring both is a definition-load error.
 
 ### Failing loudly instead of silently
 
@@ -202,7 +212,55 @@ This Feature is a deliberate breaking change with no deprecation window, so ever
 
 **Given** a collection with column `population` of type `int` and `min_value: 0`
 **When** a record is validated with `population: -5`
-**Then** validation fails with an error naming `population`, the `min_value` bound, and the value `-5`
+**Then** validation fails with an error naming `population`, the `min_value` bound, and the value `-5` — the declared zero bound is enforced, not read as unset
+
+### AC: max-value-rejects-above-bound
+
+**Requirements:** column-validation#req:value-range-constraints
+
+**Given** a collection with column `percent` of type `int` and `max_value: 100`
+**When** a record is validated with `percent: 101`
+**Then** validation fails naming `percent`, the `max_value` bound, and the value `101`
+
+### AC: inverted-range-rejected-at-load
+
+**Requirements:** column-validation#req:value-range-constraints
+
+**Given** a collection definition with column `n` of type `int`, `min_value: 10` and `max_value: 5`
+**When** the definition is loaded
+**Then** loading fails stating that `min_value` exceeds `max_value`
+
+### AC: required-when-builtin-identifier-allowed
+
+**Requirements:** column-validation#req:conditional-required
+
+**Given** a collection with column `tags` of type `[]string` and column `summary` declaring `required_when: 'len(tags) > 0'`
+**When** the definition is loaded
+**Then** loading succeeds — `len` resolves as a predeclared builtin, not as an undeclared sibling
+
+### AC: required-when-non-boolean-rejected
+
+**Requirements:** column-validation#req:conditional-required
+
+**Given** a collection where column `note` declares `required_when: 'name'` and `name` is a `string` column
+**When** a record is validated with `name: "anything"`
+**Then** validation fails stating the expression evaluated to a non-boolean — it is not coerced to truthy
+
+### AC: required-when-computed-column-rejected-at-load
+
+**Requirements:** column-validation#req:conditional-required
+
+**Given** a collection where column `total` declares a `formula` and column `note` declares `required_when: 'total > 0'`
+**When** the definition is loaded
+**Then** loading fails stating that `required_when` may not reference a computed column
+
+### AC: list-any-still-requires-a-list
+
+**Requirements:** column-validation#req:list-column-type
+
+**Given** a collection with column `misc` of type `[]any`
+**When** a record is validated with `misc: "not-a-list"`
+**Then** validation fails — `[]any` accepts any element but still requires the value to be a list
 
 ### AC: value-range-on-string-rejected-at-load
 
@@ -305,7 +363,15 @@ This Feature is a deliberate breaking change with no deprecation window, so ever
 - **A deprecation window for the strictness rules** — the owner chose a hard break with the two known-broken fixtures migrated in the same change (see `migrate-known-databases`). A warn-then-error cycle was considered and rejected as ceremony for a pre-1.0 module whose only known consumers are in this workspace. Databases outside it are covered by release notes.
 - **Splitting into three Features** (enforce-declared / new-primitives / fail-loudly) — the reviewer's decomposition is sound in principle, but the hard-break decision couples them: strictness lands with the fixture migration, and `value-range-constraints` must land with `reject-unknown-column-keys` or `geo-ingitdb` breaks instead of being fixed. Kept as one Feature by owner decision.
 - **`number` as a column-type alias** — `int` and `float` already cover it; two spellings for one type is what produced the grammar inconsistency in the first place.
-- **Nested and `map[...]` list element types** — `[]<scalar>` only; nested lists have no demonstrated demand.
+- **Nested and `map[...]` list element types** — only the closed element set enumerated in `list-column-type`; nested lists have no demonstrated demand.
+
+## Rehearse Integration
+
+No Rehearse stubs are scaffolded: `specscore.yaml` in this repo declares no rehearse configuration, and every AC here is directly executable as a Go table test against `datavalidator` and the definition loader, which is where this project's existing coverage lives. Recorded as an explicit skip rather than an omission.
+
+## Dependent Modules
+
+Making `Length`/`MinLength`/`MaxLength` pointer-typed is a Go API break. One known downstream compile site exists in this workspace: `ingitdb-cli/cmd/ingitdb/tui/lazy_eval_test.go:213` (`Length: 12`). `migrate-known-databases` covers databases only; this module change MUST be landed together with an `ingitdb-cli` update.
 
 ## Open Questions
 
