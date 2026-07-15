@@ -1,0 +1,26 @@
+# SpecScore Repo Config Schema: https://specscore.md/repo-config
+
+project:
+    title: inGitDB Go
+    host: github.com
+    org: ingitdb
+    repo: ingitdb-go
+gates:
+    feature.approved:
+        reviewers:
+            - description: Baseline SpecScore Feature reviewer
+              name: ai-spec-reviewer
+              prompt: .specscore/reviewers/specify-feature-reviewer.md
+              type: ai
+            - description: Human author approval before plan/implement
+              name: human-approval
+              type: human
+publication:
+    default:
+        actions:
+            - stage
+            - commit
+    push:
+        allow_branches:
+            - main
+        deny_branches: []
