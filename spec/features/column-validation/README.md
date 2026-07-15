@@ -7,6 +7,9 @@ status: In Review
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=explore) | [Edit](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=edit) | [Ask question](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=ask) | [Request change](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=request-change) |
 **Status:** In Review
+**Date:** 2026-07-15
+**Owner:** alex
+**Supersedes:** —
 **Source Ideas:** —
 
 ## Summary
@@ -87,7 +90,7 @@ This rule is what keeps `conditional-required`'s resolver-only approach sound. T
 
 The failure it prevents is silent, which is why it is a load-time error rather than a lint: `EvaluateFormula` binds only *stored* fields (`column_formula_eval.go:57-63`), so a computed `type` is never bound, and `type == "x"` compares the Starlark builtin *function* to a string and yields `False` — a wrong value, never an error.
 
-The restriction costs nothing real: such a column is unreferenceable anyway, since computed columns are never bound into `fields`, so every reference to it already resolves silently to the builtin instead. **Stored** columns need no such rule — they are predeclared via the stored half of the predicate, and `fields` shadows the builtin at evaluation.
+The restriction costs nothing real: such a column is unreferenceable anyway, since computed columns are never bound into `fields`, so every reference to it already resolves silently to the builtin instead. **Stored** columns need no such rule — they are predeclared via the stored half of the predicate, and `fields` shadows the builtin at evaluation **whenever the field is present in the record**. Forbidding a stored column named `type` would be absurd; it resolves correctly every time it is populated.
 
 #### REQ: formula-cache-key-includes-predeclared-set
 
@@ -454,6 +457,7 @@ Making `Length`/`MinLength`/`MaxLength` pointer-typed is a Go API break. One kno
 - How should `enum` interact with a `[]string` column — membership per element, or over the whole list? `geo-ingitdb`'s `counties: "[]string"` is exactly this shape, so the question is live rather than theoretical. Per-element is the intuitive reading; unresolved until an author asks for it.
 - How should length and value-range constraints behave on a `type: any` column, where the runtime value could be a string, a list, or a number? Load-time rejection is undecidable, so the choice is runtime-check-if-applicable or forbid the combination.
 - `column_type.go:45-47` has a latent slice-bounds panic: for `ct == "map["`, `strings.Index` returns `-1`, yielding `ct[4:3]`. `reject-unknown-column-type` puts an implementer directly in this function; fix in scope or file separately?
+- A **stored** column named after a builtin behaves asymmetrically when *omitted* from a record: `EvaluateFormula` leaves it unbound, so `type` falls through to the Starlark builtin and the expression silently yields a wrong value, whereas an omitted stored column named anything else fails loudly (`internal error: predeclared variable state is uninitialized`). Pre-existing `EvaluateFormula` behaviour, untouched by this Feature and not worth forbidding a legitimate column name over — but the silent-vs-loud asymmetry is the same family as the `column_type.go:47` panic above. Bind absent stored fields to `None`, or accept it?
 - `*float64` cannot exactly represent integer bounds above 2^53. `geo-ingitdb`'s bounds (`0`, `99000000`) are orders of magnitude below that, so it does not block — but an `int` column with a bound near `math.MaxInt64` would round. Accept the limit, or carry the bound as a decimal/`json.Number`?
 - `foreign-key-enforced` moves an existing check's timing — `view_builder.go:413` already reports a missing FK collection at materialize time. Should the load-time check replace it, or both fire?
 
