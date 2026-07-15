@@ -10,7 +10,7 @@ Feature specifications for this project.
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| [column-validation](column-validation/README.md) | In Review | Enforce the validation constraints a collection definition already declares, add the primitives it lacks (enum, list type, conditional-required), and fail loudly on config that is currently accepted and silently ignored. |
+| [column-validation](column-validation/README.md) | Approved | Enforce the validation constraints a collection definition already declares, add the primitives it lacks (enum, list type, conditional-required), and fail loudly on config that is currently accepted and silently ignored. |
 
 ## Open Questions
 

@@ -1,16 +1,17 @@
 ---
 format: https://specscore.md/feature-specification
-status: In Review
+status: Approved
 ---
 
 # Feature: Column validation primitives
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=explore) | [Edit](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=edit) | [Ask question](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=ask) | [Request change](https://specscore.studio/app/github.com/ingitdb/ingitdb-go/spec/features/column-validation?op=request-change) |
-**Status:** In Review
+**Status:** Approved
 **Date:** 2026-07-15
 **Owner:** alex
 **Supersedes:** —
 **Source Ideas:** —
+**Grade:** B
 
 ## Summary
 
