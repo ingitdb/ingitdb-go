@@ -1,6 +1,7 @@
 package ingitdb
 
 // specscore: feature/record-count-constraints
+// specscore: feature/definition-inheritance
 
 import (
 	"errors"
