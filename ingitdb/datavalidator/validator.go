@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -261,6 +262,51 @@ func parseListRows(content []byte, colDef *ingitdb.CollectionDef) ([]map[string]
 	}
 }
 
+// reservedFieldPrefix marks a key the library owns rather than the schema.
+// datavalidator sets record["$ID"] for INGR input and parse.go sets row["$ID"]
+// for CSV, so these keys appear in records without ever being declared.
+const reservedFieldPrefix = "$"
+
+// undeclaredFieldErrors reports record fields with no corresponding column.
+//
+// This walks the record's keys, not the schema's columns. Iterating columns —
+// which is all the rest of validateRecordData does — can never surface a field
+// the schema does not mention, so a typo'd field name was silently stored and
+// silently ignored forever.
+//
+// Keys prefixed with reservedFieldPrefix are exempt whether or not the
+// definition declares them: they are injected by the library itself, so
+// flagging them would fail every INGR and CSV collection on a field inGitDB
+// added. A definition may still declare a $-prefixed column (demo-ingitdb's
+// order_details declares "$ID"), and doing so does not change the outcome.
+func undeclaredFieldErrors(
+	collectionKey string,
+	filePath string,
+	recordKey string,
+	colDef *ingitdb.CollectionDef,
+	data map[string]any,
+) []ingitdb.ValidationError {
+	var errors []ingitdb.ValidationError
+	fields := make([]string, 0, len(data))
+	for fieldName := range data {
+		fields = append(fields, fieldName)
+	}
+	// Deterministic order: Go map ranging is randomised, and callers compare
+	// and display these.
+	slices.Sort(fields)
+	for _, fieldName := range fields {
+		if strings.HasPrefix(fieldName, reservedFieldPrefix) {
+			continue
+		}
+		if _, declared := colDef.Columns[fieldName]; declared {
+			continue
+		}
+		message := fmt.Sprintf("undeclared field %q: no column of that name in the collection definition", fieldName)
+		errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil))
+	}
+	return errors
+}
+
 // columnIsRequired reports whether a column with no value in this record is
 // required: directly via `required`, or conditionally via `required_when`.
 //
@@ -325,6 +371,7 @@ func validateRecordData(
 	data map[string]any,
 ) []ingitdb.ValidationError {
 	var errors []ingitdb.ValidationError
+	errors = append(errors, undeclaredFieldErrors(collectionKey, filePath, recordKey, colDef, data)...)
 	for fieldName, columnDef := range colDef.Columns {
 		if columnDef.Formula != "" {
 			if _, present := data[fieldName]; present {
