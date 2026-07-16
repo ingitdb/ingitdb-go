@@ -2,6 +2,7 @@ package validator
 
 // specscore: feature/cli/validate
 // specscore: feature/column-validation
+// specscore: feature/definition-inheritance
 
 import (
 	"bytes"
@@ -33,6 +34,124 @@ func decodeCollectionDef(fileContent []byte, colDef *ingitdb.CollectionDef) erro
 	dec := yaml.NewDecoder(bytes.NewReader(fileContent))
 	dec.KnownFields(true)
 	return dec.Decode(colDef)
+}
+
+// resolveInheritance overlays the base definition referenced by colDef.Inherits
+// (transitively) onto colDef in place, then clears the field. defFilePath is the
+// path of colDef's own definition file; the `inherits` value is resolved
+// relative to its directory. A missing base or an inheritance cycle is a
+// load-time error — the point of the feature is that `inherits` is no longer
+// silently discarded. Resolution runs before DirPath, subcollections, and views
+// are derived, so every downstream reader sees the fully-merged definition. See
+// spec/features/definition-inheritance.
+func (dl defLoader) resolveInheritance(colDef *ingitdb.CollectionDef, defFilePath string) error {
+	if colDef.Inherits == "" {
+		return nil
+	}
+	// seen holds the absolute path of every file already visited on this chain,
+	// so a base that (transitively) re-references an ancestor is a load error
+	// rather than unbounded recursion. The inheriting file counts as visited.
+	seen := map[string]bool{absInheritPath(defFilePath): true}
+	base, err := dl.loadInheritedBase(defFilePath, colDef.Inherits, seen)
+	if err != nil {
+		return err
+	}
+	overlayCollectionDef(colDef, base)
+	colDef.Inherits = ""
+	return nil
+}
+
+// loadInheritedBase reads and decodes the base partial referenced by `inherits`
+// relative to fromFile's directory. When that base itself declares `inherits`,
+// the rest of the chain is resolved and overlaid first (a nearer base wins over
+// a farther one), so the returned CollectionDef is the fully-resolved base.
+func (dl defLoader) loadInheritedBase(fromFile, inherits string, seen map[string]bool) (*ingitdb.CollectionDef, error) {
+	basePath := filepath.Join(filepath.Dir(fromFile), inherits)
+	baseAbs := absInheritPath(basePath)
+	if seen[baseAbs] {
+		return nil, fmt.Errorf("inheritance cycle detected: %s re-inherits %s", fromFile, basePath)
+	}
+	seen[baseAbs] = true
+
+	content, err := dl.readFile(basePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read inherited definition %q referenced by %s: %w", basePath, fromFile, err)
+	}
+	base := new(ingitdb.CollectionDef)
+	if err = decodeCollectionDef(content, base); err != nil {
+		return nil, fmt.Errorf("failed to parse inherited definition %s: %w", basePath, err)
+	}
+	if base.Inherits != "" {
+		parent, parentErr := dl.loadInheritedBase(basePath, base.Inherits, seen)
+		if parentErr != nil {
+			return nil, parentErr
+		}
+		overlayCollectionDef(base, parent)
+		base.Inherits = ""
+	}
+	return base, nil
+}
+
+// absInheritPath returns the absolute form of p for cycle-detection keys,
+// falling back to p unchanged when the working directory cannot be resolved.
+func absInheritPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
+}
+
+// overlayCollectionDef fills fields child leaves unset from base and merges
+// columns and titles by key, with child winning. Structural fields populated
+// from the filesystem (ID, DirPath, SubCollections, Views) are never taken from
+// base. See spec/features/definition-inheritance REQ column-merge-child-wins and
+// REQ scalar-and-map-field-inheritance.
+func overlayCollectionDef(child, base *ingitdb.CollectionDef) {
+	// Columns merge by name: base contributes any column child does not declare;
+	// a column child declares wholly replaces base's column of the same name.
+	if len(base.Columns) > 0 {
+		if child.Columns == nil {
+			child.Columns = make(map[string]*ingitdb.ColumnDef, len(base.Columns))
+		}
+		for name, col := range base.Columns {
+			if _, ok := child.Columns[name]; !ok {
+				child.Columns[name] = col
+			}
+		}
+	}
+	// Titles merge per locale: child wins for any locale it declares, base fills
+	// the rest.
+	if len(base.Titles) > 0 {
+		if child.Titles == nil {
+			child.Titles = make(map[string]string, len(base.Titles))
+		}
+		for locale, title := range base.Titles {
+			if _, ok := child.Titles[locale]; !ok {
+				child.Titles[locale] = title
+			}
+		}
+	}
+	if child.RecordFile == nil {
+		child.RecordFile = base.RecordFile
+	}
+	if child.DataDir == "" {
+		child.DataDir = base.DataDir
+	}
+	if len(child.ColumnsOrder) == 0 {
+		child.ColumnsOrder = base.ColumnsOrder
+	}
+	if len(child.PrimaryKey) == 0 {
+		child.PrimaryKey = base.PrimaryKey
+	}
+	if child.DefaultView == nil {
+		child.DefaultView = base.DefaultView
+	}
+	if child.Readme == nil {
+		child.Readme = base.Readme
+	}
+	if child.ConflictResolution == nil {
+		child.ConflictResolution = base.ConflictResolution
+	}
 }
 
 // definitionReader wraps ReadDefinition to satisfy ingitdb.CollectionsReader.
@@ -185,6 +304,13 @@ func (dl defLoader) readCollectionDef(rootPath, relPath, parentPath, id string, 
 	}
 	colDef.ID = id
 
+	// Resolve `inherits` before DirPath/data_dir, subcollections, and views are
+	// derived, so the merge is layout-agnostic and every downstream reader sees
+	// the fully-merged definition. A missing base or a cycle is a load error.
+	if err = dl.resolveInheritance(colDef, colDefFilePath); err != nil {
+		return nil, err
+	}
+
 	var dataBase string
 	if isNewLayout {
 		dataBase = colDir
@@ -266,6 +392,12 @@ func (dl defLoader) readCollectionDefShared(schemaDir, dataBaseDir, parentPath, 
 		return nil, fmt.Errorf("failed to parse YAML file %s: %w", colDefFilePath, err)
 	}
 	colDef.ID = id
+
+	// Resolve `inherits` before data_dir, subcollections, and views are derived
+	// (see readCollectionDef). A missing base or a cycle is a load error.
+	if err = dl.resolveInheritance(colDef, colDefFilePath); err != nil {
+		return nil, err
+	}
 
 	if colDef.DataDir != "" {
 		colDef.DirPath = filepath.Join(dataBaseDir, colDef.DataDir)

@@ -51,15 +51,16 @@ func TestDecodeCollectionDef_RejectsUnknownColumnKey(t *testing.T) {
 }
 
 // Strict decoding is document-wide, not column-only. geo-ingitdb declared all
-// of these and none has ever been implemented: an inherits: hierarchy across
-// four files and record_labels. They were read and dropped, so the config
-// looked live and did nothing.
+// of these and none had ever been implemented; they were read and dropped, so
+// the config looked live and did nothing.
 //
-// min_records_count / max_records_count are NOT in this list: they were in the
-// same geo-ingitdb sweep, but ingitdb-go#8 implemented them, so they are now
-// modelled keys (see TestDecodeCollectionDef_AcceptsModelledKeys).
+// `inherits` and `min_records_count`/`max_records_count` are deliberately NOT in
+// this list any more: ingitdb-go#7 and #8 implemented them, so they are now
+// modelled keys (see TestDecodeCollectionDef_AcceptsInherits and
+// TestDecodeCollectionDef_AcceptsModelledKeys). Only record_labels and the
+// records_file typo remain genuinely unknown.
 func TestDecodeCollectionDef_RejectsUnknownCollectionKey(t *testing.T) {
-	for _, key := range []string{"inherits", "record_labels", "records_file"} {
+	for _, key := range []string{"record_labels", "records_file"} {
 		t.Run(key, func(t *testing.T) {
 			y := key + ": x\ncolumns:\n  id:\n    type: string\n"
 			var colDef ingitdb.CollectionDef
@@ -121,5 +122,19 @@ columns_order: [id, state, name]
 	}
 	if colDef.MaxRecordsCount == nil || *colDef.MaxRecordsCount != 100 {
 		t.Error("max_records_count must survive decoding as a modelled key")
+	}
+}
+
+// `inherits` is a modelled top-level key (ingitdb-go#7): it must decode rather
+// than being rejected as unknown. Full resolution/merge behaviour lives in
+// def_inheritance_test.go; this only guards the strict-decode boundary.
+func TestDecodeCollectionDef_AcceptsInherits(t *testing.T) {
+	y := "inherits: $base.yaml\ncolumns:\n  id:\n    type: string\n"
+	var colDef ingitdb.CollectionDef
+	if err := decodeCollectionDef([]byte(y), &colDef); err != nil {
+		t.Fatalf("inherits must decode as a modelled key, got: %v", err)
+	}
+	if colDef.Inherits != "$base.yaml" {
+		t.Errorf("inherits must survive decoding, got %q", colDef.Inherits)
 	}
 }
