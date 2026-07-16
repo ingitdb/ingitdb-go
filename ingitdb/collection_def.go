@@ -1,5 +1,7 @@
 package ingitdb
 
+// specscore: feature/record-count-constraints
+
 import (
 	"errors"
 	"fmt"
@@ -30,6 +32,24 @@ type CollectionDef struct {
 
 	Readme *CollectionReadmeDef `yaml:"readme,omitempty" json:"readme,omitempty"`
 
+	// MinRecordsCount and MaxRecordsCount constrain how many records the
+	// collection may hold. They are collection-level integrity invariants:
+	// `min_records_count: 1` means "this collection must not be empty",
+	// `max_records_count: 0` means "this collection must be empty". A negative
+	// bound, or a min above the max, is a definition-load error (Validate); a
+	// record count outside the range is a validation error emitted during
+	// whole-database validation (datavalidator).
+	//
+	// Pointer-typed on purpose, for the same reason as MinValue/MaxValue and
+	// MinLength/MaxLength: a declared zero must be distinguishable from "not
+	// declared". `max_records_count: 0` is meaningful, and with a plain int the
+	// natural "!= 0" guard would read that declared zero as unset and enforce
+	// nothing — the silent-no-op failure this whole validation stack exists to
+	// end (geo-ingitdb declared these on three subcollections and inGitDB read
+	// and dropped them; ingitdb-go#8).
+	MinRecordsCount *int `yaml:"min_records_count,omitempty" json:"min_records_count,omitempty"`
+	MaxRecordsCount *int `yaml:"max_records_count,omitempty" json:"max_records_count,omitempty"`
+
 	// ConflictResolution overrides the database-level conflict-resolution
 	// settings for this collection. Nil fields inherit the database default.
 	ConflictResolution *ConflictResolutionConfig `yaml:"conflict_resolution,omitempty" json:"conflict_resolution,omitempty"`
@@ -58,6 +78,9 @@ func (r *CollectionReadmeDef) Validate() error {
 func (v *CollectionDef) Validate() error {
 	if v.ID == "" {
 		return fmt.Errorf("missing 'id' in collection definition")
+	}
+	if err := v.validateRecordCountBounds(); err != nil {
+		return err
 	}
 	var allErrors []error
 	if len(v.Columns) == 0 {
@@ -138,5 +161,24 @@ func (v *CollectionDef) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+// validateRecordCountBounds rejects a record-count bound that cannot describe
+// any valid collection: a negative min or max (a collection can never hold a
+// negative number of records), or a min above the max (no count satisfies
+// both). An impossible bound is an author mistake in the schema itself, caught
+// at definition-load rather than deferred to a validation-time finding — the
+// same policy the column value-range constraints use for an inverted range.
+func (v *CollectionDef) validateRecordCountBounds() error {
+	if v.MinRecordsCount != nil && *v.MinRecordsCount < 0 {
+		return fmt.Errorf("min_records_count must not be negative, got %d", *v.MinRecordsCount)
+	}
+	if v.MaxRecordsCount != nil && *v.MaxRecordsCount < 0 {
+		return fmt.Errorf("max_records_count must not be negative, got %d", *v.MaxRecordsCount)
+	}
+	if v.MinRecordsCount != nil && v.MaxRecordsCount != nil && *v.MinRecordsCount > *v.MaxRecordsCount {
+		return fmt.Errorf("min_records_count %d exceeds max_records_count %d", *v.MinRecordsCount, *v.MaxRecordsCount)
+	}
 	return nil
 }

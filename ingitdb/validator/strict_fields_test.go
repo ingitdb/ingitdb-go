@@ -52,10 +52,14 @@ func TestDecodeCollectionDef_RejectsUnknownColumnKey(t *testing.T) {
 
 // Strict decoding is document-wide, not column-only. geo-ingitdb declared all
 // of these and none has ever been implemented: an inherits: hierarchy across
-// four files, record-count bounds, and record_labels. They were read and
-// dropped, so the config looked live and did nothing.
+// four files and record_labels. They were read and dropped, so the config
+// looked live and did nothing.
+//
+// min_records_count / max_records_count are NOT in this list: they were in the
+// same geo-ingitdb sweep, but ingitdb-go#8 implemented them, so they are now
+// modelled keys (see TestDecodeCollectionDef_AcceptsModelledKeys).
 func TestDecodeCollectionDef_RejectsUnknownCollectionKey(t *testing.T) {
-	for _, key := range []string{"inherits", "min_records_count", "max_records_count", "record_labels", "records_file"} {
+	for _, key := range []string{"inherits", "record_labels", "records_file"} {
 		t.Run(key, func(t *testing.T) {
 			y := key + ": x\ncolumns:\n  id:\n    type: string\n"
 			var colDef ingitdb.CollectionDef
@@ -76,6 +80,8 @@ func TestDecodeCollectionDef_AcceptsModelledKeys(t *testing.T) {
 	y := `titles:
   en: Capabilities
 primary_key: ["id"]
+min_records_count: 1
+max_records_count: 100
 record_file:
   name: "{key}.json"
   type: "map[string]any"
@@ -108,5 +114,12 @@ columns_order: [id, state, name]
 	}
 	if colDef.Columns["state"].Enum == nil {
 		t.Error("enum must survive decoding")
+	}
+	// Verifies record-count-constraints#ac:record-count-bounds-decode-under-strict-fields.
+	if colDef.MinRecordsCount == nil || *colDef.MinRecordsCount != 1 {
+		t.Error("min_records_count must survive decoding as a modelled key")
+	}
+	if colDef.MaxRecordsCount == nil || *colDef.MaxRecordsCount != 100 {
+		t.Error("max_records_count must survive decoding as a modelled key")
 	}
 }
