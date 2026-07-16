@@ -35,6 +35,14 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 		for _, validationErr := range errors {
 			result.Append(validationErr)
 		}
+		// Record-count bounds are a collection-level invariant checked against
+		// the record count the schema pass just produced. Only root collections
+		// are walked here (this loop, like the schema pass, iterates
+		// def.Collections, never subcollections) — see the Feature's
+		// root-vs-subcollection note.
+		for _, validationErr := range checkRecordCountConstraints(collectionKey, colDef, total) {
+			result.Append(validationErr)
+		}
 		result.SetRecordCounts(collectionKey, passed, total)
 		result.SetRecordCount(collectionKey, total)
 	}
@@ -594,6 +602,34 @@ func newValidationError(collectionKey, filePath, recordKey, fieldName, message s
 		Message:      message,
 		Err:          err,
 	}
+}
+
+// checkRecordCountConstraints enforces a collection's min_records_count /
+// max_records_count against how many records it holds. count is the record
+// count already produced by the schema pass (validateCollectionRecords' total):
+// for a single-record-per-file collection that is the file count, and for a
+// map- or list-of-records collection it is the number of parsed entries — which
+// is what an author means by "records count". It deliberately is NOT a raw
+// countRecords directory scan, which would report 1 for a map/list collection
+// whose records all live in one backing file.
+//
+// A violation is a collection-level finding: no field, no record key, naming
+// the collection, the bound, and the actual count. Bounds are inclusive, and an
+// impossible bound is already rejected at definition-load, so both pointers here
+// are either nil or a sane value.
+func checkRecordCountConstraints(collectionKey string, colDef *ingitdb.CollectionDef, count int) []ingitdb.ValidationError {
+	var errors []ingitdb.ValidationError
+	if colDef.MinRecordsCount != nil && count < *colDef.MinRecordsCount {
+		message := fmt.Sprintf("collection %q holds %d record(s), fewer than the declared min_records_count of %d",
+			collectionKey, count, *colDef.MinRecordsCount)
+		errors = append(errors, newValidationError(collectionKey, "", "", "", message, nil))
+	}
+	if colDef.MaxRecordsCount != nil && count > *colDef.MaxRecordsCount {
+		message := fmt.Sprintf("collection %q holds %d record(s), more than the declared max_records_count of %d",
+			collectionKey, count, *colDef.MaxRecordsCount)
+		errors = append(errors, newValidationError(collectionKey, "", "", "", message, nil))
+	}
+	return errors
 }
 
 // countRecords counts the number of record keys in a collection directory.
