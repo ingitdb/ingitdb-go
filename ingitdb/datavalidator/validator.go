@@ -37,6 +37,13 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 		result.SetRecordCount(collectionKey, total)
 	}
 
+	// Referential integrity is a whole-definition concern — a value must exist
+	// as a key in the resolved target collection — so it runs after the
+	// per-collection schema pass, once every collection's keys are known.
+	for _, validationErr := range validateForeignKeyReferences(def) {
+		result.Append(validationErr)
+	}
+
 	return result, nil
 }
 
