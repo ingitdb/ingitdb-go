@@ -12,6 +12,14 @@ type ColumnDef struct {
 	MinLength  int               `yaml:"min_length,omitempty"`
 	MaxLength  int               `yaml:"max_length,omitempty"`
 	ForeignKey string            `yaml:"foreign_key,omitempty"`
+	// Enum, when non-empty, restricts the column's value to one of the listed
+	// members. A record value outside the list is a validation error naming the
+	// field, the offending value, and the permitted set.
+	//
+	// Declaring an empty enum, duplicate members, or a member not assignable to
+	// the column's declared Type is a definition-load error: each is a mistake
+	// that would otherwise silently constrain nothing or nothing at all.
+	Enum []any `yaml:"enum,omitempty"`
 	// Locale pairs this column with a map[locale]string column named <this_column_name>+"s".
 	// For example, column "title" with locale "en" is paired with column "titles".
 	// When reading, the locale value is extracted from the pair column and exposed as this column.

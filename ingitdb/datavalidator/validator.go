@@ -295,14 +295,67 @@ func validateRecordData(
 			}
 			continue
 		}
-		if valueMatchesColumnType(value, columnDef.Type) {
+		if !valueMatchesColumnType(value, columnDef.Type) {
+			message := fmt.Sprintf("wrong type for field %q: expected %s, got %T", fieldName, columnDef.Type, value)
+			validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil)
+			errors = append(errors, validationErr)
 			continue
 		}
-		message := fmt.Sprintf("wrong type for field %q: expected %s, got %T", fieldName, columnDef.Type, value)
-		validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil)
-		errors = append(errors, validationErr)
+		if err := checkEnum(fieldName, value, columnDef.Enum); err != nil {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+			continue
+		}
 	}
 	return errors
+}
+
+// checkEnum reports whether value is one of the column's permitted members.
+// An empty enum means the column is unconstrained by this rule.
+func checkEnum(fieldName string, value any, enum []any) error {
+	if len(enum) == 0 {
+		return nil
+	}
+	for _, member := range enum {
+		if enumValuesEqual(member, value) {
+			return nil
+		}
+	}
+	permitted := make([]string, 0, len(enum))
+	for _, member := range enum {
+		permitted = append(permitted, fmt.Sprintf("%v", member))
+	}
+	return fmt.Errorf("value %v for field %q is not one of the permitted values: %s",
+		value, fieldName, strings.Join(permitted, ", "))
+}
+
+// enumValuesEqual compares a declared enum member against a record value.
+// YAML and JSON decode numbers into different Go types (int vs float64), so a
+// direct == would reject a legitimate member on type alone; compare numerics by
+// value and everything else directly.
+func enumValuesEqual(member, value any) bool {
+	if member == value {
+		return true
+	}
+	mf, mok := numericValue(member)
+	vf, vok := numericValue(value)
+	return mok && vok && mf == vf
+}
+
+func numericValue(v any) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float32:
+		return float64(n), true
+	case float64:
+		return n, true
+	default:
+		return 0, false
+	}
 }
 
 func valueMatchesColumnType(value any, columnType ingitdb.ColumnType) bool {
