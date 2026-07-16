@@ -8,8 +8,21 @@ import (
 )
 
 type CollectionDef struct {
-	ID           string                `json:"-"` // Taken from dir name
-	DirPath      string                `yaml:"-" json:"-"`
+	ID      string `json:"-"` // Taken from dir name
+	DirPath string `yaml:"-" json:"-"`
+	// Inherits, when set, names a base partial definition to overlay under this
+	// one. The value is a filesystem path resolved relative to the directory
+	// containing this definition file (the `.collection/` schema directory, or
+	// the `.collections/<name>/` directory in the shared layout). The base is a
+	// partial CollectionDef: it need not be a loadable collection on its own and
+	// commonly declares only shared columns. Resolution happens at definition
+	// load (validator.ReadDefinition): columns merge by name (this definition
+	// wins), other inheritable fields fill in where this one leaves them unset,
+	// a base may itself declare `inherits` (chains are resolved transitively),
+	// and a missing base or an inheritance cycle is a load-time error. After
+	// resolution the field is cleared, so a fully-loaded definition never
+	// carries it. See spec/features/definition-inheritance.
+	Inherits     string                `yaml:"inherits,omitempty" json:"-"`
 	Titles       map[string]string     `yaml:"titles,omitempty"`
 	RecordFile   *RecordFileDef        `yaml:"record_file"`
 	DataDir      string                `yaml:"data_dir,omitempty"`
