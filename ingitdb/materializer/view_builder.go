@@ -1,5 +1,7 @@
 package materializer
 
+// specscore: feature/materialized-view-md-extension
+
 import (
 	"bytes"
 	"context"
@@ -534,8 +536,24 @@ func resolveViewOutputPath(col *ingitdb.CollectionDef, view *ingitdb.ViewDef, db
 	if name == "" {
 		name = "view"
 	}
-	ext := defaultViewFormatExtension(strings.ToLower(view.Format))
+	ext := namedViewExtension(view)
 	return filepath.Join(repoRoot, ingitdb.IngitdbDir, relPath, name+"."+ext)
+}
+
+// namedViewExtension returns the output file extension for a template-less
+// named view. The built-in renderer (renderBuiltinView) emits a Markdown table
+// when the view's formats list contains "md", so the output file MUST carry the
+// ".md" extension in that case — otherwise a Markdown table lands in a ".ingr"
+// file that GitHub will not render (ingitdb-go#3). When formats does not request
+// Markdown, the extension is the data-export extension derived from format
+// (ingr by default), unchanged.
+func namedViewExtension(view *ingitdb.ViewDef) string {
+	for _, f := range view.Formats {
+		if strings.EqualFold(f, "md") {
+			return "md"
+		}
+	}
+	return defaultViewFormatExtension(strings.ToLower(view.Format))
 }
 
 // displayRelPath returns outPath relative to repoRoot for display, or outPath if unavailable.

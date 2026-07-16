@@ -1,5 +1,7 @@
 package ingitdb
 
+// specscore: feature/record-file-name-placeholders
+
 import (
 	"fmt"
 	"regexp"
@@ -124,23 +126,56 @@ func (rfd RecordFileDef) RecordsBasePath() string {
 	return ""
 }
 
-func (rfd RecordFileDef) GetRecordFileName(record dal.Record) string {
+// GetRecordFileName computes a record's on-disk file name from the
+// record_file.name pattern, substituting the first {key} placeholder with the
+// record's key (its ID, the same value the records reader derives from the file
+// name) and each {fieldName} placeholder with the matching column value.
+//
+// It returns an error — and no usable file name — when a substituted value
+// contains a path separator ('/' or '\'). Such a value would nest the record
+// file under a directory the records reader can never glob back, silently
+// losing the record (ingitdb-go#1). Failing here turns that silent data loss
+// into an actionable error at the point the name is computed.
+func (rfd RecordFileDef) GetRecordFileName(record dal.Record) (string, error) {
 	name := rfd.Name
-	if i := strings.Index(name, "{key}"); i >= 0 {
-		key := record.Key()
-		s := key.String()
+
+	if strings.Contains(name, "{key}") {
+		s := fmt.Sprintf("%v", record.Key().ID)
+		if err := checkFileNameSegment("key", s); err != nil {
+			return "", err
+		}
 		name = strings.Replace(name, "{key}", s, 1)
 	}
-	data := record.Data().(map[string]any)
+
+	data, _ := record.Data().(map[string]any)
 	for colName, colValue := range data {
-		if colName != "" {
+		if colName == "" {
+			// There is no {} placeholder concept; only named columns
+			// substitute. (The former guard was inverted, skipping every
+			// named column and leaving {fieldName} literal — ingitdb-go#2.)
 			continue
 		}
 		placeholder := fmt.Sprintf("{%s}", colName)
 		if strings.Contains(name, placeholder) {
 			s := fmt.Sprintf("%v", colValue)
+			if err := checkFileNameSegment(colName, s); err != nil {
+				return "", err
+			}
 			name = strings.Replace(name, placeholder, s, 1)
 		}
 	}
-	return name
+	return name, nil
+}
+
+// checkFileNameSegment rejects a value substituted into a record-file name
+// segment when it contains a path separator. Both '/' and '\' are rejected so a
+// database authored on one OS cannot silently nest a record file on another.
+func checkFileNameSegment(placeholder, value string) error {
+	if strings.ContainsAny(value, `/\`) {
+		return fmt.Errorf(
+			"record_file.name {%s} value %q contains a path separator; "+
+				"it would nest the record file where it cannot be read back",
+			placeholder, value)
+	}
+	return nil
 }

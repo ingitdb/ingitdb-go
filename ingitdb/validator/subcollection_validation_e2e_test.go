@@ -317,14 +317,10 @@ func TestSubcolE2E_DemoIngitdbSubcollectionsClean(t *testing.T) {
 		t.Fatalf("validate error: %v", err)
 	}
 	errs := res.Errors()
-	// The newly-walked orders/order_details subcollection is clean.
-	for _, e := range errs {
-		if strings.HasPrefix(e.CollectionID, "commerce.orders/") || e.CollectionID == "commerce.orders/order_details" {
-			t.Errorf("demo-ingitdb subcollection must be clean, got finding: [col=%s] %s (%s)", e.CollectionID, e.Message, e.FilePath)
-		}
-	}
-	// Pre-existing root-level findings (commerce.addresses postal_code) remain.
-	if len(findingsFor(errs, "commerce.addresses")) == 0 {
-		t.Errorf("expected pre-existing commerce.addresses findings to remain; got none of %d findings", len(errs))
+	// The newly-walked orders/order_details subcollection is clean — and since
+	// the root commerce.addresses postal_code data was fixed (ingitdb-go#6), the
+	// whole database now validates clean. This asserts both at once.
+	if len(errs) != 0 {
+		t.Errorf("demo-ingitdb must validate clean (root + subcollections), got %d findings: %v", len(errs), errs)
 	}
 }

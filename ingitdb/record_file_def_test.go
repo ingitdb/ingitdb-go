@@ -288,42 +288,57 @@ func TestRecordFileDefValidate(t *testing.T) {
 	}
 }
 
+func recordWith(t *testing.T, id string, data map[string]any) dal.Record {
+	t.Helper()
+	key := dal.NewKeyWithID("tasks", id)
+	record := dal.NewRecordWithData(key, data)
+	record.SetError(nil)
+	return record
+}
+
 func TestRecordFileDefGetRecordFileName(t *testing.T) {
 	t.Parallel()
 
-	key := dal.NewKeyWithID("tasks", "task-1")
-	keyString := key.String()
-	data := map[string]any{
-		"":    "val",
-		"foo": "bar",
-	}
-	record := dal.NewRecordWithData(key, data)
-	record.SetError(nil)
-
 	tests := []struct {
-		name string
-		def  RecordFileDef
-		want string
+		name   string
+		def    RecordFileDef
+		record dal.Record
+		want   string
 	}{
 		{
-			name: "key_and_empty_placeholder",
-			def:  RecordFileDef{Format: "JSON", Name: "file-{}-{key}.json"},
-			want: "file-" + "val" + "-" + keyString + ".json",
+			// AC: key-placeholder-still-substitutes
+			name:   "key_placeholder_substitutes_record_id",
+			def:    RecordFileDef{Format: "JSON", Name: "{key}.yaml"},
+			record: recordWith(t, "task-1", map[string]any{"foo": "bar"}),
+			want:   "task-1.yaml",
 		},
 		{
-			name: "replaces_only_first_key_placeholder",
-			def:  RecordFileDef{Format: "JSON", Name: "{key}-second-{key}.json"},
-			want: keyString + "-second-{key}.json",
+			// AC: fieldname-placeholder-is-substituted
+			name:   "fieldname_placeholder_substitutes_column_value",
+			def:    RecordFileDef{Format: "JSON", Name: "{status}-{key}.json"},
+			record: recordWith(t, "inline-keyboard", map[string]any{"status": "native"}),
+			want:   "native-inline-keyboard.json",
 		},
 		{
-			name: "replaces_only_first_value_placeholder",
-			def:  RecordFileDef{Format: "JSON", Name: "file-{}-again-{}.json"},
-			want: "file-" + "val" + "-again-{}.json",
+			// AC: empty-named-column-is-skipped — an empty-named column is not a
+			// placeholder; {key} still substitutes, {} is left untouched.
+			name:   "empty_named_column_is_skipped",
+			def:    RecordFileDef{Format: "JSON", Name: "{key}.json"},
+			record: recordWith(t, "k1", map[string]any{"": "val"}),
+			want:   "k1.json",
 		},
 		{
-			name: "static_name",
-			def:  RecordFileDef{Format: "JSON", Name: "static.json"},
-			want: "static.json",
+			name:   "replaces_only_first_key_placeholder",
+			def:    RecordFileDef{Format: "JSON", Name: "{key}-second-{key}.json"},
+			record: recordWith(t, "task-1", nil),
+			want:   "task-1-second-{key}.json",
+		},
+		{
+			// AC: static-name-round-trips
+			name:   "static_name",
+			def:    RecordFileDef{Format: "JSON", Name: "static.json"},
+			record: recordWith(t, "task-1", map[string]any{"foo": "bar"}),
+			want:   "static.json",
 		},
 	}
 
@@ -331,9 +346,65 @@ func TestRecordFileDefGetRecordFileName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := tt.def.GetRecordFileName(record)
+			got, err := tt.def.GetRecordFileName(tt.record)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if got != tt.want {
 				t.Fatalf("expected %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestRecordFileDefGetRecordFileName_RejectsPathSeparator(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		def         RecordFileDef
+		record      dal.Record
+		wantInError []string
+	}{
+		{
+			// AC: slash-in-key-is-rejected
+			name:        "slash_in_key",
+			def:         RecordFileDef{Format: "JSON", Name: "{key}.json"},
+			record:      recordWith(t, "telegram/inline-keyboard", nil),
+			wantInError: []string{"key", "telegram/inline-keyboard"},
+		},
+		{
+			// AC: slash-in-field-value-is-rejected
+			name:        "slash_in_field_value",
+			def:         RecordFileDef{Format: "JSON", Name: "{status}-{key}.json"},
+			record:      recordWith(t, "k", map[string]any{"status": "in/progress"}),
+			wantInError: []string{"status", "in/progress"},
+		},
+		{
+			name: "backslash_in_key",
+			def:  RecordFileDef{Format: "JSON", Name: "{key}.json"},
+			// %q escapes the backslash in the message, so assert the placeholder
+			// and the error nature rather than the raw value verbatim.
+			record:      recordWith(t, `win\path`, nil),
+			wantInError: []string{"key", "path separator"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tt.def.GetRecordFileName(tt.record)
+			if err == nil {
+				t.Fatalf("expected an error, got file name %q", got)
+			}
+			if got != "" {
+				t.Fatalf("expected empty file name on error, got %q", got)
+			}
+			for _, want := range tt.wantInError {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error %q does not contain %q", err.Error(), want)
+				}
 			}
 		})
 	}
