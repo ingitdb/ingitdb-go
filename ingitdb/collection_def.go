@@ -1,5 +1,7 @@
 package ingitdb
 
+// specscore: feature/record-count-constraints
+
 import (
 	"errors"
 	"fmt"

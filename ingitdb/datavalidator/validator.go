@@ -1,6 +1,7 @@
 package datavalidator
 
 // specscore: feature/column-validation
+// specscore: feature/record-count-constraints
 
 import (
 	"context"
