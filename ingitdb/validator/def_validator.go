@@ -73,6 +73,18 @@ func ReadDefinition(rootPath string, o ...ingitdb.ReadOption) (def *ingitdb.Defi
 	if err != nil {
 		return nil, err
 	}
+	// A database that resolves to zero collections but carries an older-layout
+	// marker is not empty — it is unreadable, and returning it with no error is
+	// silent success on a broken read (ingitdb-go#9). geo-ingitdb hits exactly
+	// this: a single `.ingitdb.yaml` plus `.ingitdb-collection.yaml` /
+	// `.ingitdb-subcol.*`, none of which the current reader understands.
+	if len(def.Collections) == 0 {
+		if marker := detectLegacyLayout(dl, rootPath); marker != "" {
+			return nil, fmt.Errorf(
+				"%s carries %s, a marker of an unsupported older inGitDB layout, and resolved to zero collections; the reader expects %s/%s and .collection/definition.yaml (see ingitdb-go#9)",
+				rootPath, marker, config.IngitDBDirName, config.RootCollectionsFileName)
+		}
+	}
 	// NOT wired in yet: ingitdb.ValidateForeignKeys(def) is implemented and
 	// tested, but enabling it here makes ReadDefinition fail outright for
 	// demo-ingitdb, whose columns declare `foreign_key: countries` while the
@@ -83,6 +95,26 @@ func ReadDefinition(rootPath string, o ...ingitdb.ReadOption) (def *ingitdb.Defi
 	// also exists. Turning this on before that is decided would break a database
 	// on a guess. See ingitdb-go#11.
 	return def, nil
+}
+
+// legacyLayoutMarkers are root-level files that mean "this is an inGitDB
+// database written in the older layout": a single `.ingitdb.yaml` config (the
+// current reader wants a `.ingitdb/` directory) and a bare
+// `.ingitdb-collection.yaml` (the current reader wants `.collection/`).
+var legacyLayoutMarkers = []string{".ingitdb.yaml", ".ingitdb-collection.yaml"}
+
+// detectLegacyLayout reports the first legacy-layout marker present at rootPath,
+// or "" if none. Used only to turn a zero-collection result into a loud error
+// rather than silent success, so it is deliberately conservative: it checks a
+// couple of unambiguous root-level filenames rather than scanning the tree, so
+// it never flags a directory the caller merely pointed at by mistake.
+func detectLegacyLayout(dl defLoader, rootPath string) string {
+	for _, name := range legacyLayoutMarkers {
+		if _, err := dl.readFile(filepath.Join(rootPath, name)); err == nil {
+			return name
+		}
+	}
+	return ""
 }
 
 func (dl defLoader) readRootCollections(rootPath string, rootConfig config.RootConfig, o ingitdb.ReadOptions) (def *ingitdb.Definition, err error) {
