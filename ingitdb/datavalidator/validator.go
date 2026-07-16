@@ -2,6 +2,7 @@ package datavalidator
 
 // specscore: feature/column-validation
 // specscore: feature/record-count-constraints
+// specscore: feature/subcollection-record-validation
 
 import (
 	"context"
@@ -48,9 +49,18 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 		result.SetRecordCount(collectionKey, total)
 	}
 
+	// Subcollection records are not reached by the root loop above (it iterates
+	// def.Collections only). This additive pass walks every collection's
+	// SubCollections recursively, resolving each subcollection's on-disk data
+	// per parent record, and validates their records with the same per-record
+	// checks and record-count enforcement. See
+	// spec/features/subcollection-record-validation.
+	validateSubCollections(def, result)
+
 	// Referential integrity is a whole-definition concern — a value must exist
 	// as a key in the resolved target collection — so it runs after the
-	// per-collection schema pass, once every collection's keys are known.
+	// per-collection schema pass, once every collection's keys are known. It
+	// covers both root and subcollection records (shared walk).
 	for _, validationErr := range validateForeignKeyReferences(def) {
 		result.Append(validationErr)
 	}

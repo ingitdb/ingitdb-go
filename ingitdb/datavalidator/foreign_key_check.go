@@ -1,11 +1,14 @@
 package datavalidator
 
 // specscore: feature/column-validation
+// specscore: feature/subcollection-record-validation
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	ingitdb "github.com/ingitdb/ingitdb-go/ingitdb"
 )
@@ -60,15 +63,18 @@ func validateForeignKeyReferences(def *ingitdb.Definition) []ingitdb.ValidationE
 	}
 
 	var errors []ingitdb.ValidationError
-	var walk func(fullID string, col *ingitdb.CollectionDef)
-	walk = func(fullID string, col *ingitdb.CollectionDef) {
-		errors = append(errors, checkCollectionForeignKeys(fullID, col, def, idx)...)
-		for subID, sub := range col.SubCollections {
-			walk(fullID+"/"+subID, sub)
-		}
-	}
-	for id, col := range def.Collections {
-		walk(id, col)
+	for _, id := range slices.Sorted(maps.Keys(def.Collections)) {
+		col := def.Collections[id]
+		errors = append(errors, checkCollectionForeignKeys(id, col, def, idx)...)
+		// Subcollection records live once per parent record, not at the
+		// subcollection's loaded DirPath; walkSubCollectionInstances repoints each
+		// instance at its on-disk data so a foreign_key on a subcollection column
+		// is actually checked. This shares one instance-enumeration with the
+		// schema pass (validateSubCollections), so the two passes cannot disagree
+		// on where a subcollection's records live.
+		walkSubCollectionInstances(id, col, func(inst subCollectionInstance) {
+			errors = append(errors, checkCollectionForeignKeys(inst.fullID, inst.colDef, def, idx)...)
+		})
 	}
 	return errors
 }
