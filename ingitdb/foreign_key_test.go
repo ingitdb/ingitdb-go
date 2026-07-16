@@ -34,6 +34,85 @@ func TestValidateForeignKeys_RejectsUnknownTarget(t *testing.T) {
 	}
 }
 
+// REQ:foreign-key-enforced — module-relative resolution. A bare foreign_key
+// resolves within the declaring collection's module first. Mirrors
+// demo-ingitdb: commerce.addresses says `foreign_key: countries` and must reach
+// commerce.countries, not fail because no bare `countries` exists and not
+// collide with geo.countries.
+func TestResolveForeignKey_ModuleRelative(t *testing.T) {
+	collections := map[string]*CollectionDef{
+		"commerce.addresses": {ID: "commerce.addresses"},
+		"commerce.countries": {ID: "commerce.countries"},
+		"geo.countries":      {ID: "geo.countries"},
+	}
+	cases := []struct {
+		name       string
+		declaring  string
+		fk         string
+		wantTarget string
+		wantOK     bool
+	}{
+		{"bare resolves within module", "commerce.addresses", "countries", "commerce.countries", true},
+		{"bare prefers own module over another", "commerce.addresses", "countries", "commerce.countries", true},
+		{"fully-qualified is used as-is", "commerce.addresses", "geo.countries", "geo.countries", true},
+		{"fully-qualified to a missing target fails", "commerce.addresses", "geo.provinces", "geo.provinces", false},
+		{"bare with no module match fails", "commerce.addresses", "nope", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ResolveForeignKey(tc.declaring, tc.fk, collections)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v (target %q)", ok, tc.wantOK, got)
+			}
+			if ok && got != tc.wantTarget {
+				t.Errorf("target = %q, want %q", got, tc.wantTarget)
+			}
+		})
+	}
+}
+
+// A module-relative subcollection FK resolves via the root ancestor's module.
+func TestResolveForeignKey_SubcollectionUsesRootModule(t *testing.T) {
+	collections := map[string]*CollectionDef{
+		"commerce.products": {ID: "commerce.products"},
+	}
+	got, ok := ResolveForeignKey("commerce.orders/order_details", "products", collections)
+	if !ok || got != "commerce.products" {
+		t.Errorf("subcollection FK must resolve via root module: got %q ok=%v", got, ok)
+	}
+}
+
+// A bare collection id (no module) still resolves bare — can-i-use.
+func TestResolveForeignKey_NoModuleBare(t *testing.T) {
+	collections := map[string]*CollectionDef{
+		"capabilities":        {ID: "capabilities"},
+		"equivalence_classes": {ID: "equivalence_classes"},
+	}
+	got, ok := ResolveForeignKey("capabilities", "equivalence_classes", collections)
+	if !ok || got != "equivalence_classes" {
+		t.Errorf("bare id must resolve bare: got %q ok=%v", got, ok)
+	}
+}
+
+// ValidateForeignKeys accepts a whole module-namespaced definition. Mirrors
+// demo-ingitdb's commerce module.
+func TestValidateForeignKeys_AcceptsModuleRelative(t *testing.T) {
+	def := &Definition{Collections: map[string]*CollectionDef{
+		"commerce.addresses": {ID: "commerce.addresses", Columns: map[string]*ColumnDef{
+			"country_id": {Type: ColumnTypeString, ForeignKey: "countries"},
+		}},
+		"commerce.countries": {ID: "commerce.countries", Columns: map[string]*ColumnDef{
+			"name": {Type: ColumnTypeString},
+		}},
+		"geo.countries": {ID: "geo.countries", Columns: map[string]*ColumnDef{
+			"name": {Type: ColumnTypeString},
+		}},
+	}}
+	if err := ValidateForeignKeys(def); err != nil {
+		t.Errorf("module-relative foreign_key must resolve, got: %v", err)
+	}
+}
+
 // A foreign_key naming a real collection loads cleanly. Mirrors can-i-use.
 func TestValidateForeignKeys_AcceptsKnownTarget(t *testing.T) {
 	def := &Definition{Collections: map[string]*CollectionDef{
