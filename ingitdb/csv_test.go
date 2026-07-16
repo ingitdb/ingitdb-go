@@ -3,7 +3,6 @@ package ingitdb
 import (
 	"strings"
 	"testing"
-
 )
 
 func newCSVCollectionDef(columns []string) *CollectionDef {

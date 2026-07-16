@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
 )
 
 // recordsKey is the key under which a parsed CSV list of rows is exposed

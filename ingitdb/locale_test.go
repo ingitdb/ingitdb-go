@@ -2,7 +2,6 @@ package ingitdb
 
 import (
 	"testing"
-
 )
 
 func TestApplyLocaleToRead(t *testing.T) {

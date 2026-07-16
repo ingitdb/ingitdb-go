@@ -155,3 +155,95 @@ func TestFileViewWriter_StripsMarkdownComments_EmptyLineCollapse(t *testing.T) {
 		t.Fatalf("expected one blank line between sections, got:\n%s", output)
 	}
 }
+
+func TestFileViewWriter_NoTemplate_MDFormat_RendersTable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	col := &ingitdb.CollectionDef{DirPath: dir}
+	view := &ingitdb.ViewDef{
+		Formats:  []string{"md"},
+		Columns:  []string{"name", "state"},
+		FileName: "output.md",
+	}
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("1", map[string]any{"name": "Alice", "state": "active"}),
+		ingitdb.NewMapRecordEntry("2", map[string]any{"name": "Bob", "state": "inactive"}),
+	}
+	outPath := filepath.Join(dir, "output.md")
+	writer := NewFileViewWriter()
+	outcome, err := writer.WriteView(context.Background(), col, view, records, outPath)
+	if err != nil {
+		t.Fatalf("WriteView: %v", err)
+	}
+	if outcome == WriteOutcomeUnchanged {
+		t.Fatalf("expected file to be written")
+	}
+	content, readErr := os.ReadFile(outPath)
+	if readErr != nil {
+		t.Fatalf("read output: %v", readErr)
+	}
+	out := string(content)
+	if !strings.Contains(out, "| name |") {
+		t.Errorf("expected '| name |' header in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "| state |") {
+		t.Errorf("expected '| state |' header in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Alice") {
+		t.Errorf("expected 'Alice' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Bob") {
+		t.Errorf("expected 'Bob' in output, got:\n%s", out)
+	}
+}
+
+func TestFileViewWriter_NoTemplate_NoMDFormat_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	col := &ingitdb.CollectionDef{DirPath: dir}
+	view := &ingitdb.ViewDef{}
+	outPath := filepath.Join(dir, "output.md")
+	writer := NewFileViewWriter()
+	_, err := writer.WriteView(context.Background(), col, view, nil, outPath)
+	if err == nil {
+		t.Fatalf("expected error for missing template and no md format")
+	}
+}
+
+func TestFuncViewWriter_NoTemplate_MDFormat_RendersTable(t *testing.T) {
+	t.Parallel()
+
+	var captured []byte
+	writer := NewFuncViewWriter(func(content []byte) error {
+		captured = make([]byte, len(content))
+		copy(captured, content)
+		return nil
+	})
+	col := &ingitdb.CollectionDef{}
+	view := &ingitdb.ViewDef{
+		Formats: []string{"md"},
+		Columns: []string{"name", "state"},
+	}
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("1", map[string]any{"name": "Alice", "state": "active"}),
+	}
+	outcome, err := writer.WriteView(context.Background(), col, view, records, "output.md")
+	if err != nil {
+		t.Fatalf("WriteView: %v", err)
+	}
+	if outcome == WriteOutcomeUnchanged {
+		t.Fatalf("expected content to be written")
+	}
+	out := string(captured)
+	if !strings.Contains(out, "| name |") {
+		t.Errorf("expected '| name |' header in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "| state |") {
+		t.Errorf("expected '| state |' header in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Alice") {
+		t.Errorf("expected 'Alice' in output, got:\n%s", out)
+	}
+}

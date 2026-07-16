@@ -3,7 +3,6 @@ package ingitdb
 import (
 	"strings"
 	"testing"
-
 )
 
 func TestEncodeListOfRecordsContent_OrderAndRoundTrip(t *testing.T) {

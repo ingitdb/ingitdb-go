@@ -18,8 +18,8 @@ type csvWriter interface {
 }
 
 var (
-	yamlMarshal  = yaml.Marshal
-	tomlMarshal  = toml.Marshal
-	newCSVWriter = func(w io.Writer) csvWriter { return csv.NewWriter(w) }
+	yamlMarshal      = yaml.Marshal
+	tomlMarshal      = toml.Marshal
+	newCSVWriter     = func(w io.Writer) csvWriter { return csv.NewWriter(w) }
 	newRecordsWriter = func(w io.Writer) ingr.RecordsWriter { return ingr.NewRecordsWriter(w) }
 )

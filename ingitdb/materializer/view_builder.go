@@ -121,6 +121,13 @@ func (b SimpleViewBuilder) BuildViews(
 			continue
 		}
 
+		if fieldName, ok := extractParameterField(view.ID); ok {
+			// For parameterized views, group by the field value BEFORE column filtering
+			// so the partition key field is still present in the data.
+			sortRecordsByOrderBy(records, view.OrderBy)
+			buildParameterizedViews(ctx, col, view, records, fieldName, dbPath, repoRoot, b.Writer, b.Logf, result)
+			continue
+		}
 		records = filterColumns(records, view.Columns)
 		sortRecordsByOrderBy(records, view.OrderBy)
 		if view.Top > 0 && len(records) > view.Top {
@@ -188,6 +195,13 @@ func (b SimpleViewBuilder) BuildView(
 		return result, nil
 	}
 
+	if fieldName, ok := extractParameterField(view.ID); ok {
+		// For parameterized views, group by the field value BEFORE column filtering
+		// so the partition key field is still present in the data.
+		sortRecordsByOrderBy(records, view.OrderBy)
+		buildParameterizedViews(ctx, col, view, records, fieldName, dbPath, repoRoot, b.Writer, b.Logf, result)
+		return result, nil
+	}
 	records = filterColumns(records, view.Columns)
 	sortRecordsByOrderBy(records, view.OrderBy)
 	if view.Top > 0 && len(records) > view.Top {
@@ -650,4 +664,91 @@ func cmpFloats(a, b float64) int {
 		return 1
 	}
 	return 0
+}
+
+// extractParameterField returns the field name between the first '{' and '}'
+// in the given string. Returns ("", false) if no such pattern is found.
+func extractParameterField(id string) (string, bool) {
+	start := strings.Index(id, "{")
+	if start < 0 {
+		return "", false
+	}
+	end := strings.Index(id[start:], "}")
+	if end < 0 {
+		return "", false
+	}
+	field := id[start+1 : start+end]
+	if field == "" {
+		return "", false
+	}
+	return field, true
+}
+
+// substituteField replaces "{fieldName}" with fieldValue in s.
+func substituteField(s, fieldName, fieldValue string) string {
+	return strings.ReplaceAll(s, "{"+fieldName+"}", fieldValue)
+}
+
+// buildParameterizedViews writes one output file per distinct field value found in records.
+// Records where the field is absent or nil are skipped.
+// It accumulates results into result and calls writer once per partition.
+func buildParameterizedViews(
+	ctx context.Context,
+	col *ingitdb.CollectionDef,
+	view *ingitdb.ViewDef,
+	records []ingitdb.IRecordEntry,
+	fieldName string,
+	dbPath string,
+	repoRoot string,
+	writer ViewWriter,
+	logf func(string, ...any),
+	result *ingitdb.MaterializeResult,
+) {
+	baseOutPath := resolveViewOutputPath(col, view, dbPath, repoRoot)
+	// Group records by field value; skip records missing the field.
+	groups := make(map[string][]ingitdb.IRecordEntry)
+	for _, rec := range records {
+		d := rec.GetData()
+		if d == nil {
+			continue
+		}
+		raw := d[fieldName]
+		if raw == nil {
+			continue
+		}
+		fv := fmt.Sprintf("%v", raw)
+		if fv == "" {
+			continue
+		}
+		groups[fv] = append(groups[fv], rec)
+	}
+
+	for fieldValue, partitionRecords := range groups {
+		partView := *view
+		if partView.Titles != nil {
+			newTitles := make(map[string]string, len(partView.Titles))
+			for k, v := range partView.Titles {
+				newTitles[k] = substituteField(v, fieldName, fieldValue)
+			}
+			partView.Titles = newTitles
+		}
+		outPath := substituteField(baseOutPath, fieldName, fieldValue)
+		outcome, err := writer.WriteView(ctx, col, &partView, partitionRecords, outPath)
+		if err != nil {
+			result.Errors = append(result.Errors, err)
+			continue
+		}
+		switch outcome {
+		case WriteOutcomeCreated:
+			result.FilesCreated++
+		case WriteOutcomeUpdated:
+			result.FilesUpdated++
+		default:
+			result.FilesUnchanged++
+		}
+		if logf != nil {
+			logf("Materializing view %s/%s[%s=%s]... %d records saved to %s",
+				col.ID, view.ID, fieldName, fieldValue, len(partitionRecords), displayRelPath(repoRoot, outPath))
+		}
+	}
 }

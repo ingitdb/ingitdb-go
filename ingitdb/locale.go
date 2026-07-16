@@ -2,7 +2,6 @@ package ingitdb
 
 import (
 	"maps"
-
 )
 
 // ApplyLocaleToRead transforms record data from file representation to application representation.

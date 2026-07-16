@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -29,7 +30,14 @@ func (w FuncViewWriter) WriteView(
 ) (WriteOutcome, error) {
 	_ = ctx
 	if view.Template == "" {
-		return WriteOutcomeUnchanged, fmt.Errorf("view template is required")
+		content, err := renderBuiltinView(view, records)
+		if err != nil {
+			return WriteOutcomeUnchanged, err
+		}
+		if err := w.write(content); err != nil {
+			return WriteOutcomeUnchanged, err
+		}
+		return WriteOutcomeCreated, nil
 	}
 	templatePath := filepath.Join(col.DirPath, view.Template)
 	tmpl, err := template.ParseFiles(templatePath)
@@ -75,7 +83,26 @@ func (w FileViewWriter) WriteView(
 ) (WriteOutcome, error) {
 	_ = ctx
 	if view.Template == "" {
-		return WriteOutcomeUnchanged, fmt.Errorf("view template is required")
+		content, err := renderBuiltinView(view, records)
+		if err != nil {
+			return WriteOutcomeUnchanged, err
+		}
+		existing, readErr := w.readFile(outPath)
+		if readErr == nil {
+			if bytes.Equal(existing, content) {
+				return WriteOutcomeUnchanged, nil
+			}
+		}
+		if err := w.mkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+			return WriteOutcomeUnchanged, fmt.Errorf("failed to create directory for %s: %w", outPath, err)
+		}
+		if err := w.writeFile(outPath, content, 0o644); err != nil {
+			return WriteOutcomeUnchanged, fmt.Errorf("failed to write view output %s: %w", outPath, err)
+		}
+		if readErr == nil {
+			return WriteOutcomeUpdated, nil
+		}
+		return WriteOutcomeCreated, nil
 	}
 	templatePath := filepath.Join(col.DirPath, view.Template)
 	tmpl, err := template.ParseFiles(templatePath)
@@ -107,6 +134,68 @@ func (w FileViewWriter) WriteView(
 		return WriteOutcomeUpdated, nil
 	}
 	return WriteOutcomeCreated, nil
+}
+
+// renderBuiltinView renders a view using a built-in renderer (no template file).
+// It checks view.Formats for "md" and renders a markdown table.
+// If no supported format is found, it returns an error.
+func renderBuiltinView(view *ingitdb.ViewDef, records []ingitdb.IRecordEntry) ([]byte, error) {
+	for _, f := range view.Formats {
+		if strings.EqualFold(f, "md") {
+			return renderBuiltinMDTable(view, records), nil
+		}
+	}
+	return nil, fmt.Errorf("view template is required")
+}
+
+// renderBuiltinMDTable renders records as a markdown pipe table.
+// Uses view.Columns as headers; if empty, collects keys from first record sorted alphabetically.
+func renderBuiltinMDTable(view *ingitdb.ViewDef, records []ingitdb.IRecordEntry) []byte {
+	cols := view.Columns
+	if len(cols) == 0 && len(records) > 0 {
+		data := records[0].GetData()
+		keys := make([]string, 0, len(data))
+		for k := range data {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		cols = keys
+	}
+
+	var sb strings.Builder
+
+	// Header row
+	sb.WriteString("|")
+	for _, col := range cols {
+		sb.WriteString(" ")
+		sb.WriteString(col)
+		sb.WriteString(" |")
+	}
+	sb.WriteString("\n")
+
+	// Separator row
+	sb.WriteString("|")
+	for range cols {
+		sb.WriteString("---|")
+	}
+	sb.WriteString("\n")
+
+	// Data rows
+	for _, record := range records {
+		d := record.GetData()
+		sb.WriteString("|")
+		for _, col := range cols {
+			sb.WriteString(" ")
+			v := d[col]
+			if v != nil {
+				sb.WriteString(fmt.Sprintf("%v", v))
+			}
+			sb.WriteString(" |")
+		}
+		sb.WriteString("\n")
+	}
+
+	return []byte(sb.String())
 }
 
 func viewTemplateData(view *ingitdb.ViewDef, records []ingitdb.IRecordEntry) map[string]any {

@@ -253,9 +253,9 @@ func markdownColDef(contentField string) *CollectionDef {
 			ContentField: contentField,
 		},
 		Columns: map[string]*ColumnDef{
-			"title":                             {Type: ColumnTypeString},
+			"title":                     {Type: ColumnTypeString},
 			DefaultMarkdownContentField: {Type: ColumnTypeString},
-			"body":                              {Type: ColumnTypeString},
+			"body":                      {Type: ColumnTypeString},
 		},
 	}
 }
@@ -303,7 +303,7 @@ func TestEncodeRecordContentForCollection_Markdown_RoundTrip(t *testing.T) {
 	col := markdownColDef("")
 	col.ColumnsOrder = []string{"title"}
 	record := map[string]any{
-		"title":                             "Product 1",
+		"title":                     "Product 1",
 		DefaultMarkdownContentField: "Body here.\n",
 	}
 	encoded, err := EncodeRecordContentForCollection(record, col)
@@ -333,7 +333,7 @@ func TestEncodeRecordContentForCollection_Markdown_ContentFieldNotString(t *test
 	t.Parallel()
 
 	record := map[string]any{
-		"title":                             "x",
+		"title":                     "x",
 		DefaultMarkdownContentField: 42,
 	}
 	_, err := EncodeRecordContentForCollection(record, markdownColDef(""))
