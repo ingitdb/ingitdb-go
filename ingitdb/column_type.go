@@ -1,5 +1,7 @@
 package ingitdb
 
+// specscore: feature/column-validation
+
 import (
 	"errors"
 	"fmt"

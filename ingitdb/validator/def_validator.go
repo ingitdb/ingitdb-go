@@ -1,6 +1,7 @@
 package validator
 
 // specscore: feature/cli/validate
+// specscore: feature/column-validation
 
 import (
 	"bytes"
