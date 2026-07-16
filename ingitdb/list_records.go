@@ -1,6 +1,7 @@
 package ingitdb
 
 // specscore: feature/record-format/list-of-records
+// specscore: feature/subcollection-record-validation
 
 import (
 	"bytes"
@@ -184,9 +185,17 @@ func encodeYAMLList(rows []map[string]any, columnsOrder []string) ([]byte, error
 }
 
 // ResolveListRecordKey resolves a list row's record key, in order: the
-// collection's declared primary_key (composite values joined), else a "$id"
-// field, else an "id" field. ok is false when none is available, meaning the
-// list has no usable record key.
+// collection's declared primary_key (composite values joined), else the
+// reserved identity field, else a bare "id" field. ok is false when none is
+// available, meaning the list has no usable record key.
+//
+// The reserved identity field is matched as "$ID" (the canonical form the rest
+// of the library uses — datavalidator's reserved $ID column, injected for INGR
+// and CSV records) as well as the historical lowercase "$id". Recognising both
+// keeps list-keyed data written either way usable; without "$ID" a
+// []map[string]any collection whose records are keyed by the declared "$ID"
+// column (e.g. demo-ingitdb's order_details subcollection) would resolve to no
+// key and every record would be reported unkeyed.
 func ResolveListRecordKey(row map[string]any, colDef *CollectionDef) (string, bool) {
 	if colDef != nil && len(colDef.PrimaryKey) > 0 {
 		parts := make([]string, len(colDef.PrimaryKey))
@@ -195,7 +204,7 @@ func ResolveListRecordKey(row map[string]any, colDef *CollectionDef) (string, bo
 		}
 		return strings.Join(parts, listKeySeparator), true
 	}
-	for _, candidate := range []string{"$id", "id"} {
+	for _, candidate := range []string{"$ID", "$id", "id"} {
 		if v, ok := row[candidate]; ok {
 			return fmt.Sprintf("%v", v), true
 		}
