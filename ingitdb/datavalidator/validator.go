@@ -443,7 +443,12 @@ func valueMatchesColumnType(value any, columnType ingitdb.ColumnType) bool {
 		if strings.HasPrefix(string(columnType), "map[") {
 			return isMapValue(value)
 		}
-		return true
+		// Unrecognised types are NOT permissive. Returning true here is what
+		// let `type: number` validate every value in e2e-test-ingitdb. Column
+		// types are rejected at definition-load by ingitdb.ValidateColumnType,
+		// so a loaded definition never reaches this; a caller constructing a
+		// CollectionDef in memory can, and must not be silently trusted.
+		return false
 	}
 }
 
