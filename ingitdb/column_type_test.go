@@ -41,8 +41,21 @@ func TestValidateColumnType(t *testing.T) {
 			ct:   "map[string]string",
 		},
 		{
-			name: "custom_non_map",
-			ct:   "custom",
+			// Was asserted valid, which codified the permissive fallthrough this
+			// Feature removes: an unrecognised type was accepted at load and then
+			// matched every value. See REQ:reject-unknown-column-type.
+			name:    "custom_non_map",
+			ct:      "custom",
+			wantErr: "unknown column type",
+		},
+		{
+			name: "list_of_string",
+			ct:   "[]string",
+		},
+		{
+			name:    "list_of_unsupported_element",
+			ct:      "[]map[string]any",
+			wantErr: "unsupported element type",
 		},
 	}
 

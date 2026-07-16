@@ -74,10 +74,10 @@ func TestDefinitionReader_ReadDefinition(t *testing.T) {
   name: "{key}.yaml"
   type: "map[string]any"
   format: yaml
+primary_key: ["id"]
 columns:
   id:
     type: string
-    primaryKey: true
   name:
     type: string
 `
@@ -238,10 +238,8 @@ func TestDefinitionReader_ReadDefinition_WithoutValidation(t *testing.T) {
 columns:
   id:
     type: string
-    primaryKey: true
   email:
     type: string
-    unique: true
 `
 	err = os.WriteFile(collectionDefPath, []byte(collectionDefContent), 0644)
 	if err != nil {

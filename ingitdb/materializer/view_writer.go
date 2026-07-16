@@ -188,7 +188,7 @@ func renderBuiltinMDTable(view *ingitdb.ViewDef, records []ingitdb.IRecordEntry)
 			sb.WriteString(" ")
 			v := d[col]
 			if v != nil {
-				sb.WriteString(fmt.Sprintf("%v", v))
+				fmt.Fprintf(&sb, "%v", v)
 			}
 			sb.WriteString(" |")
 		}

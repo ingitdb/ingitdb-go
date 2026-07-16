@@ -1,8 +1,10 @@
 package validator
 
 // specscore: feature/cli/validate
+// specscore: feature/column-validation
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +16,24 @@ import (
 	"github.com/ingitdb/ingitdb-go/ingitdb/config"
 	"gopkg.in/yaml.v3"
 )
+
+// decodeCollectionDef parses a collection definition, rejecting any key the
+// schema does not model.
+//
+// yaml.Unmarshal ignores unknown keys, which is what let a plausible-looking
+// `enum:` or `one_of:` appear enforced while doing nothing. It is not
+// hypothetical: geo-ingitdb declared an `inherits:` hierarchy across four
+// files, plus min_records_count/max_records_count and record_labels, none of
+// which inGitDB has ever implemented — the keys were read and dropped, so the
+// config looked live and did nothing.
+//
+// KnownFields(true) is already the house pattern (config/root_config.go,
+// validator/subscribers_validator.go); this path had simply diverged.
+func decodeCollectionDef(fileContent []byte, colDef *ingitdb.CollectionDef) error {
+	dec := yaml.NewDecoder(bytes.NewReader(fileContent))
+	dec.KnownFields(true)
+	return dec.Decode(colDef)
+}
 
 // definitionReader wraps ReadDefinition to satisfy ingitdb.CollectionsReader.
 type definitionReader struct{}
@@ -54,7 +74,48 @@ func ReadDefinition(rootPath string, o ...ingitdb.ReadOption) (def *ingitdb.Defi
 	if err != nil {
 		return nil, err
 	}
+	// A database that resolves to zero collections but carries an older-layout
+	// marker is not empty — it is unreadable, and returning it with no error is
+	// silent success on a broken read (ingitdb-go#9). geo-ingitdb hits exactly
+	// this: a single `.ingitdb.yaml` plus `.ingitdb-collection.yaml` /
+	// `.ingitdb-subcol.*`, none of which the current reader understands.
+	if len(def.Collections) == 0 {
+		if marker := detectLegacyLayout(dl, rootPath); marker != "" {
+			return nil, fmt.Errorf(
+				"%s carries %s, a marker of an unsupported older inGitDB layout, and resolved to zero collections; the reader expects %s/%s and .collection/definition.yaml (see ingitdb-go#9)",
+				rootPath, marker, config.IngitDBDirName, config.RootCollectionsFileName)
+		}
+	}
+	// foreign_key targets resolve module-relative to the declaring collection
+	// (ingitdb.ResolveForeignKey), so `foreign_key: countries` in
+	// commerce.addresses reaches commerce.countries without hard-coding the
+	// mount. A target that resolves to no collection is a load-time error.
+	if opts.IsValidationRequired() {
+		if err = ingitdb.ValidateForeignKeys(def); err != nil {
+			return nil, err
+		}
+	}
 	return def, nil
+}
+
+// legacyLayoutMarkers are root-level files that mean "this is an inGitDB
+// database written in the older layout": a single `.ingitdb.yaml` config (the
+// current reader wants a `.ingitdb/` directory) and a bare
+// `.ingitdb-collection.yaml` (the current reader wants `.collection/`).
+var legacyLayoutMarkers = []string{".ingitdb.yaml", ".ingitdb-collection.yaml"}
+
+// detectLegacyLayout reports the first legacy-layout marker present at rootPath,
+// or "" if none. Used only to turn a zero-collection result into a loud error
+// rather than silent success, so it is deliberately conservative: it checks a
+// couple of unambiguous root-level filenames rather than scanning the tree, so
+// it never flags a directory the caller merely pointed at by mistake.
+func detectLegacyLayout(dl defLoader, rootPath string) string {
+	for _, name := range legacyLayoutMarkers {
+		if _, err := dl.readFile(filepath.Join(rootPath, name)); err == nil {
+			return name
+		}
+	}
+	return ""
 }
 
 func (dl defLoader) readRootCollections(rootPath string, rootConfig config.RootConfig, o ingitdb.ReadOptions) (def *ingitdb.Definition, err error) {
@@ -119,7 +180,7 @@ func (dl defLoader) readCollectionDef(rootPath, relPath, parentPath, id string, 
 
 	colDef = new(ingitdb.CollectionDef)
 	colDefFilePath := filepath.Join(schemaDir, ingitdb.CollectionDefFileName)
-	if err = yaml.Unmarshal(fileContent, colDef); err != nil {
+	if err = decodeCollectionDef(fileContent, colDef); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML file %s: %w", colDefFilePath, err)
 	}
 	colDef.ID = id
@@ -201,7 +262,7 @@ func (dl defLoader) readCollectionDefShared(schemaDir, dataBaseDir, parentPath, 
 	}
 
 	colDef := new(ingitdb.CollectionDef)
-	if err = yaml.Unmarshal(fileContent, colDef); err != nil {
+	if err = decodeCollectionDef(fileContent, colDef); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML file %s: %w", colDefFilePath, err)
 	}
 	colDef.ID = id
