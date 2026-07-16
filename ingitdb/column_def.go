@@ -8,10 +8,20 @@ type ColumnDef struct {
 	Titles     map[string]string `yaml:"titles,omitempty"`
 	ValueTitle string            `yaml:"valueTitle,omitempty"`
 	Required   bool              `yaml:"required,omitempty"`
-	Length     int               `yaml:"length,omitempty"`
-	MinLength  int               `yaml:"min_length,omitempty"`
-	MaxLength  int               `yaml:"max_length,omitempty"`
-	ForeignKey string            `yaml:"foreign_key,omitempty"`
+	// Length, MinLength and MaxLength constrain a value's length: character
+	// count (Unicode code points) for a string, element count for a list,
+	// entry count for a map.
+	//
+	// Pointer-typed on purpose, for the same reason as MinValue/MaxValue: a
+	// declared zero must be distinguishable from "not declared". min_length: 0
+	// is meaningless, but max_length: 0 (forbid any content) is not — and with
+	// a plain int the natural "!= 0" guard reads it as unset and enforces
+	// nothing. It also makes "a length constraint declared on a bool column" a
+	// detectable definition-load error rather than an invisible no-op.
+	Length     *int   `yaml:"length,omitempty"`
+	MinLength  *int   `yaml:"min_length,omitempty"`
+	MaxLength  *int   `yaml:"max_length,omitempty"`
+	ForeignKey string `yaml:"foreign_key,omitempty"`
 	// MinValue and MaxValue constrain a numeric column's value inclusively.
 	//
 	// Pointer-typed on purpose: a declared zero must be distinguishable from

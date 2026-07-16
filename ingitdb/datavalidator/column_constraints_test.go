@@ -187,3 +187,109 @@ func TestValueRange_UnsetBoundsDoNotConstrain(t *testing.T) {
 		t.Fatalf("no bounds declared, so any int passes; got: %s", errorsJoined(errs))
 	}
 }
+
+// --- length-constraints-enforced --------------------------------------------
+
+func ip(v int) *int { return &v }
+
+// Verifies column-validation#ac:min-length-rejects-empty-list — and downstream
+// capability-record#ac:absent-without-citation-rejected, which is the AC behind
+// "absence is data": an absent record MUST cite something.
+func TestLength_MinLengthRejectsEmptyList(t *testing.T) {
+	t.Parallel()
+
+	col := colDefWith("docs", ingitdb.ColumnDef{Type: "[]string", MinLength: ip(1)})
+
+	errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"docs": []any{}})
+	if len(errs) == 0 {
+		t.Fatal("min_length: 1 must reject an empty list")
+	}
+	msg := errorsJoined(errs)
+	for _, want := range []string{"docs", "min_length", "0"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error must name %q; got: %s", want, msg)
+		}
+	}
+}
+
+// Verifies column-validation#ac:max-length-rejects-long-string.
+func TestLength_MaxLengthRejectsLongString(t *testing.T) {
+	t.Parallel()
+
+	col := colDefWith("title", ingitdb.ColumnDef{Type: ingitdb.ColumnTypeString, MaxLength: ip(5)})
+
+	errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"title": "far too long"})
+	if len(errs) == 0 {
+		t.Fatal("expected an error for a string longer than max_length")
+	}
+	if msg := errorsJoined(errs); !strings.Contains(msg, "title") || !strings.Contains(msg, "max_length") {
+		t.Errorf("error must name the field and constraint; got: %s", msg)
+	}
+}
+
+// Verifies column-validation#ac:exact-length-enforced.
+func TestLength_ExactLengthEnforced(t *testing.T) {
+	t.Parallel()
+
+	col := colDefWith("code", ingitdb.ColumnDef{Type: ingitdb.ColumnTypeString, Length: ip(3)})
+
+	errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"code": "ab"})
+	if len(errs) == 0 {
+		t.Fatal("length: 3 must reject a 2-character string")
+	}
+	if msg := errorsJoined(errs); !strings.Contains(msg, "2") {
+		t.Errorf("error must report the actual length; got: %s", msg)
+	}
+	if errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"code": "abc"}); len(errs) != 0 {
+		t.Errorf("exact length 3 must accept 'abc'; got: %s", errorsJoined(errs))
+	}
+}
+
+// Verifies column-validation#ac:declared-zero-max-length-distinguishable-from-absent.
+// This is why the fields are *int: with a plain int, max_length: 0 is
+// indistinguishable from "not declared" and silently enforces nothing.
+func TestLength_DeclaredZeroMaxLengthIsEnforced(t *testing.T) {
+	t.Parallel()
+
+	col := colDefWith("note", ingitdb.ColumnDef{Type: ingitdb.ColumnTypeString, MaxLength: ip(0)})
+
+	if errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"note": "x"}); len(errs) == 0 {
+		t.Fatal("max_length: 0 is a declared bound (forbid content), not 'unset'")
+	}
+	if errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"note": ""}); len(errs) != 0 {
+		t.Errorf("max_length: 0 must accept an empty string; got: %s", errorsJoined(errs))
+	}
+}
+
+// String length counts Unicode code points, not bytes.
+func TestLength_CountsRunesNotBytes(t *testing.T) {
+	t.Parallel()
+
+	col := colDefWith("s", ingitdb.ColumnDef{Type: ingitdb.ColumnTypeString, MaxLength: ip(3)})
+
+	// "héllo" is 5 runes but 6 bytes; "hé" is 2 runes / 3 bytes and must pass.
+	if errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"s": "hé"}); len(errs) != 0 {
+		t.Errorf("2 runes must pass max_length 3; got: %s", errorsJoined(errs))
+	}
+}
+
+// A map column's length constrains entry count.
+func TestLength_MapConstrainsEntryCount(t *testing.T) {
+	t.Parallel()
+
+	col := colDefWith("m", ingitdb.ColumnDef{Type: "map[string]any", MinLength: ip(1)})
+
+	if errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"m": map[string]any{}}); len(errs) == 0 {
+		t.Fatal("min_length: 1 on a map must reject an empty map")
+	}
+}
+
+func TestLength_UnsetDoesNotConstrain(t *testing.T) {
+	t.Parallel()
+
+	col := colDefWith("s", ingitdb.ColumnDef{Type: ingitdb.ColumnTypeString})
+
+	if errs := validateRecordData("test", "f.json", "r1", col, map[string]any{"s": ""}); len(errs) != 0 {
+		t.Fatalf("no length declared, so any string passes; got: %s", errorsJoined(errs))
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	ingitdb "github.com/ingitdb/ingitdb-go/ingitdb"
 )
@@ -309,6 +310,10 @@ func validateRecordData(
 			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
 			continue
 		}
+		if err := checkLength(fieldName, value, columnDef.Length, columnDef.MinLength, columnDef.MaxLength); err != nil {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+			continue
+		}
 	}
 	return errors
 }
@@ -565,4 +570,45 @@ func checkValueRange(fieldName string, value any, minValue, maxValue *float64) e
 		return fmt.Errorf("value %v for field %q is above max_value %v", value, fieldName, *maxValue)
 	}
 	return nil
+}
+
+// checkLength enforces length/min_length/max_length. Length is measured as
+// Unicode code points for a string, element count for a list, entry count for
+// a map. All three bounds are pointers so a declared zero is enforced rather
+// than read as unset.
+func checkLength(fieldName string, value any, exact, minLen, maxLen *int) error {
+	if exact == nil && minLen == nil && maxLen == nil {
+		return nil
+	}
+	n, ok := valueLength(value)
+	if !ok {
+		// Length is undefined for this value's kind; declaring a length
+		// constraint on such a column is a definition-load error.
+		return nil
+	}
+	if exact != nil && n != *exact {
+		return fmt.Errorf("length %d for field %q does not match required length %d", n, fieldName, *exact)
+	}
+	if minLen != nil && n < *minLen {
+		return fmt.Errorf("length %d for field %q is below min_length %d", n, fieldName, *minLen)
+	}
+	if maxLen != nil && n > *maxLen {
+		return fmt.Errorf("length %d for field %q is above max_length %d", n, fieldName, *maxLen)
+	}
+	return nil
+}
+
+// valueLength reports a value's length and whether length is defined for it.
+// Strings count runes rather than bytes, so a multi-byte character counts once.
+func valueLength(value any) (int, bool) {
+	switch v := value.(type) {
+	case string:
+		return utf8.RuneCountInString(v), true
+	case []any:
+		return len(v), true
+	case map[string]any:
+		return len(v), true
+	default:
+		return 0, false
+	}
 }
