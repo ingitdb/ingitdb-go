@@ -55,7 +55,13 @@ This is the one constraint with demonstrated demand: `geo-ingitdb` already decla
 
 #### REQ: foreign-key-enforced
 
-When a column declares `foreign_key: <collection>`, record validation MUST verify the value exists as a key in that collection, via the already-declared `ForeignKeyIndex`. A value with no matching key MUST produce a validation error naming the field, the value, and the referenced collection. A `foreign_key` naming a collection absent from the definition MUST be rejected at definition-load time.
+When a column declares `foreign_key: <collection>`, record validation MUST verify the value exists as a key in that collection. A value with no matching key MUST produce a validation error naming the field, the value, and the referenced collection. A `foreign_key` naming a collection absent from the definition MUST be rejected at definition-load time.
+
+**This REQ said "via the already-declared `ForeignKeyIndex`", which was wrong and understated the work.** `ForeignKeyIndex` (`datavalidator/interfaces.go:11`) is an interface with **no implementation and no callers**; nothing reads `ColumnDef.ForeignKey` during validation at all. It is a stub, not available infrastructure. The record-level check therefore requires building the index — record keys per collection, gathered once and threaded through the five `validateRecordData` call sites.
+
+**Resolution semantics are undefined, and MUST be decided before either half ships (ingitdb-go#11).** `demo-ingitdb` declares `foreign_key: countries` while the collection is registered module-namespaced as `commerce.countries`; a bare `countries` matches nothing and is ambiguous regardless, since `geo.countries` also exists. Either a `foreign_key` resolves module-relative (keeping a module portable across mount points, no data migration) or targets must be fully qualified (explicit, but couples each module to its mount point and migrates both demo databases). `materializer/view_builder.go:411` already assumes the bare lookup and has been failing to resolve these all along.
+
+**Status:** the load-time half is implemented and tested (`ingitdb/foreign_key.go`) but deliberately **not** wired into `ReadDefinition` — enabling it makes `ReadDefinition` fail outright for `demo-ingitdb`, which would break a database on a guess about the rule. The record-level half is blocked on the same decision, since the index is keyed by whatever a `foreign_key` resolves to.
 
 ### New primitives
 
