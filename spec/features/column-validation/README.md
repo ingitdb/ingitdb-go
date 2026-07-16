@@ -133,12 +133,20 @@ A column type that is not recognised MUST be rejected at definition-load time an
 
 #### REQ: migrate-known-databases
 
-This Feature is a deliberate breaking change with no deprecation window, so every database in this workspace MUST load and validate cleanly against the new rules before it ships. Two are known to break today and MUST be migrated as part of this Feature:
+This Feature is a deliberate breaking change with no deprecation window, so every database in this workspace MUST load and validate cleanly against the new rules before it ships. Verification MUST be an audit of every definition file in the workspace, not a list of databases believed to be affected — the audit found five classes of breakage where this REQ originally named two, and it found them in databases this REQ did not mention.
 
-- `e2e-test-ingitdb/countries/.collection/definition.yaml:12,14` — `type: number` becomes `int` or `float` per the column's actual data.
-- `geo-ingitdb` — `min_value`/`max_value` become enforced rather than unknown, so their declared values MUST be checked to be well-formed numbers. `max_value: 99 000 000` (`.ingitdb-subcol.states.yaml:28`) is not a YAML number and MUST be corrected.
+Migrated as part of this Feature:
+
+- `e2e-test-ingitdb/countries/.collection/definition.yaml:12,14` — `type: number` becomes `int` (both columns hold whole numbers in every record).
+- `geo-ingitdb` — `max_value: 99 000 000` / `19 000 000` are strings, not YAML numbers, in **three** files (`.ingitdb-subcol.states.yaml`, `.ingitdb-subcol.$admin_divisions_base.yaml`, `.ingitdb-subcol.$admin_divisions.settlements.yaml`), not the one this REQ named. `municipal_status` declared `required` + `enum` with **no `type`**, so its enum had been inert since it was written and the column accepted any value.
+- `geo-ingitdb` — seven keys declared and implemented nowhere (`inherits`, `min_records_count`, `max_records_count`, `record_labels`, `readme.sub_collections`, `records_file`), stripped under `reject-unknown-column-keys`. Intent preserved in ingitdb-go#7 and #8.
+- `agiledger-demo/collections/teams` and **this repository's own test fixtures** — column-level `primaryKey: true` (and `unique: true`) were never modelled; the real spelling is a collection-level `primary_key` list.
+
+**This REQ's premise about `geo-ingitdb` was wrong, and the correction matters more than the migration.** `geo-ingitdb` is not loadable by ingitdb-go at all: it uses an older layout (a single `.ingitdb.yaml`, plus `.ingitdb-collection.yaml` / `.ingitdb-subcol.*.yaml`) while the reader looks for `.ingitdb/root-collections.yaml` and `.collection/definition.yaml`. `ReadDefinition` returns **0 collections, with no error** (ingitdb-go#9). Its `min_value`/`max_value` therefore cannot "become enforced" — nothing reads them. The geo-ingitdb migrations above are pre-emptive: they matter when that database is moved to the current layout, not today. Reading its definition files directly into `ColumnDef` makes them look live, which is exactly how the premise went unchallenged.
 
 `demo-ingitdb`, `demo-commerce-ingitdb` and any other database in the workspace MUST be verified against the new rules, and their TODO comments requesting value constraints resolved. Databases outside this workspace are out of scope and are addressed by the release notes, not by code.
+
+Verification of record: 337 definition files audited across every layout (`.collection/definition.yaml`, `.collections/*/definition.yaml`, subcollections, and geo's `.ingitdb-*` files); 336 decode cleanly under `KnownFields(true)`. The one holdout is `geo-ingitdb/countries/.ingitdb-subol.counties.yaml`, dead twice over: its filename is misspelled (`subol`, not `subcol`) so it is not recognised as a definition, and it spells `records_file` where every sibling spells `record_file`. It is left in place under ingitdb-go#7.
 
 ## Acceptance Criteria
 
