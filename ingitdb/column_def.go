@@ -12,6 +12,18 @@ type ColumnDef struct {
 	MinLength  int               `yaml:"min_length,omitempty"`
 	MaxLength  int               `yaml:"max_length,omitempty"`
 	ForeignKey string            `yaml:"foreign_key,omitempty"`
+	// MinValue and MaxValue constrain a numeric column's value inclusively.
+	//
+	// Pointer-typed on purpose: a declared zero must be distinguishable from
+	// "not declared". `min_value: 0` is not hypothetical — geo-ingitdb declares
+	// exactly that on population and area, and with a plain float64 the natural
+	// "!= 0" guard would read the declared bound as unset and silently enforce
+	// nothing, which is the failure this whole feature exists to end.
+	//
+	// float64 rather than *int so `min_value: 0.5` is expressible on a float
+	// column; a fractional bound on an int column is a definition-load error.
+	MinValue *float64 `yaml:"min_value,omitempty"`
+	MaxValue *float64 `yaml:"max_value,omitempty"`
 	// Enum, when non-empty, restricts the column's value to one of the listed
 	// members. A record value outside the list is a validation error naming the
 	// field, the offending value, and the permitted set.

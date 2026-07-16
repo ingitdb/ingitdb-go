@@ -305,6 +305,10 @@ func validateRecordData(
 			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
 			continue
 		}
+		if err := checkValueRange(fieldName, value, columnDef.MinValue, columnDef.MaxValue); err != nil {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+			continue
+		}
 	}
 	return errors
 }
@@ -377,6 +381,9 @@ func valueMatchesColumnType(value any, columnType ingitdb.ColumnType) bool {
 	case ingitdb.ColumnTypeL10N:
 		return isStringMap(value)
 	default:
+		if elem, ok := ingitdb.ListElementType(columnType); ok {
+			return valueMatchesListType(value, elem)
+		}
 		if strings.HasPrefix(string(columnType), "map[") {
 			return isMapValue(value)
 		}
@@ -521,4 +528,41 @@ func countEntries(dirPath string, exts map[string]struct{}, rfd *ingitdb.RecordF
 		}
 	}
 	return len(seen), nil
+}
+
+// valueMatchesListType reports whether value is a list whose every element
+// matches elem. A []T column requires the value to BE a list — including
+// []any, which accepts any element but not a non-list.
+func valueMatchesListType(value any, elem ingitdb.ColumnType) bool {
+	items, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range items {
+		if !valueMatchesColumnType(item, elem) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkValueRange enforces min_value/max_value inclusively on a numeric value.
+// Both bounds are pointers so a declared zero is distinguishable from unset.
+func checkValueRange(fieldName string, value any, minValue, maxValue *float64) error {
+	if minValue == nil && maxValue == nil {
+		return nil
+	}
+	n, ok := numericValue(value)
+	if !ok {
+		// A non-numeric value in a bounded column is caught by the type check;
+		// declaring bounds on a non-numeric column is a definition-load error.
+		return nil
+	}
+	if minValue != nil && n < *minValue {
+		return fmt.Errorf("value %v for field %q is below min_value %v", value, fieldName, *minValue)
+	}
+	if maxValue != nil && n > *maxValue {
+		return fmt.Errorf("value %v for field %q is above max_value %v", value, fieldName, *maxValue)
+	}
+	return nil
 }
