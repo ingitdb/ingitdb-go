@@ -274,6 +274,11 @@ func parseListRows(content []byte, colDef *ingitdb.CollectionDef) ([]map[string]
 // for CSV, so these keys appear in records without ever being declared.
 const reservedFieldPrefix = "$"
 
+// reservedIDField is the synthetic per-record key the library supplies from the
+// record's identity: validator.go sets it for INGR, parse.go for CSV, and
+// validateRecordData binds it from recordKey for per-file records.
+const reservedIDField = "$ID"
+
 // undeclaredFieldErrors reports record fields with no corresponding column.
 //
 // This walks the record's keys, not the schema's columns. Iterating columns —
@@ -389,6 +394,14 @@ func validateRecordData(
 			continue
 		}
 		value, ok := data[fieldName]
+		if (!ok || value == nil) && fieldName == reservedIDField && recordKey != "" {
+			// $ID is the record's own key. INGR and CSV inject it into the
+			// record before validation; per-file records legitimately omit it
+			// (it is the filename), so bind it here from the known key rather
+			// than reporting it missing. Bound locally, never written back into
+			// data — the exported entry point's caller serialises that map.
+			value, ok = recordKey, true
+		}
 		if !ok || value == nil {
 			required, err := columnIsRequired(columnDef, colDef, data)
 			if err != nil {
