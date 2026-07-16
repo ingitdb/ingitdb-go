@@ -986,13 +986,13 @@ func TestBuildFKViews_FKCollectionNotFoundInDefinition(t *testing.T) {
 	}
 	foundMsgErr := false
 	for _, e := range errs {
-		if strings.Contains(e.Error(), "countries") && strings.Contains(e.Error(), "not found") {
+		if strings.Contains(e.Error(), "countries") && strings.Contains(e.Error(), "resolves to no collection") {
 			foundMsgErr = true
 			break
 		}
 	}
 	if !foundMsgErr {
-		t.Errorf("expected error mentioning %q and 'not found', got: %v", "countries", errs)
+		t.Errorf("expected error mentioning %q and 'resolves to no collection', got: %v", "countries", errs)
 	}
 
 	// No file should have been written.

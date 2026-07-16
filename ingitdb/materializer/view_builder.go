@@ -422,11 +422,17 @@ func buildFKViews(
 			continue
 		}
 
-		referredColDef, ok := def.Collections[colDef.ForeignKey]
+		// Resolve module-relative (ingitdb.ResolveForeignKey), the same rule
+		// validation uses: a bare `foreign_key: countries` in commerce.addresses
+		// resolves to commerce.countries. The bare def.Collections[fk] lookup
+		// this replaced never resolved a module-namespaced target, so FK views
+		// for demo-ingitdb silently never built.
+		resolvedFK, ok := ingitdb.ResolveForeignKey(col.ID, colDef.ForeignKey, def.Collections)
 		if !ok {
-			errs = append(errs, fmt.Errorf("buildFKViews: FK collection %q not found in definition", colDef.ForeignKey))
+			errs = append(errs, fmt.Errorf("buildFKViews: FK for column %q resolves to no collection (foreign_key %q, from %q)", colName, colDef.ForeignKey, col.ID))
 			continue
 		}
+		referredColDef := def.Collections[resolvedFK]
 		referredRelColPath, _ := filepath.Rel(outputRoot, referredColDef.DirPath)
 
 		// Exclude the FK column itself — its value is constant for every record in
@@ -457,7 +463,7 @@ func buildFKViews(
 		}
 
 		for fkValue, fkRecords := range groups {
-			viewName := colDef.ForeignKey + "/$fk/" + col.ID + "/" + colName + "/" + fkValue
+			viewName := resolvedFK + "/$fk/" + col.ID + "/" + colName + "/" + fkValue
 			content, err := formatExportBatch(format, viewName, fkExportColumns, fkRecords, exportOpts...)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("buildFKViews %s/%s: format: %w", colName, fkValue, err))

@@ -6,8 +6,10 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	ingitdb "github.com/ingitdb/ingitdb-go/ingitdb"
 )
@@ -33,6 +35,13 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 		}
 		result.SetRecordCounts(collectionKey, passed, total)
 		result.SetRecordCount(collectionKey, total)
+	}
+
+	// Referential integrity is a whole-definition concern — a value must exist
+	// as a key in the resolved target collection — so it runs after the
+	// per-collection schema pass, once every collection's keys are known.
+	for _, validationErr := range validateForeignKeyReferences(def) {
+		result.Append(validationErr)
 	}
 
 	return result, nil
@@ -260,6 +269,97 @@ func parseListRows(content []byte, colDef *ingitdb.CollectionDef) ([]map[string]
 	}
 }
 
+// reservedFieldPrefix marks a key the library owns rather than the schema.
+// datavalidator sets record["$ID"] for INGR input and parse.go sets row["$ID"]
+// for CSV, so these keys appear in records without ever being declared.
+const reservedFieldPrefix = "$"
+
+// undeclaredFieldErrors reports record fields with no corresponding column.
+//
+// This walks the record's keys, not the schema's columns. Iterating columns —
+// which is all the rest of validateRecordData does — can never surface a field
+// the schema does not mention, so a typo'd field name was silently stored and
+// silently ignored forever.
+//
+// Keys prefixed with reservedFieldPrefix are exempt whether or not the
+// definition declares them: they are injected by the library itself, so
+// flagging them would fail every INGR and CSV collection on a field inGitDB
+// added. A definition may still declare a $-prefixed column (demo-ingitdb's
+// order_details declares "$ID"), and doing so does not change the outcome.
+func undeclaredFieldErrors(
+	collectionKey string,
+	filePath string,
+	recordKey string,
+	colDef *ingitdb.CollectionDef,
+	data map[string]any,
+) []ingitdb.ValidationError {
+	var errors []ingitdb.ValidationError
+	fields := make([]string, 0, len(data))
+	for fieldName := range data {
+		fields = append(fields, fieldName)
+	}
+	// Deterministic order: Go map ranging is randomised, and callers compare
+	// and display these.
+	slices.Sort(fields)
+	for _, fieldName := range fields {
+		if strings.HasPrefix(fieldName, reservedFieldPrefix) {
+			continue
+		}
+		if _, declared := colDef.Columns[fieldName]; declared {
+			continue
+		}
+		message := fmt.Sprintf("undeclared field %q: no column of that name in the collection definition", fieldName)
+		errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil))
+	}
+	return errors
+}
+
+// columnIsRequired reports whether a column with no value in this record is
+// required: directly via `required`, or conditionally via `required_when`.
+//
+// The two are mutually exclusive at definition-load time, so there is no
+// precedence to resolve here.
+func columnIsRequired(columnDef *ingitdb.ColumnDef, colDef *ingitdb.CollectionDef, data map[string]any) (bool, error) {
+	if columnDef.RequiredWhen == "" {
+		return columnDef.Required, nil
+	}
+	result, err := ingitdb.EvaluateFormula(columnDef.RequiredWhen, storedFields(colDef, data))
+	if err != nil {
+		return false, fmt.Errorf("required_when: %w", err)
+	}
+	required, ok := result.(bool)
+	if !ok {
+		// Deliberately not a truthiness coercion: `required_when: 'name'` must
+		// be an error, not "required when name is non-empty".
+		return false, fmt.Errorf("required_when must evaluate to True or False, got %T", result)
+	}
+	return required, nil
+}
+
+// storedFields builds the binding environment for a required_when expression:
+// every stored (non-computed) column of the collection, taking the record's
+// value where present and nil otherwise.
+//
+// Binding every declared column rather than only the record's own keys matters
+// twice. A sibling the record omits is declared, so asking about it is
+// legitimate and must yield None rather than "predeclared variable X is
+// uninitialized". And the resulting name set is identical for every record of
+// the collection, so the compiled-program cache holds one entry per expression
+// instead of one per field shape.
+//
+// Computed columns are excluded, matching the load-time rule that
+// required_when may reference only stored fields.
+func storedFields(colDef *ingitdb.CollectionDef, data map[string]any) map[string]any {
+	fields := make(map[string]any, len(colDef.Columns))
+	for name, def := range colDef.Columns {
+		if def.Formula != "" {
+			continue
+		}
+		fields[name] = data[name]
+	}
+	return fields
+}
+
 // ValidateRecordData validates a single in-memory record's field values against
 // the collection's schema: declared column types, required fields, and the
 // rule that computed-column values must not be stored. It returns the schema
@@ -278,6 +378,7 @@ func validateRecordData(
 	data map[string]any,
 ) []ingitdb.ValidationError {
 	var errors []ingitdb.ValidationError
+	errors = append(errors, undeclaredFieldErrors(collectionKey, filePath, recordKey, colDef, data)...)
 	for fieldName, columnDef := range colDef.Columns {
 		if columnDef.Formula != "" {
 			if _, present := data[fieldName]; present {
@@ -289,20 +390,86 @@ func validateRecordData(
 		}
 		value, ok := data[fieldName]
 		if !ok || value == nil {
-			if columnDef.Required {
+			required, err := columnIsRequired(columnDef, colDef, data)
+			if err != nil {
+				errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+				continue
+			}
+			if required {
 				validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, "missing required field", nil)
 				errors = append(errors, validationErr)
 			}
 			continue
 		}
-		if valueMatchesColumnType(value, columnDef.Type) {
+		if !valueMatchesColumnType(value, columnDef.Type) {
+			message := fmt.Sprintf("wrong type for field %q: expected %s, got %T", fieldName, columnDef.Type, value)
+			validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil)
+			errors = append(errors, validationErr)
 			continue
 		}
-		message := fmt.Sprintf("wrong type for field %q: expected %s, got %T", fieldName, columnDef.Type, value)
-		validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil)
-		errors = append(errors, validationErr)
+		if err := checkEnum(fieldName, value, columnDef.Enum); err != nil {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+			continue
+		}
+		if err := checkValueRange(fieldName, value, columnDef.MinValue, columnDef.MaxValue); err != nil {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+			continue
+		}
+		if err := checkLength(fieldName, value, columnDef.Length, columnDef.MinLength, columnDef.MaxLength); err != nil {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+			continue
+		}
 	}
 	return errors
+}
+
+// checkEnum reports whether value is one of the column's permitted members.
+// An empty enum means the column is unconstrained by this rule.
+func checkEnum(fieldName string, value any, enum []any) error {
+	if len(enum) == 0 {
+		return nil
+	}
+	for _, member := range enum {
+		if enumValuesEqual(member, value) {
+			return nil
+		}
+	}
+	permitted := make([]string, 0, len(enum))
+	for _, member := range enum {
+		permitted = append(permitted, fmt.Sprintf("%v", member))
+	}
+	return fmt.Errorf("value %v for field %q is not one of the permitted values: %s",
+		value, fieldName, strings.Join(permitted, ", "))
+}
+
+// enumValuesEqual compares a declared enum member against a record value.
+// YAML and JSON decode numbers into different Go types (int vs float64), so a
+// direct == would reject a legitimate member on type alone; compare numerics by
+// value and everything else directly.
+func enumValuesEqual(member, value any) bool {
+	if member == value {
+		return true
+	}
+	mf, mok := numericValue(member)
+	vf, vok := numericValue(value)
+	return mok && vok && mf == vf
+}
+
+func numericValue(v any) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float32:
+		return float64(n), true
+	case float64:
+		return n, true
+	default:
+		return 0, false
+	}
 }
 
 func valueMatchesColumnType(value any, columnType ingitdb.ColumnType) bool {
@@ -324,10 +491,18 @@ func valueMatchesColumnType(value any, columnType ingitdb.ColumnType) bool {
 	case ingitdb.ColumnTypeL10N:
 		return isStringMap(value)
 	default:
+		if elem, ok := ingitdb.ListElementType(columnType); ok {
+			return valueMatchesListType(value, elem)
+		}
 		if strings.HasPrefix(string(columnType), "map[") {
 			return isMapValue(value)
 		}
-		return true
+		// Unrecognised types are NOT permissive. Returning true here is what
+		// let `type: number` validate every value in e2e-test-ingitdb. Column
+		// types are rejected at definition-load by ingitdb.ValidateColumnType,
+		// so a loaded definition never reaches this; a caller constructing a
+		// CollectionDef in memory can, and must not be silently trusted.
+		return false
 	}
 }
 
@@ -468,4 +643,82 @@ func countEntries(dirPath string, exts map[string]struct{}, rfd *ingitdb.RecordF
 		}
 	}
 	return len(seen), nil
+}
+
+// valueMatchesListType reports whether value is a list whose every element
+// matches elem. A []T column requires the value to BE a list — including
+// []any, which accepts any element but not a non-list.
+func valueMatchesListType(value any, elem ingitdb.ColumnType) bool {
+	items, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range items {
+		if !valueMatchesColumnType(item, elem) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkValueRange enforces min_value/max_value inclusively on a numeric value.
+// Both bounds are pointers so a declared zero is distinguishable from unset.
+func checkValueRange(fieldName string, value any, minValue, maxValue *float64) error {
+	if minValue == nil && maxValue == nil {
+		return nil
+	}
+	n, ok := numericValue(value)
+	if !ok {
+		// A non-numeric value in a bounded column is caught by the type check;
+		// declaring bounds on a non-numeric column is a definition-load error.
+		return nil
+	}
+	if minValue != nil && n < *minValue {
+		return fmt.Errorf("value %v for field %q is below min_value %v", value, fieldName, *minValue)
+	}
+	if maxValue != nil && n > *maxValue {
+		return fmt.Errorf("value %v for field %q is above max_value %v", value, fieldName, *maxValue)
+	}
+	return nil
+}
+
+// checkLength enforces length/min_length/max_length. Length is measured as
+// Unicode code points for a string, element count for a list, entry count for
+// a map. All three bounds are pointers so a declared zero is enforced rather
+// than read as unset.
+func checkLength(fieldName string, value any, exact, minLen, maxLen *int) error {
+	if exact == nil && minLen == nil && maxLen == nil {
+		return nil
+	}
+	n, ok := valueLength(value)
+	if !ok {
+		// Length is undefined for this value's kind; declaring a length
+		// constraint on such a column is a definition-load error.
+		return nil
+	}
+	if exact != nil && n != *exact {
+		return fmt.Errorf("length %d for field %q does not match required length %d", n, fieldName, *exact)
+	}
+	if minLen != nil && n < *minLen {
+		return fmt.Errorf("length %d for field %q is below min_length %d", n, fieldName, *minLen)
+	}
+	if maxLen != nil && n > *maxLen {
+		return fmt.Errorf("length %d for field %q is above max_length %d", n, fieldName, *maxLen)
+	}
+	return nil
+}
+
+// valueLength reports a value's length and whether length is defined for it.
+// Strings count runes rather than bytes, so a multi-byte character counts once.
+func valueLength(value any) (int, bool) {
+	switch v := value.(type) {
+	case string:
+		return utf8.RuneCountInString(v), true
+	case []any:
+		return len(v), true
+	case map[string]any:
+		return len(v), true
+	default:
+		return 0, false
+	}
 }

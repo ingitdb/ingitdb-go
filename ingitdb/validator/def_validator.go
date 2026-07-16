@@ -3,6 +3,7 @@ package validator
 // specscore: feature/cli/validate
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +15,24 @@ import (
 	"github.com/ingitdb/ingitdb-go/ingitdb/config"
 	"gopkg.in/yaml.v3"
 )
+
+// decodeCollectionDef parses a collection definition, rejecting any key the
+// schema does not model.
+//
+// yaml.Unmarshal ignores unknown keys, which is what let a plausible-looking
+// `enum:` or `one_of:` appear enforced while doing nothing. It is not
+// hypothetical: geo-ingitdb declared an `inherits:` hierarchy across four
+// files, plus min_records_count/max_records_count and record_labels, none of
+// which inGitDB has ever implemented — the keys were read and dropped, so the
+// config looked live and did nothing.
+//
+// KnownFields(true) is already the house pattern (config/root_config.go,
+// validator/subscribers_validator.go); this path had simply diverged.
+func decodeCollectionDef(fileContent []byte, colDef *ingitdb.CollectionDef) error {
+	dec := yaml.NewDecoder(bytes.NewReader(fileContent))
+	dec.KnownFields(true)
+	return dec.Decode(colDef)
+}
 
 // definitionReader wraps ReadDefinition to satisfy ingitdb.CollectionsReader.
 type definitionReader struct{}
@@ -53,6 +72,15 @@ func ReadDefinition(rootPath string, o ...ingitdb.ReadOption) (def *ingitdb.Defi
 	def.Subscribers, err = ReadSubscribers(rootPath, opts)
 	if err != nil {
 		return nil, err
+	}
+	// foreign_key targets resolve module-relative to the declaring collection
+	// (ingitdb.ResolveForeignKey), so `foreign_key: countries` in
+	// commerce.addresses reaches commerce.countries without hard-coding the
+	// mount. A target that resolves to no collection is a load-time error.
+	if opts.IsValidationRequired() {
+		if err = ingitdb.ValidateForeignKeys(def); err != nil {
+			return nil, err
+		}
 	}
 	return def, nil
 }
@@ -119,7 +147,7 @@ func (dl defLoader) readCollectionDef(rootPath, relPath, parentPath, id string, 
 
 	colDef = new(ingitdb.CollectionDef)
 	colDefFilePath := filepath.Join(schemaDir, ingitdb.CollectionDefFileName)
-	if err = yaml.Unmarshal(fileContent, colDef); err != nil {
+	if err = decodeCollectionDef(fileContent, colDef); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML file %s: %w", colDefFilePath, err)
 	}
 	colDef.ID = id
@@ -201,7 +229,7 @@ func (dl defLoader) readCollectionDefShared(schemaDir, dataBaseDir, parentPath, 
 	}
 
 	colDef := new(ingitdb.CollectionDef)
-	if err = yaml.Unmarshal(fileContent, colDef); err != nil {
+	if err = decodeCollectionDef(fileContent, colDef); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML file %s: %w", colDefFilePath, err)
 	}
 	colDef.ID = id
