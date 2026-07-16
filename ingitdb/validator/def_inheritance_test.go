@@ -198,7 +198,9 @@ func TestInheritance_MultiLevelChain(t *testing.T) {
 func TestInheritance_UnknownKeyInBaseRejected(t *testing.T) {
 	dir := writeInheritanceDB(t, map[string]string{
 		".ingitdb/root-collections.yaml": rootStates,
-		"states/.collection/$base.yaml":  "min_records_count: 1\ncolumns:\n  x:\n    type: string\n",
+		// record_labels is a genuinely unmodelled key (min_records_count, once a
+		// candidate here, became a modelled key when ingitdb-go#8 merged).
+		"states/.collection/$base.yaml": "record_labels: x\ncolumns:\n  x:\n    type: string\n",
 		"states/.collection/definition.yaml": "inherits: $base.yaml\n" + mapRecordFile +
 			"columns:\n  name:\n    type: string\n",
 	})
@@ -206,7 +208,7 @@ func TestInheritance_UnknownKeyInBaseRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("an unrecognised key in a base partial must be rejected")
 	}
-	if !strings.Contains(err.Error(), "min_records_count") {
+	if !strings.Contains(err.Error(), "record_labels") {
 		t.Errorf("error must name the unrecognised base key, got: %v", err)
 	}
 }
