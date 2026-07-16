@@ -73,6 +73,15 @@ func ReadDefinition(rootPath string, o ...ingitdb.ReadOption) (def *ingitdb.Defi
 	if err != nil {
 		return nil, err
 	}
+	// NOT wired in yet: ingitdb.ValidateForeignKeys(def) is implemented and
+	// tested, but enabling it here makes ReadDefinition fail outright for
+	// demo-ingitdb, whose columns declare `foreign_key: countries` while the
+	// collection is registered module-namespaced as `commerce.countries`.
+	// Whether a foreign_key resolves module-relative (keeping a module portable
+	// across mount points) or must be fully qualified is an open design
+	// decision — and bare `countries` is ambiguous anyway, since `geo.countries`
+	// also exists. Turning this on before that is decided would break a database
+	// on a guess. See ingitdb-go#11.
 	return def, nil
 }
 
