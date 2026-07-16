@@ -34,6 +34,21 @@ func validateComputedColumn(collectionID, colName string, col *ColumnDef, column
 	return validateFormulaExpr(collectionID, colName, "formula", col.Formula, columns)
 }
 
+// validateRequiredWhen validates a column whose RequiredWhen is non-empty: the
+// expression must resolve against the collection's stored columns, and must not
+// coexist with a plain Required.
+//
+// Unlike a computed column, a conditionally-required column may be named after
+// a builtin: its own name is never resolved as an identifier, only referenced
+// siblings are, and at evaluation a field shadows a same-named builtin.
+func validateRequiredWhen(collectionID, colName string, col *ColumnDef, columns map[string]*ColumnDef) error {
+	if col.Required {
+		return fmt.Errorf("collection '%s': column '%s' declares both 'required' and 'required_when': use one or the other",
+			collectionID, colName)
+	}
+	return validateFormulaExpr(collectionID, colName, "required_when", col.RequiredWhen, columns)
+}
+
 // validateComputedColumnName rejects a computed column whose name is already a
 // Starlark builtin.
 //

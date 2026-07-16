@@ -8,6 +8,25 @@ type ColumnDef struct {
 	Titles     map[string]string `yaml:"titles,omitempty"`
 	ValueTitle string            `yaml:"valueTitle,omitempty"`
 	Required   bool              `yaml:"required,omitempty"`
+	// RequiredWhen makes the column required only when the expression evaluates
+	// to Starlark True. It is a single Starlark expression over the record's
+	// stored sibling fields, and reuses Formula's parser and evaluator rather
+	// than introducing a second expression dialect: one grammar, one evaluator,
+	// one set of edge cases.
+	//
+	// Siblings the record omits bind as None, so `state != "absent"` is a valid
+	// question to ask of a record that has no state. Computed siblings are not
+	// visible; referencing one is a definition-load error, as is an undeclared
+	// identifier.
+	//
+	// The expression MUST evaluate to True or False. Anything else is an error
+	// rather than a truthiness coercion, so `required_when: 'name'` does not
+	// silently mean "required when name is non-empty".
+	//
+	// Declaring both Required and RequiredWhen on one column is a
+	// definition-load error: the two would otherwise contradict each other with
+	// no defined precedence.
+	RequiredWhen string `yaml:"required_when,omitempty"`
 	// Length, MinLength and MaxLength constrain a value's length: character
 	// count (Unicode code points) for a string, element count for a list,
 	// entry count for a map.

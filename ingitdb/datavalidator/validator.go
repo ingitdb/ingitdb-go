@@ -261,6 +261,52 @@ func parseListRows(content []byte, colDef *ingitdb.CollectionDef) ([]map[string]
 	}
 }
 
+// columnIsRequired reports whether a column with no value in this record is
+// required: directly via `required`, or conditionally via `required_when`.
+//
+// The two are mutually exclusive at definition-load time, so there is no
+// precedence to resolve here.
+func columnIsRequired(columnDef *ingitdb.ColumnDef, colDef *ingitdb.CollectionDef, data map[string]any) (bool, error) {
+	if columnDef.RequiredWhen == "" {
+		return columnDef.Required, nil
+	}
+	result, err := ingitdb.EvaluateFormula(columnDef.RequiredWhen, storedFields(colDef, data))
+	if err != nil {
+		return false, fmt.Errorf("required_when: %w", err)
+	}
+	required, ok := result.(bool)
+	if !ok {
+		// Deliberately not a truthiness coercion: `required_when: 'name'` must
+		// be an error, not "required when name is non-empty".
+		return false, fmt.Errorf("required_when must evaluate to True or False, got %T", result)
+	}
+	return required, nil
+}
+
+// storedFields builds the binding environment for a required_when expression:
+// every stored (non-computed) column of the collection, taking the record's
+// value where present and nil otherwise.
+//
+// Binding every declared column rather than only the record's own keys matters
+// twice. A sibling the record omits is declared, so asking about it is
+// legitimate and must yield None rather than "predeclared variable X is
+// uninitialized". And the resulting name set is identical for every record of
+// the collection, so the compiled-program cache holds one entry per expression
+// instead of one per field shape.
+//
+// Computed columns are excluded, matching the load-time rule that
+// required_when may reference only stored fields.
+func storedFields(colDef *ingitdb.CollectionDef, data map[string]any) map[string]any {
+	fields := make(map[string]any, len(colDef.Columns))
+	for name, def := range colDef.Columns {
+		if def.Formula != "" {
+			continue
+		}
+		fields[name] = data[name]
+	}
+	return fields
+}
+
 // ValidateRecordData validates a single in-memory record's field values against
 // the collection's schema: declared column types, required fields, and the
 // rule that computed-column values must not be stored. It returns the schema
@@ -290,7 +336,12 @@ func validateRecordData(
 		}
 		value, ok := data[fieldName]
 		if !ok || value == nil {
-			if columnDef.Required {
+			required, err := columnIsRequired(columnDef, colDef, data)
+			if err != nil {
+				errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
+				continue
+			}
+			if required {
 				validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, "missing required field", nil)
 				errors = append(errors, validationErr)
 			}

@@ -183,6 +183,16 @@ func compileFormulaWith(formula, cacheKey string, isPredeclared func(string) boo
 }
 
 // goToStarlark converts a supported Go value into its Starlark equivalent.
+//
+// Composite values are converted recursively so that list and map columns are
+// usable from an expression: a []string column supports len(tags) > 0, and a
+// map[string]any column supports constraints["maxButtons"]. Decoded JSON
+// arrives as []any and map[string]any, so both spellings are handled.
+//
+// Converted composites are frozen. They are bound as predeclared values shared
+// across evaluations, and Starlark's lists and dicts are mutable by default;
+// freezing keeps evaluation side-effect-free, so one record's formula cannot
+// mutate a value another evaluation observes.
 func goToStarlark(v any) (starlark.Value, error) {
 	switch t := v.(type) {
 	case nil:
@@ -191,6 +201,22 @@ func goToStarlark(v any) (starlark.Value, error) {
 		return starlark.Bool(t), nil
 	case string:
 		return starlark.String(t), nil
+	case []any:
+		return goSliceToStarlark(t)
+	case []string:
+		elems := make([]any, len(t))
+		for i, s := range t {
+			elems[i] = s
+		}
+		return goSliceToStarlark(elems)
+	case map[string]any:
+		return goMapToStarlark(t)
+	case map[string]string:
+		m := make(map[string]any, len(t))
+		for k, s := range t {
+			m[k] = s
+		}
+		return goMapToStarlark(m)
 	case int:
 		return starlark.MakeInt64(int64(t)), nil
 	case int8:
@@ -218,6 +244,44 @@ func goToStarlark(v any) (starlark.Value, error) {
 	default:
 		return nil, fmt.Errorf("unsupported field type %T", v)
 	}
+}
+
+// goSliceToStarlark converts a Go slice into a frozen Starlark list.
+func goSliceToStarlark(s []any) (starlark.Value, error) {
+	elems := make([]starlark.Value, len(s))
+	for i, raw := range s {
+		v, err := goToStarlark(raw)
+		if err != nil {
+			return nil, fmt.Errorf("element %d: %w", i, err)
+		}
+		elems[i] = v
+	}
+	list := starlark.NewList(elems)
+	list.Freeze()
+	return list, nil
+}
+
+// goMapToStarlark converts a Go string-keyed map into a frozen Starlark dict.
+// Keys are inserted in sorted order so iteration is deterministic: Starlark
+// dicts preserve insertion order, and Go map ranging does not.
+func goMapToStarlark(m map[string]any) (starlark.Value, error) {
+	dict := starlark.NewDict(len(m))
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		v, err := goToStarlark(m[k])
+		if err != nil {
+			return nil, fmt.Errorf("key %q: %w", k, err)
+		}
+		if err := dict.SetKey(starlark.String(k), v); err != nil {
+			return nil, fmt.Errorf("key %q: %w", k, err)
+		}
+	}
+	dict.Freeze()
+	return dict, nil
 }
 
 // starlarkToGo converts a Starlark result value into a Go-native value.

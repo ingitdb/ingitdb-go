@@ -72,6 +72,11 @@ func (v *CollectionDef) Validate() error {
 				return err
 			}
 		}
+		if col.RequiredWhen != "" {
+			if err := validateRequiredWhen(v.ID, id, col, v.Columns); err != nil {
+				return err
+			}
+		}
 	}
 	for i, colName := range v.ColumnsOrder {
 		if _, ok := v.Columns[colName]; !ok {
