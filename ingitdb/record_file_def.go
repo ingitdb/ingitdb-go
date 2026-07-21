@@ -4,10 +4,9 @@ package ingitdb
 
 import (
 	"fmt"
+	dalrecord "github.com/dal-go/record"
 	"regexp"
 	"strings"
-
-	"github.com/dal-go/dalgo/dal"
 )
 
 type RecordType string
@@ -136,7 +135,7 @@ func (rfd RecordFileDef) RecordsBasePath() string {
 // file under a directory the records reader can never glob back, silently
 // losing the record (ingitdb-go#1). Failing here turns that silent data loss
 // into an actionable error at the point the name is computed.
-func (rfd RecordFileDef) GetRecordFileName(record dal.Record) (string, error) {
+func (rfd RecordFileDef) GetRecordFileName(record dalrecord.Record) (string, error) {
 	name := rfd.Name
 
 	if strings.Contains(name, "{key}") {
