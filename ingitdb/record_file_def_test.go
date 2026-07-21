@@ -1,10 +1,9 @@
 package ingitdb
 
 import (
+	dalrecord "github.com/dal-go/record"
 	"strings"
 	"testing"
-
-	"github.com/dal-go/dalgo/dal"
 )
 
 func TestRecordFileDefValidate_MissingBranches(t *testing.T) {
@@ -288,10 +287,10 @@ func TestRecordFileDefValidate(t *testing.T) {
 	}
 }
 
-func recordWith(t *testing.T, id string, data map[string]any) dal.Record {
+func recordWith(t *testing.T, id string, data map[string]any) dalrecord.Record {
 	t.Helper()
-	key := dal.NewKeyWithID("tasks", id)
-	record := dal.NewRecordWithData(key, data)
+	key := dalrecord.NewKeyWithID("tasks", id)
+	record := dalrecord.NewRecordWithData(key, data)
 	record.SetError(nil)
 	return record
 }
@@ -302,7 +301,7 @@ func TestRecordFileDefGetRecordFileName(t *testing.T) {
 	tests := []struct {
 		name   string
 		def    RecordFileDef
-		record dal.Record
+		record dalrecord.Record
 		want   string
 	}{
 		{
@@ -363,7 +362,7 @@ func TestRecordFileDefGetRecordFileName_RejectsPathSeparator(t *testing.T) {
 	tests := []struct {
 		name        string
 		def         RecordFileDef
-		record      dal.Record
+		record      dalrecord.Record
 		wantInError []string
 	}{
 		{
