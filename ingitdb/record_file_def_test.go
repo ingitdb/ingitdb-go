@@ -159,6 +159,16 @@ func TestRecordFileDef_RecordsBasePath(t *testing.T) {
 		want string
 	}{
 		{
+			name: "explicit_dot_places_keyed_records_at_data_root",
+			rfd:  RecordFileDef{Name: "{key}/space.yaml", RecordsDir: stringPointer(".")},
+			want: "",
+		},
+		{
+			name: "explicit_nested_directory",
+			rfd:  RecordFileDef{Name: "{key}.yaml", RecordsDir: stringPointer("records/v2")},
+			want: "records/v2",
+		},
+		{
 			name: "name_with_key_placeholder_returns_records",
 			rfd:  RecordFileDef{Name: "{key}.yaml"},
 			want: "$records",
@@ -186,6 +196,37 @@ func TestRecordFileDef_RecordsBasePath(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordFileDefValidate_RecordsDir(t *testing.T) {
+	t.Parallel()
+	valid := RecordFileDef{Name: "{key}/space.yaml", Format: RecordFormatYAML, RecordType: SingleRecord}
+	tests := []struct {
+		name       string
+		recordsDir string
+		wantError  bool
+	}{
+		{name: "data root", recordsDir: "."},
+		{name: "nested", recordsDir: "records/v2"},
+		{name: "empty", recordsDir: "", wantError: true},
+		{name: "absolute", recordsDir: "/tmp", wantError: true},
+		{name: "parent", recordsDir: "../outside", wantError: true},
+		{name: "unclean", recordsDir: "records/../other", wantError: true},
+		{name: "backslash", recordsDir: `records\other`, wantError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			def := valid
+			def.RecordsDir = &tt.recordsDir
+			err := def.Validate()
+			if (err != nil) != tt.wantError {
+				t.Fatalf("Validate() error=%v, wantError=%v", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func stringPointer(value string) *string { return &value }
 
 func TestRecordFileDefValidate(t *testing.T) {
 	t.Parallel()

@@ -167,7 +167,7 @@ func loadSingleRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
 		if parseErr != nil {
 			continue
 		}
-		records = append(records, loadedRecord{Key: recordKeyFromFilePath(filePath), Data: data})
+		records = append(records, loadedRecord{Key: recordKeyFromCollectionFilePath(colDef, filePath), Data: data})
 	}
 	return records, nil
 }

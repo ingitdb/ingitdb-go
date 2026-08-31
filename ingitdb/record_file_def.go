@@ -1,10 +1,12 @@
 package ingitdb
 
 // specscore: feature/record-file-name-placeholders
+// specscore: feature/explicit-record-base-directory
 
 import (
 	"fmt"
 	dalrecord "github.com/dal-go/record"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -20,6 +22,11 @@ const (
 type RecordFileDef struct {
 	Name   string       `yaml:"name"`
 	Format RecordFormat `yaml:"format"`
+	// RecordsDir overrides the directory below CollectionDef.DirPath where
+	// record files live. Nil preserves the historical implicit behavior:
+	// keyed filenames live under $records and static filenames live directly
+	// under DirPath. The explicit value "." means DirPath itself.
+	RecordsDir *string `yaml:"records_dir,omitempty"`
 
 	// RecordType can have next values:
 	// "map[string]any" - each record in a separate file
@@ -50,6 +57,9 @@ func (rfd RecordFileDef) Validate() error {
 	}
 	if rfd.Name == "" {
 		return fmt.Errorf("record file name cannot be empty")
+	}
+	if err := validateRecordsDir(rfd.RecordsDir); err != nil {
+		return err
 	}
 	switch rfd.RecordType {
 	case SingleRecord, ListOfRecords, MapOfRecords:
@@ -119,10 +129,40 @@ func (rfd RecordFileDef) ResolvedContentField() string {
 // causing inGitDB to store individual record files under a $records/ subdirectory.
 // This keeps README.md visible at the top of the collection directory on GitHub.com.
 func (rfd RecordFileDef) RecordsBasePath() string {
+	if rfd.RecordsDir != nil {
+		if *rfd.RecordsDir == "." {
+			return ""
+		}
+		return *rfd.RecordsDir
+	}
 	if strings.Contains(rfd.Name, "{key}") {
 		return "$records"
 	}
 	return ""
+}
+
+func validateRecordsDir(recordsDir *string) error {
+	if recordsDir == nil {
+		return nil
+	}
+	value := *recordsDir
+	if value == "" {
+		return fmt.Errorf("record file records_dir cannot be empty; omit it for the default or use . for data_dir itself")
+	}
+	if strings.Contains(value, `\`) {
+		return fmt.Errorf("record file records_dir %q must use forward slashes", value)
+	}
+	if strings.HasPrefix(value, "/") {
+		return fmt.Errorf("record file records_dir %q must be relative", value)
+	}
+	clean := path.Clean(value)
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return fmt.Errorf("record file records_dir %q must not traverse above data_dir", value)
+	}
+	if clean != value {
+		return fmt.Errorf("record file records_dir %q is not a clean path", value)
+	}
+	return nil
 }
 
 // GetRecordFileName computes a record's on-disk file name from the
