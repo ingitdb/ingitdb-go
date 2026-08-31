@@ -677,3 +677,51 @@ func TestExpectedRecordExtensions_NoExtInName(t *testing.T) {
 		t.Errorf("expected 3 legacy extensions when name has no ext, got %d", len(exts))
 	}
 }
+
+func TestRecordKeyFromCollectionFilePath_NestedKeyDirectory(t *testing.T) {
+	t.Parallel()
+	recordsDir := "."
+	colDef := &ingitdb.CollectionDef{
+		DirPath: "/repo/sneat/spaces",
+		RecordFile: &ingitdb.RecordFileDef{
+			Name: "{key}/space.yaml", RecordsDir: &recordsDir,
+		},
+	}
+	got := recordKeyFromCollectionFilePath(colDef, "/repo/sneat/spaces/space-1/space.yaml")
+	if got != "space-1" {
+		t.Fatalf("record key = %q, want space-1", got)
+	}
+}
+
+func TestValidate_ExplicitDataRootWithNestedKeyDirectory(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	spacesDir := filepath.Join(root, "sneat", "spaces")
+	if err := os.MkdirAll(filepath.Join(spacesDir, "space-1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(spacesDir, "space-1", "space.yaml"), []byte("title: Home\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recordsDir := "."
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"spaces": {
+			ID: "spaces", DirPath: spacesDir,
+			RecordFile: &ingitdb.RecordFileDef{
+				Name: "{key}/space.yaml", RecordsDir: &recordsDir,
+				Format: ingitdb.RecordFormatYAML, RecordType: ingitdb.SingleRecord,
+			},
+			Columns: map[string]*ingitdb.ColumnDef{"title": {Type: ingitdb.ColumnTypeString, Required: true}},
+		},
+	}}
+	result, err := NewValidator().Validate(context.Background(), root, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == nil || result.HasErrors() {
+		t.Fatalf("expected exact-path record to validate, result=%+v", result)
+	}
+	if got := result.GetRecordCount("spaces"); got != 1 {
+		t.Fatalf("record count = %d, want 1", got)
+	}
+}

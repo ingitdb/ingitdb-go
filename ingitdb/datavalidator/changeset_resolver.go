@@ -38,7 +38,7 @@ func (changeSetResolver) Resolve(dbPath string, def *ingitdb.Definition, changed
 			affected = append(affected, AffectedRecord{
 				CollectionID: colID,
 				FilePath:     absPath,
-				RecordKey:    recordKeyFromFilePath(absPath),
+				RecordKey:    recordKeyFromCollectionFilePath(colDef, absPath),
 				ChangeKind:   cf.Kind,
 			})
 		case ingitdb.MapOfRecords, ingitdb.ListOfRecords:

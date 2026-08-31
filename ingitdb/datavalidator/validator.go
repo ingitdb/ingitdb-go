@@ -3,6 +3,7 @@ package datavalidator
 // specscore: feature/column-validation
 // specscore: feature/record-count-constraints
 // specscore: feature/subcollection-record-validation
+// specscore: feature/explicit-record-base-directory
 
 import (
 	"context"
@@ -147,7 +148,7 @@ func validateSingleRecordFile(collectionKey string, colDef *ingitdb.CollectionDe
 		validationErr := newValidationError(collectionKey, filePath, "", "", "failed to parse record file", parseErr)
 		return 0, 1, []ingitdb.ValidationError{validationErr}
 	}
-	recordKey := recordKeyFromFilePath(filePath)
+	recordKey := recordKeyFromCollectionFilePath(colDef, filePath)
 	recordErrors := validateRecordData(collectionKey, filePath, recordKey, colDef, data)
 	if len(recordErrors) > 0 {
 		return 0, 1, recordErrors
@@ -177,6 +178,25 @@ func recordKeyFromFilePath(filePath string) string {
 	name := filepath.Base(filePath)
 	ext := filepath.Ext(name)
 	return strings.TrimSuffix(name, ext)
+}
+
+func recordKeyFromCollectionFilePath(colDef *ingitdb.CollectionDef, filePath string) string {
+	if colDef == nil || colDef.RecordFile == nil || !strings.Contains(colDef.RecordFile.Name, "{key}") {
+		return recordKeyFromFilePath(filePath)
+	}
+	baseDir := filepath.Join(colDef.DirPath, colDef.RecordFile.RecordsBasePath())
+	rel, err := filepath.Rel(baseDir, filePath)
+	if err != nil {
+		return recordKeyFromFilePath(filePath)
+	}
+	rel = filepath.ToSlash(rel)
+	prefix, rest, _ := strings.Cut(filepath.ToSlash(colDef.RecordFile.Name), "{key}")
+	keySuffix, _, _ := strings.Cut(rest, "/")
+	rel = strings.TrimPrefix(rel, prefix)
+	if before, _, found := strings.Cut(rel, "/"); found {
+		return strings.TrimSuffix(before, keySuffix)
+	}
+	return strings.TrimSuffix(rel, keySuffix)
 }
 
 func validateMapOfRecordsFile(collectionKey string, colDef *ingitdb.CollectionDef) (int, int, []ingitdb.ValidationError) {
