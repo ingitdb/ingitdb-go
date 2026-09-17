@@ -875,11 +875,7 @@ No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configur
 
 ## Open Questions
 
-1. **Keep per-record repair, or drop it?** Choose one:
-   - (A, recommended) Keep per-record repair (REQ `drifted-record-repair`). A drifted record can then be fixed without the caller already holding its body, reusing the ordinary write plan inside one directory.
-   - (B) Drop it, and state that a re-put by a caller that already holds the body is the only fix.
-
-   **Recommendation: A.** Under B, a drifted record cannot be read, so no ordinary caller can obtain the body to re-put it. The data then stays stuck until someone edits files by hand. Repair adds no collection-wide machinery: it is the write plan with the body bytes taken from the drifted file.
+None at this time.
 
 Resolved on 2026-09-17 by founder decision:
 - body file names are fixed, `<key>.<record-suffix>.<field>.<ext>`;
@@ -888,7 +884,8 @@ Resolved on 2026-09-17 by founder decision:
 - `body_files` is a plural list;
 - the contract is YAML conformance vectors plus JSON Schema, owned by `ingitdb/ingitdb` and `ingitdb/ingitdb-schema`;
 - the project is in private beta, so there are no legacy-compatibility constraints;
-- body file names are never renamed by a dedicated feature: a per-record format change is an ordinary put, and definition drift is a validation finding.
+- body file names are never renamed by a dedicated feature: a per-record format change is an ordinary put, and definition drift is a validation finding;
+- per-record repair is kept (REQ `drifted-record-repair`), founder 2026-09-17: *"Keep it"*.
 
 ---
 *This document follows the https://specscore.md/feature-specification*
