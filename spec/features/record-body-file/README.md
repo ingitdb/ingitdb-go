@@ -14,7 +14,7 @@ status: Draft
 
 ## Summary
 
-A single-record collection may declare `record_file.body_files`: one or more string fields, each stored as a raw-text file beside the record file. The file name is fixed, not configurable: `<key>.<record-suffix>.<field>.<body-type>`, for example `customer-invoices.query.text.dtql` beside `customer-invoices.query.json`. The body type comes from a per-record type field. Readers merge each body into its field byte-for-byte. Writers split the fields back out through an exported, ordered write plan. They never duplicate a body into the record file or leave a stale body behind. Crash-safe multi-file application is owned by ingitdb/dalgo2ingitdb#15, and every reader runs that driver's recovery first. Definition validation keeps record templates and body file names disjoint, so listing never mistakes a body file for a record. The shape is pinned in `FORMAT.md` and a golden fixture, so the Go and TypeScript readers agree. Closes ingitdb-go#24.
+A single-record collection may declare `record_file.body_files`: one or more string fields, each stored as a raw-text file beside the record file. The file name is fixed, not configurable: `<key>.<record-suffix>.<field>.<body-type>`, for example `customer-invoices.query.text.dtql` beside `customer-invoices.query.json`. The body type comes from a per-record type field. Readers merge each body into its field byte-for-byte. Writers split the fields back out through an exported, ordered write plan. They never duplicate a body into the record file or leave a stale body behind. Crash-safe multi-file application is owned by ingitdb/dalgo2ingitdb#15, and every reader runs that driver's recovery first. Definition validation keeps record templates and body file names disjoint, so listing never mistakes a body file for a record. The normative contract is a set of YAML conformance vectors in the standard repository `ingitdb/ingitdb` (ingitdb/ingitdb#9), plus the definition's JSON Schema (ingitdb/ingitdb-schema#9). Every implementation vendors the vectors and runs them. Closes ingitdb-go#24.
 
 ## Problem
 
@@ -112,11 +112,17 @@ With the rule enforced, a body file cannot match any record matcher, neither the
 
 The body type for an entry MUST be the record's `type_field` value with ASCII letters lowercased. For example, `SQL` resolves to `sql`, `DTQL` to `dtql` and `JSON` to `json`. The value MUST be 1 to 32 characters, each an ASCII letter, digit, `_` or `-`. The founder decided on 2026-09-17 that the body type is the lowercased type value.
 
-This is the same bounded derivation as `datatug-core`'s `queryTypeFileExtension`. The resulting file names differ from today's DataTug sidecars (see REQ `datatug-cut-over-referenced`). The type value is record content, and so it is untrusted. Bounding it here stops a value like `../../x` from addressing a file outside the collection.
+This is the same bounded derivation as `datatug-core`'s `queryTypeFileExtension`. The type value is record content, and so it is untrusted. Bounding it here stops a value like `../../x` from addressing a file outside the collection.
 
 A `JSON`-typed body is allowed. Its name, `x.query.text.json`, is disjoint from the record glob by REQ `suffix-disjointness-covers-body-files`.
 
-An entry is **unnameable** for a record when that record's `type_field` value is empty, absent or outside the allowed set. A write that carries an unnameable entry's field is refused (REQ `write-splits-bodies-out`). The read rule for an unnameable entry is in REQ `read-merges-bodies-raw`.
+For each record, an entry is in one of three states:
+
+- **typed**: its `type_field` value is non-empty and in the allowed set;
+- **untyped**: the value is empty or absent;
+- **unnameable**: the value is non-empty but outside the allowed set.
+
+REQ `body-presence-follows-type` gives the read and write rules for each state.
 
 ### Reading
 
@@ -131,15 +137,20 @@ A read MUST fail with an error that names the record key, the field and the body
 - the body file is not valid UTF-8, since records are text-only per `ingitdb/ingitdb` Feature `storage-format`, REQ `text-only`;
 - the body path is not a regular file: a directory or symlink on a filesystem, or a Git tree entry whose mode is not `100644` or `100755` (for example `120000`, a symlink, or `160000`, a submodule);
 - the record file itself contains the entry's `field` key, so the value would have two sources and neither silently wins;
-- the entry is unnameable for that record **and** at least one candidate body file for that entry is present.
+- the entry is unnameable for that record;
+- any case REQ `body-presence-follows-type` makes a read error.
 
-An unnameable entry with no candidate body file reads with the same result as a missing body (REQ `missing-body-is-absent-field`).
+#### REQ: body-presence-follows-type
 
-#### REQ: missing-body-is-absent-field
+**Provisional until Open Question 1 is decided.** This REQ is written as the recommended option.
 
-**Provisional until Open Question 2 is decided.** A missing body file MUST NOT be an error. The record MUST read with that `field` **absent** from its data, not set to the empty string. A present but empty body file MUST read as `field: ""`.
+- **Typed entry:** the body file is REQUIRED. When it is missing, the read MUST fail with a typed missing-body error that names the key, the field and the expected path. A DTQL query with no DTQL body is corrupt.
+- **Untyped entry:** the entry has no body. The field reads **absent**. If a candidate body file for that entry is present, the read MUST fail.
+- **Either way:** a body file that is present but empty is a real, empty body and MUST read as `field: ""`.
 
-A missing body can only mean "no body" when no multi-file change is pending. REQ `pending-changes-recovered-before-read` guarantees that, so a torn write is never read as a valid record without a body.
+The alternative in Open Question 1 would instead read a missing body of a typed entry as an absent field.
+
+A missing body can be judged corrupt only when no multi-file change is pending. REQ `pending-changes-recovered-before-read` guarantees that, so a torn write is never mistaken for corruption, nor for a valid record without a body.
 
 ### Writing and deleting
 
@@ -148,14 +159,14 @@ A missing body can only mean "no body" when no multi-file change is pending. REQ
 For each entry in `body_files`, a writer putting a record MUST:
 
 - encode the record file from the record data **without** any entry's `field`, so no body is duplicated into the record file;
-- when the field is present with a string value, write its body file with exactly those bytes and no encoding;
-- when the field is absent or null, write no body file for it and remove any existing body file for that entry;
-- refuse the whole put, before changing any file, when a body field is present but is not a string, or when a present body field's entry is unnameable;
+- when the entry is typed and the field holds a string, write its body file with exactly those bytes and no encoding;
+- when the entry is untyped and the field is absent or null, write no body file for it and remove any existing body file for that entry;
+- refuse the whole put, before changing any file, when any of these holds: a body field is present but is not a string; an entry is unnameable; a typed entry's field is absent or null (provisional, REQ `body-presence-follows-type`); or an untyped entry's field is present;
 - leave a file untouched when its bytes already equal the bytes being written, per `storage-format` REQ `no-rewrite-without-change`.
 
 #### REQ: delete-and-type-change-leave-no-stale-body
 
-A delete MUST remove the record file and every body file resolved from the stored record's type values. A body file that is already missing is not an error.
+A delete MUST remove the record file and every body file resolved from the stored record's typed entries. A body file that is already missing is not an error.
 
 A put that changes an entry's resolved body name MUST remove that entry's body file resolved from the **previously stored** record, as part of the same change. A change of `type` from `SQL` to `DTQL` is one such put. After the put, each entry of a record has at most one body file on disk, and it is the one the record's current type names.
 
@@ -217,18 +228,15 @@ Whole-database validation MUST report a finding for each **orphan body file**. A
 - there is no record file for key `<k>`, or
 - the record's current type value for that entry resolves to a type other than `<t>`, such as a stale `.query.text.sql` left beside a `DTQL` query by a hand edit.
 
-The finding names the collection and the file path. A stale body beside a nameable entry is a finding, not a read error: the record still reads its current body. The unnameable case is a read error, per REQ `read-merges-bodies-raw`.
+The finding names the collection and the file path. A stale body beside a typed entry is a finding, not a read error: the record still reads its current body. A body file beside an untyped or unnameable entry is a read error, per REQ `read-merges-bodies-raw`.
 
-### Compatibility
+### Implementations
 
-#### REQ: version-skew-fails-safe
+#### REQ: implementations-current-and-strict
 
-A reader or writer that does not understand `body_files` must never silently mishandle a collection that declares it. Such a mistake would write `text` into the record file, leave stale bodies, or drop `body_files` from the definition.
+The project is in private beta, and existing data carries no compatibility constraints (founder, 2026-09-17). There is therefore one rule: every implementation (`ingitdb-go`, `dalgo2ingitdb`, `dalgo2ingitdb4github`, `ingitdb-ts`) MUST be on the latest release of its `ingitdb` dependencies and MUST pass the conformance vectors (REQ `conformance-vectors-are-the-contract`). There are no minimum-version tables, no format version numbers and no skew shims.
 
-- **Format version.** `FORMAT.md` MUST bump its version from `v1` to `v2`. A collection that declares `body_files` is `v2` content.
-- **Minimum versions.** The first `ingitdb-go/ingitdb` release that implements this Feature is the minimum for `body_files`. `dalgo2ingitdb` and `dalgo2ingitdb4github`, both of which currently require `ingitdb-go/ingitdb` v0.5.2, MUST raise their requirement to that release. `FORMAT.md` MUST name that release and the first `ingitdb-ts` release that reads body files.
-- **Strict decoding.** Strict older readers, such as `ingitdb-go` releases up to v0.7.0 that use `KnownFields(true)`, already reject a definition that contains `body_files`, and that is the intended fail-safe. Every lenient definition decode in the drivers MUST become strict (`KnownFields(true)`), or MUST preserve `body_files` unchanged. The known lenient decodes are `dalgo2ingitdb`'s `schema_reader.go:105` (`DescribeCollection`) and `schema_modifier.go:445` (`readCollectionDefYAML`).
-- **Definition round trip.** A collection alteration that decodes and rewrites the definition (`writeCollectionDefYAML`, `schema_modifier.go:427`) MUST round-trip `body_files` byte-for-byte unless the alteration itself updates it (REQ `schema-alteration-keeps-body-files-consistent`).
+Separately, for correctness: every definition decode MUST be strict (`KnownFields(true)` or its equivalent), so an unmodelled key is an error and is never silently dropped. The known lenient decodes are `dalgo2ingitdb`'s `schema_reader.go:105` (`DescribeCollection`) and `schema_modifier.go:445` (`readCollectionDefYAML`). A collection alteration that decodes and rewrites the definition (`writeCollectionDefYAML`, `schema_modifier.go:427`) MUST keep `body_files` unless the alteration itself updates it (REQ `schema-alteration-keeps-body-files-consistent`).
 
 #### REQ: schema-alteration-keeps-body-files-consistent
 
@@ -240,55 +248,49 @@ A schema alteration on a collection that declares `body_files` MUST leave a defi
 - `ApplyDropField` of a column that any entry references MUST be refused.
 - Any alteration that changes `record_file.name` on a collection with `body_files` MUST be refused, because it would change the record suffix in every body file name.
 
-#### REQ: datatug-cut-over-referenced
-
-DataTug's existing sidecars are named `<id>.query.<type>`, for example `.query.dtql` and `.query.sql`. Under this Feature they become `<id>.query.text.<type>`. The rename is DataTug's concern, under the hard cut-over of `datatug/datatug` Feature `dalgo-project-store` (section "Hard cut-over", REQ `filestore-is-cut-over`). This Feature MUST NOT read the old names as bodies. A leftover `<id>.query.sql` is not a body file and is not a record, since it does not match `*.query.json`.
-
 ### Cross-language contract
 
-#### REQ: format-contract-and-golden-fixture
+#### REQ: conformance-vectors-are-the-contract
 
-The on-disk contract `FORMAT.md` currently lives in `ingitdb/dalgo2ingitdb` (with `testdata/format-fixtures/`). It is mirrored in `ingitdb/ingitdb-ts` at `packages/client-fs/src/__fixtures__/format-fixtures/` and `packages/client-github/src/__fixtures__/format-fixtures/`. `ingitdb-go` has no `FORMAT.md` today.
+The normative on-disk contract MUST be YAML, not Markdown (founder, 2026-09-17: *"Yaml can have comments for humans. Let's go with yaml."*). It has two parts, each owned once:
 
-This Feature MUST change `FORMAT.md`'s title version to `v2` and add a "Body files" section. The section's content MUST state the `body_files` keys, the naming rule, body type resolution, the raw merge, absent versus empty, the disjointness rule, the write plan order, the recovery-before-read rule and the minimum versions. It MUST include this example tree, a `records_dir: '.'` collection with a `{key}/{key}` template:
+- **Conformance vectors:** `conformance/record-layout/vectors.yaml` in the standard repository `ingitdb/ingitdb` (tracked as ingitdb/ingitdb#9). It follows the `conformance/computed-columns/` pattern. Its YAML comments are the human documentation. Additional Markdown MAY come later and is never normative.
+- **Definition shape:** `record_file.records_dir` and `record_file.body_files` in `ingitdb/ingitdb-schema`'s `ingitdb-collection.schema.json` (tracked as ingitdb/ingitdb-schema#9). Cross-field rules that JSON Schema cannot express are carried by the vectors.
 
-```
-<root>/
-  .ingitdb/
-    root-collections.yaml                         # queries: queries
-  queries/
-    .collection/
-      definition.yaml                             # record_file:
-                                                  #   name: '{key}/{key}.query.json'
-                                                  #   format: json
-                                                  #   type: map[string]any
-                                                  #   records_dir: '.'
-                                                  #   body_files:
-                                                  #     - {field: text, type_field: type}
-                                                  #     - {field: notes, type_field: notes_format}
-    customer-invoices/                            # records_dir '.': no $records segment
-      customer-invoices.query.json                # {"title": ..., "type": "DTQL", "notes_format": "md"}
-      customer-invoices.query.text.dtql           # raw body of field `text`
-      customer-invoices.query.notes.md            # raw body of field `notes`
-    active-customers/
-      active-customers.query.json                 # {"type": "SQL"}
-      active-customers.query.text.sql
-    draft-query/
-      draft-query.query.json                      # {"type": "SQL"}: no body file, so `text` is absent
-```
+Each vector MUST be a `definition` (the collection definition, plus any sibling collections needed for a disjointness case), then one operation, then one expectation. The operation is one of:
 
-It MUST also add that `queries` collection to the golden fixture tree, with these contents:
+- a load (the definition alone);
+- a `put`, with prior files, key and data;
+- a `delete`, with prior files and key;
+- a `read`, with files and key.
 
-- `customer-invoices.query.text.dtql`: a multi-line body with a trailing newline and a non-ASCII character;
-- `customer-invoices.query.notes.md`: a non-empty Markdown body;
-- `active-customers.query.text.sql`: a body with **no** trailing newline;
-- `draft-query`: no body file.
+The expectation is one of:
 
-The fixture MUST NOT fall back to a flat `$records/` layout. `ingitdb-go` MUST keep a byte-identical copy of that `queries` subtree under `ingitdb/testdata/format-fixtures/` and read it through the real reader in a test. All copies MUST stay identical, which is the existing `FORMAT.md` rule.
+- `expect_files`: the exact set of paths and bytes after the operation;
+- `expect_record`: the field map a read returns;
+- `expect_error`: an error kind, such as `definition-invalid`, `suffix-overlap`, `missing-body`, `body-without-type`, `unnameable-type`, `invalid-utf8` or `field-in-record-file`.
+
+The vectors MUST cover at least:
+
+- `records_dir: '.'` with a `{key}/{key}.query.json` name, placing records at `<collection>/<key>/<key>.query.json` with no `$records` segment;
+- body naming `<key>.<suffix>.<field>.<type>` with the lowercased type, and exact raw bytes (a trailing newline kept, one absent, a non-ASCII character intact);
+- several bodies per record (`.query.text.dtql` and `.query.notes.md`);
+- a JSON-typed body, `x.query.text.json`, that is not listed as a record;
+- a put that splits bodies out of the record file, and a put that changes type and removes the stale body;
+- a delete that removes the record and every body;
+- the untyped entry, the typed entry with a missing body and the unnameable type (REQ `body-presence-follows-type`);
+- every definition rejection in REQ `body-files-definition-validated`, and the suffix-disjointness rejections in REQ `suffix-disjointness-covers-body-files`.
+
+Each implementation (`dalgo2ingitdb`, `dalgo2ingitdb4github`, the `ingitdb-go` validator and readers, `ingitdb-ts`) MUST do two things:
+
+- vendor the file under a header naming the source and saying "re-sync from the standard, do not edit", as `dalgo2ingitdb/testdata/conformance_vectors.yaml` does;
+- run every vector in CI, with a check that fails when the vendored copy differs from the standard's.
+
+`FORMAT.md` is retired as a contract. The `dalgo2ingitdb` and `ingitdb-ts` `format-fixtures` trees MAY be generated from the vectors, or dropped.
 
 #### REQ: ts-layout-prerequisite-recorded
 
-TypeScript parity depends on a prerequisite that does not exist yet. Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore `records_dir` and nested name templates (`client-fs/src/client.ts:248-260`, `client-github/src/collection/collection.ts:237`), so they cannot read the `queries` fixture at all. That support is tracked as ingitdb/ingitdb-ts#104. AC `go-and-ts-readers-agree-on-fixture` MUST NOT be recorded as passing before #104 and the `ingitdb-ts` body-file reader both land.
+Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore `records_dir` and nested name templates (`client-fs/src/client.ts:248-260`, `client-github/src/collection/collection.ts:237`), so they cannot pass the `records_dir: '.'` vectors. That support is tracked as ingitdb/ingitdb-ts#104. The `ingitdb-ts` half of AC `every-implementation-runs-vendored-vectors` MUST NOT be recorded as passing before #104 and the `ingitdb-ts` body-file reader both land.
 
 ## Acceptance Criteria
 
@@ -334,33 +336,32 @@ TypeScript parity depends on a prerequisite that does not exist yet. Today both 
 
 **Requirements:** record-body-file#req:read-merges-bodies-raw, record-body-file#req:body-type-resolution, record-body-file#req:body-file-naming
 
-**Given** the golden fixture's `queries` collection
-**When** records `customer-invoices` and `active-customers` are read through the Go reader
+**Given** the reference `queries` collection, with `customer-invoices` (`type: DTQL`, a multi-line body with a trailing newline and a non-ASCII character) and `active-customers` (`type: SQL`, a body with no trailing newline)
+**When** both records are read through the Go reader
 **Then** each record's `text` equals the bytes of `<key>.query.text.<lowercased type>` exactly, with the trailing newline kept for one, absent for the other, and the non-ASCII character intact
 
 ### AC: several-body-fields-per-record
 
 **Requirements:** record-body-file#req:body-file-naming, record-body-file#req:read-merges-bodies-raw, record-body-file#req:write-plan-exposed
 
-**Given** the fixture record `customer-invoices`, with `type: DTQL` and `notes_format: md`, and bodies `customer-invoices.query.text.dtql` and `customer-invoices.query.notes.md`
+**Given** a record `customer-invoices`, with `type: DTQL` and `notes_format: md`, and bodies `customer-invoices.query.text.dtql` and `customer-invoices.query.notes.md`
 **When** it is read, and a put that changes both `text` and `notes` has its write plan computed
 **Then** the read sets `text` and `notes` each to its own file's exact bytes; the plan writes `.query.text.dtql`, then `.query.notes.md`, then the record file, whose bytes contain neither key
 
-### AC: missing-body-reads-as-absent-field
+### AC: body-presence-follows-type-on-read
 
-**Requirements:** record-body-file#req:missing-body-is-absent-field
+**Requirements:** record-body-file#req:body-presence-follows-type
 
-**Given** the fixture record `draft-query` with no body file, and a second record whose `.query.text.sql` exists and is empty
-**When** both are read with recovery configured and no pending change
-**Then** `draft-query` reads without error and has no `text` key in its data, and the second record's `text` is the empty string
+**Given** recovery configured and no pending change, and three records:
+- `active-customers`, with `type: SQL`, a `.query.text.sql` body, and an empty `notes_format` with no notes file;
+- `q6`, with `type: SQL` and no `q6.query.text.sql`;
+- `q7`, with `type: SQL` and an empty `q7.query.text.sql`
 
-### AC: required-body-missing-is-a-finding-not-a-read-error
-
-**Requirements:** record-body-file#req:missing-body-is-absent-field
-
-**Given** a collection whose `text` column is `required: true` and one record with no body file
-**When** the database is validated
-**Then** validation reports a missing-required-field finding for `text` on that record, and every other record in the collection is still read and validated
+**When** each is read
+**Then** each read gives the expected result:
+- `active-customers` reads with `text` set and no `notes` key;
+- `q6` fails with the missing-body error, naming `text` and `q6/q6.query.text.sql`;
+- `q7`'s `text` is the empty string.
 
 ### AC: body-read-failures-are-errors
 
@@ -377,9 +378,9 @@ TypeScript parity depends on a prerequisite that does not exist yet. Today both 
 **When** each is read
 **Then** each read fails with an error naming the record key, the field and the body path, and no file outside the record's directory is opened
 
-### AC: unnameable-record-without-body-reads
+### AC: untyped-record-without-body-reads
 
-**Requirements:** record-body-file#req:read-merges-bodies-raw
+**Requirements:** record-body-file#req:body-presence-follows-type
 
 **Given** a record `q3` whose `type` is empty, and a directory that holds no `q3.query.text.<segment>` file
 **When** it is read
@@ -409,7 +410,7 @@ It names `queries/q1` as the containing directory.
 
 **Requirements:** record-body-file#req:write-splits-bodies-out, record-body-file#req:write-plan-exposed
 
-**Given** a stored record `q1` of type `SQL` with a body file, and new data of type `SQL` with a changed title and no `text` key
+**Given** a stored record `q1` of type `SQL` with a body file, and new data with an empty `type` and no `text` key
 **When** the write plan is computed
 **Then** the plan is, in order:
 1. write the record file, with expected prior state the SHA-256 of the stored bytes;
@@ -417,9 +418,14 @@ It names `queries/q1` as the containing directory.
 
 ### AC: non-string-or-unnameable-body-refused-before-any-change
 
-**Requirements:** record-body-file#req:write-splits-bodies-out
+**Requirements:** record-body-file#req:write-splits-bodies-out, record-body-file#req:body-presence-follows-type
 
-**Given** new data with `text: 42`, and new data with `text` present and an empty `type`
+**Given** four kinds of new data:
+- `text: 42`;
+- `text` present with an empty `type`;
+- `type: SQL` with no `text`;
+- `type: "S Q L"` with a `text` value
+
 **When** each write plan is computed
 **Then** each returns an error and no plan, so a driver applying plans changes no file
 
@@ -491,25 +497,27 @@ Exactly one `text` body file remains after the plan is applied.
 
 **Then** the revision computed from the exported canonical input differs from `R` in every case, including through `dalgo2ingitdb`'s protected profile
 
-### AC: lenient-definition-paths-preserve-body-files
+### AC: lenient-definition-paths-become-strict
 
-**Requirements:** record-body-file#req:version-skew-fails-safe
+**Requirements:** record-body-file#req:implementations-current-and-strict
 
-**Given** a `dalgo2ingitdb` collection definition declaring `body_files`
-**When** it is read through `DescribeCollection`, and separately altered with an unrelated `ApplyAddField`
-**Then** neither path drops `body_files`: the described definition carries it, and the rewritten `definition.yaml` still contains it unchanged
+**Given** a `dalgo2ingitdb` collection definition declaring `body_files`, and a second definition carrying an unknown key under `record_file`
+**When** each is read through `DescribeCollection`, and each is altered with an unrelated `ApplyAddField`
+**Then** the first keeps `body_files` in both the described and the rewritten definition, and the second fails to decode on both paths
 
-### AC: format-version-and-minimums-declared
+### AC: every-implementation-runs-vendored-vectors
 
-**Requirements:** record-body-file#req:version-skew-fails-safe, record-body-file#req:format-contract-and-golden-fixture
+**Requirements:** record-body-file#req:conformance-vectors-are-the-contract, record-body-file#req:implementations-current-and-strict, record-body-file#req:ts-layout-prerequisite-recorded
 
-**Given** the `FORMAT.md` and `go.mod` files after this Feature lands
-**When** they are read
-**Then** all of the following hold:
-- `FORMAT.md` declares `v2`;
-- it contains the "Body files" section with the example tree from REQ `format-contract-and-golden-fixture`;
-- it names the minimum `ingitdb-go/ingitdb` and `ingitdb-ts` releases;
-- `dalgo2ingitdb` and `dalgo2ingitdb4github` require at least that `ingitdb-go/ingitdb` release.
+**Given** `conformance/record-layout/vectors.yaml` in `ingitdb/ingitdb`, covering every case listed in REQ `conformance-vectors-are-the-contract`, and the `record_file` fields in `ingitdb-collection.schema.json`
+**When** CI runs in `ingitdb-go`, `dalgo2ingitdb`, `dalgo2ingitdb4github` and `ingitdb-ts`
+**Then** in each repository:
+- a vendored copy with the re-sync header is present;
+- the re-sync check passes;
+- every vector passes;
+- every vector's `definition` validates against the JSON Schema.
+
+The `ingitdb-ts` run is gated on ingitdb/ingitdb-ts#104.
 
 ### AC: schema-alteration-keeps-body-files-consistent
 
@@ -529,9 +537,9 @@ Exactly one `text` body file remains after the plan is applied.
 
 **Requirements:** record-body-file#req:body-files-isolated-from-listing
 
-**Given** the golden fixture's `queries` collection
+**Given** the reference `queries` collection holding `active-customers` and `customer-invoices` with all their body files
 **When** records are listed and counted by `datavalidator`, the materializer, the foreign-key index, `dalgo2ingitdb` and `dalgo2ingitdb4github`
-**Then** each lists exactly `active-customers`, `customer-invoices` and `draft-query`, and no reported key or file path is a body file
+**Then** each lists exactly `active-customers` and `customer-invoices`, and no reported key or file path is a body file
 
 ### AC: orphan-and-stale-body-files-reported
 
@@ -541,38 +549,25 @@ Exactly one `text` body file remains after the plan is applied.
 **When** the database is validated
 **Then** validation reports one orphan-body finding for `q9/q9.query.text.sql` and one for `q1/q1.query.text.sql`, and record `q1` reads with the `.query.text.dtql` body
 
-### AC: legacy-sidecar-names-not-read-as-bodies
-
-**Requirements:** record-body-file#req:datatug-cut-over-referenced
-
-**Given** a record `q5` of type `SQL` with a legacy `q5/q5.query.sql` and no `q5/q5.query.text.sql`
-**When** it is read and the collection is listed
-**Then** `q5` reads with no `text` key, and the legacy file is neither merged nor listed as a record
-
 ### AC: definition-without-body-files-unchanged
 
 **Requirements:** record-body-file#req:body-files-definition
 
-**Given** the existing test suite and golden fixtures with no `body_files` declared anywhere
+**Given** the existing test suite, with no `body_files` declared anywhere
 **When** they run after this Feature
 **Then** every existing read, write, listing and validation result is unchanged, and no recovery hook is required
-
-### AC: go-and-ts-readers-agree-on-fixture
-
-**Requirements:** record-body-file#req:format-contract-and-golden-fixture, record-body-file#req:ts-layout-prerequisite-recorded
-
-**Given** the `queries` fixture subtree, in its nested `{key}/{key}.query.json` layout, committed identically in `dalgo2ingitdb`, `ingitdb-ts` (`client-fs` and `client-github`) and `ingitdb-go`; `FORMAT.md` documenting body files; and ingitdb/ingitdb-ts#104 landed
-**When** the Go reader test and the `ingitdb-ts` fixture tests read all three query records
-**Then** both produce the same field maps: the same `text` and `notes` bytes, and no `text` key for `draft-query`
 
 ## Not Doing (and Why)
 
 - **Designing the multi-file journal and its recovery.** ingitdb/dalgo2ingitdb#15 owns crash-safe multi-file changes. This Feature fixes only what #15 consumes: the ordered, complete write plan with expected prior states, the recovery hook every reader calls, and the refusal of multi-operation plans until #15 lands.
 - **A configurable body file name.** The founder decided on 2026-09-17 on the fixed `<key>.<record-suffix>.<field>.<body-type>` name. It is what makes the disjointness rule a static check.
-- **Migrating DataTug's `.query.<type>` sidecars.** That is DataTug's hard cut-over (REQ `datatug-cut-over-referenced`).
+- **Renaming DataTug's existing `.query.<type>` sidecars to `.query.text.<type>`.** That belongs to DataTug's hard cut-over (`datatug/datatug` Feature `dalgo-project-store`).
 - **Renaming a body field.** That renames one file per record. It needs a collection-wide multi-file change, so the rename is refused for now.
 - **Multi-segment record suffixes, such as `{key}.a.b.json`, in body-bearing collections.** DataTug uses single-segment suffixes, and one segment keeps name parsing unambiguous.
-- **Implementing the TypeScript reader or its layout support.** Parity is made testable here through `FORMAT.md` and the shared fixture. The `ingitdb-ts` work is ingitdb/ingitdb-ts#104 plus its own body-file change.
+- **Writing the vectors or the schema change here.** They are owned by `ingitdb/ingitdb` (#9) and `ingitdb/ingitdb-schema` (#9). This Feature states what they must cover.
+- **Implementing the TypeScript reader or its layout support.** Parity is proven by the shared vectors. The `ingitdb-ts` work is ingitdb/ingitdb-ts#104 plus its own body-file change.
+- **Compatibility with pre-beta data or older releases.** The project is in private beta. Every implementation moves to latest (REQ `implementations-current-and-strict`).
+- **Markdown documentation of the format.** The YAML comments are the documentation. Markdown MAY be added later, never as a contract.
 - **Body files for list and map record types.** A many-record file has no per-record sibling owner.
 - **Binary bodies or any encoding.** Records are text-only (`storage-format` REQ `text-only`).
 - **A body-size cap.** `datatug-core` enforces its own cap before calling the store. A storage-level cap can be added later without changing this shape.
@@ -580,40 +575,52 @@ Exactly one `text` body file remains after the plan is applied.
 
 ## Rehearse Integration
 
-No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configuration. Every AC is directly executable as a Go test: definition-load table tests through `validator.ReadDefinition`, pure write-plan and revision-input unit tests, temp-dir and golden-fixture tests through the real readers and `datavalidator`, and driver tests in `dalgo2ingitdb` and `dalgo2ingitdb4github`. The one exception is the TypeScript half of `go-and-ts-readers-agree-on-fixture`, which is a vitest in `ingitdb-ts`. This is recorded as an explicit skip rather than an omission.
+No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configuration. Every AC is directly executable as a Go test: definition-load table tests through `validator.ReadDefinition`, pure write-plan and revision-input unit tests, temp-dir tests through the real readers and `datavalidator`, a vendored-vector runner in each implementation, and driver tests in `dalgo2ingitdb` and `dalgo2ingitdb4github`. The one exception is the `ingitdb-ts` vector runner, which is a vitest. This is recorded as an explicit skip rather than an omission.
 
 ## Dependent Modules
 
-- **`ingitdb/dalgo2ingitdb`** owns `FORMAT.md` and the fixture. It:
+- **`ingitdb/ingitdb`** owns `conformance/record-layout/vectors.yaml` (#9).
+- **`ingitdb/ingitdb-schema`** adds `records_dir` and `body_files` to `ingitdb-collection.schema.json` (#9).
+- **`ingitdb/dalgo2ingitdb`** vendors and runs the vectors, and retires `FORMAT.md` as a contract. It:
   - applies the write plan, refusing multi-operation plans until #15;
   - merges bodies on `Get` and query reads (`record_io.go`, `query.go` `readAllSingleStored`);
   - implements the recovery hook (#15);
   - computes protected revisions from the canonical input (`protected.go`);
-  - makes the `schema_reader.go` and `schema_modifier.go` definition decodes strict or `body_files`-preserving;
+  - makes the `schema_reader.go` and `schema_modifier.go` definition decodes strict;
   - applies the field alteration rules;
-  - raises its `ingitdb-go/ingitdb` requirement.
+  - moves to the latest `ingitdb-go/ingitdb`.
 - **`ingitdb/dalgo2ingitdb4github`**:
   - merges bodies and excludes body files in `query.go` `scanSingleRecords` (`:172-203`) and in single-record reads;
   - refuses non-regular tree entries (mode `120000`, `160000`);
   - applies each write plan in one commit;
-  - raises its `ingitdb-go/ingitdb` requirement.
-- **`ingitdb/ingitdb-ts`** needs ingitdb/ingitdb-ts#104 (`records_dir` and nested templates). It then reads body files in `client-fs` and `client-github` and mirrors the fixture.
+  - vendors and runs the vectors;
+  - moves to the latest `ingitdb-go/ingitdb`.
+- **`ingitdb/ingitdb-ts`** needs ingitdb/ingitdb-ts#104 (`records_dir` and nested templates). It then reads body files in `client-fs` and `client-github`, and vendors and runs the vectors.
+- **`ingitdb-go`** itself vendors and runs the vectors against its validator, readers and write plan.
 - **`ingitdb/ingitdb-cli`** writes records through `dalgo2ingitdb`, so it inherits body-file handling. It configures `dalgo2ingitdb`'s recovery hook for validate and materialize. Any direct file write it keeps must use the write plan.
 - **`datatug/datatug-core`**:
   - declares `body_files: [{field: text, type_field: type}]` on its queries collection (`dalgo-project-store`);
-  - maps `QueryDef.Text == ""` to an absent `text` field when it has no body;
   - renames its sidecars to `.query.text.<type>` under its hard cut-over.
 
 ## Open Questions
 
-1. **Where `FORMAT.md` lives.** It sits in `dalgo2ingitdb` today, but `ingitdb-go` owns the definition schema this Feature extends. Should `FORMAT.md` and the canonical fixture move to `ingitdb-go`, with the other repos mirroring it? Until someone decides, this Feature adds to the existing `dalgo2ingitdb` copy and mirrors the subtree into `ingitdb-go`.
-2. **A missing body file: absent field, or read error?** Choose one:
-   - (A) The record reads with the body field absent. Authors who need a body mark the column `required: true`, and validation reports it as a finding.
-   - (B) A missing body file is a read error for that record.
+1. **A missing body file for a typed entry: read error, or absent field?** Choose one:
+   - (A, recommended) When the entry's `type_field` has a value, the body file is REQUIRED, and its absence is a read error. When the type is empty, there is no body.
+   - (B) A missing body file always reads as an absent field, whatever the type.
 
-   **Recommendation: A.** DataTug already has queries without a body: `datatug-core` loads them as empty text and writes no sidecar (`store_queries.go`, `readQueryTextSidecar`). Under B, one such query fails the whole collection listing. A keeps absent (no file) distinct from empty (an empty file), so the read-write round trip is exact. The torn-write risk that B guards against is closed instead by recovery before read (REQ `pending-changes-recovered-before-read`). REQ `missing-body-is-absent-field` is written as A, provisionally.
+   **Recommendation: A.** A DTQL query with no DTQL is corrupt, and failing loudly surfaces the corruption instead of serving an empty query. A has three further effects:
+   - It gives each record one invariant, "typed ⇔ body present", which writers enforce too.
+   - It still allows a record without a body, through an empty type.
+   - Recovery before read (REQ `pending-changes-recovered-before-read`) ensures a torn write is never mistaken for corruption.
 
-Resolved: the founder decided on 2026-09-17 that the body file name is fixed (`<key>.<record-suffix>.<field>.<body-type>`) and that the body type is the lowercased type value, so the extension is not taken from a closed list. The earlier question about `JSON`-typed queries no longer applies, because `x.query.text.json` is disjoint from `*.query.json`.
+   Under B, a record that has lost its body is indistinguishable from one that never had a body. REQ `body-presence-follows-type` is written as A, provisionally.
+
+Resolved on 2026-09-17 by founder decision:
+- body file names are fixed, `<key>.<record-suffix>.<field>.<body-type>`;
+- the body type is the lowercased type value, not an entry from a closed list;
+- `body_files` is a plural list;
+- the contract is YAML conformance vectors plus JSON Schema, owned by `ingitdb/ingitdb` and `ingitdb/ingitdb-schema`; this supersedes the question of where `FORMAT.md` lives;
+- the project is in private beta, so there are no legacy-compatibility constraints.
 
 ---
 *This document follows the https://specscore.md/feature-specification*
