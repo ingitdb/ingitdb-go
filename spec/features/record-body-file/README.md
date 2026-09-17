@@ -104,7 +104,7 @@ queries/customer-graph/customer-graph.query.json         # {"text": {"$file": "c
 queries/customer-graph/customer-graph.query.text.graphql
 ```
 
-Placing the body in the record's own directory keeps a record and its bodies under one containment check and one directory for the journal (REQ `write-plan-exposed`). Including `<field>` gives every body field of a record its own file name. `<field>` and `<ext>` never contain a dot, so a body file name parses one way only: the last segment is the extension, the one before it is the field, and the one before that is the record suffix. The key is everything in front. Two different (key, field, extension) triples can therefore never produce the same name.
+Because the nested layout is required (REQ `body-files-definition-validated` rule 3), the record's directory belongs to that one record. Placing the body there keeps a record and its bodies under one containment check and one directory for the journal (REQ `write-plan-exposed`). Including `<field>` gives every body field of a record its own file name. `<field>` and `<ext>` never contain a dot, so a body file name parses one way only: the last segment is the extension, the one before it is the field, and the one before that is the record suffix. The key is everything in front. Two different (key, field, extension) triples can therefore never produce the same name.
 
 #### REQ: body-files-definition-validated
 
@@ -112,7 +112,7 @@ Placing the body in the record's own directory keeps a record and its bodies und
 
 1. `body_files` on a record type other than `map[string]any` (`SingleRecord`). A list or map file holds many records, so a per-record sibling file has no single owner.
 2. `body_files` with `format: markdown` on the record file. A Markdown record already has a body (`content_field`), and two body carriers for one record would be ambiguous.
-3. `body_files` when the record basename template is not exactly `{key}.<record-suffix>.<file-ext>`, where `<record-suffix>` and `<file-ext>` are each one non-empty segment of `[a-z0-9_-]`. Such a template can be preceded by directories, as in `{key}/{key}.query.json`. A bare `{key}.json`, or a name with no `{key}` in its basename, has no record suffix to name bodies by.
+3. `body_files` when `record_file.name` is not exactly `{key}/{key}.<record-suffix>.<file-ext>`, where `<record-suffix>` and `<file-ext>` are each one non-empty segment of `[a-z0-9_-]` (error kind `body-files-record-name`). This **nested layout** gives every record its own directory, holding exactly one record file and that record's bodies, and it is what DataTug uses. A flat `{key}.query.json` is rejected: keys may contain dots, so one record's safe body pattern (REQ `stored-reference-access-guard`) could match another record's files in a shared directory, for example record `a` against `a.b.query.json`. A bare `{key}.json`, or a basename without `{key}`, has no record suffix to name bodies by.
 4. An entry with an empty `field`, with both `format` and `format_field`, with neither, or with any other key.
 5. A `field` that does not match `^[a-z0-9_-]{1,64}$`. A body file name must be a safe, dot-free segment, and lowercase-only names cannot collide on a case-insensitive filesystem.
 6. A `format` that does not match `^[a-z0-9_-]{1,32}$`.
@@ -198,6 +198,13 @@ Rules:
 
 A safe reference that is not current is **drift** (REQ `name-drift-is-a-validation-finding`).
 
+**Protected paths.** For a record, the protected paths are:
+- the record file;
+- the current name of every `body_files` entry of the record (for a put, under the new data; for a repair, under the stored data);
+- every path that more than one entry of the record references.
+
+A stored reference held by entry E is **shared** when it names a protected path other than E's own current name. For example, `text` holds `{"$file": "q1.query.notes.md"}` while `notes` is current at that name. A plan or repair MUST NOT remove or overwrite a protected path because of a stale or shared reference, and MUST NOT read a shared reference's file as E's value. It leaves the file in place and lists the reference under `skipped` as `{field, reference, kind: shared-body-reference}`. Validation reports `shared-body-reference` as a finding. A delete is the exception: it removes the record's files as a whole, and removes each distinct safe path once.
+
 ### Reading
 
 #### REQ: read-merges-referenced-bodies
@@ -248,7 +255,7 @@ It returns an ordered list of operations, plus a `skipped` list of unsafe stored
 
 The order is fixed:
 
-- **Put:** (1) write each body file whose name or bytes change, in `body_files` order; (2) write the record file, if its bytes change; (3) remove each stale body file, in `body_files` order.
+- **Put:** (1) write each body file whose name or bytes change, in `body_files` order; (2) write the record file, if its bytes change; (3) remove each stale body file, in `body_files` order, except a protected path (REQ `stored-reference-access-guard`).
 - **Delete:** (1) remove the record file; (2) remove each referenced body file that is present, in `body_files` order.
 
 Writing bodies before the record file means a record file never references a file that has not yet been written. An unchanged put returns an empty list. Every path in a plan shares one containing directory, and the plan names that directory. The guard is what keeps this invariant true for removals driven by stored references.
@@ -374,7 +381,7 @@ A body file's name is always a pure function of the definition and the record's 
 
 This module MUST export a **repair plan** function for one record, and drivers MUST expose it as a repair operation. It is not a migration feature. It is the ordinary write plan with a different source for body values:
 
-- For each entry whose stored reference is safe but not current, whatever differs (extension, field or suffix), the new value is the bytes of the file behind the stored reference. The same checks apply: the file exists, `lstat` shows a regular file, and it is valid UTF-8. Otherwise the repair of that record fails with that error kind.
+- For each entry whose stored reference is safe, not current and not shared, whatever differs (extension, field or suffix), the new value is the bytes of the file behind the stored reference. A shared reference is skipped and reported (REQ `stored-reference-access-guard`), and that entry is written as `null`, so the record reads again without taking another entry's body. The same checks apply: the file exists, `lstat` shows a regular file, and it is valid UTF-8. Otherwise the repair of that record fails with that error kind.
 - Every other field keeps its stored value.
 - The plan is then computed exactly as for a put: write the body at the derived name, rewrite the reference, and remove the drifted file. Every file stays inside the record's directory, and the plan is applied under #15 like any put.
 - Unsafe references are skipped and reported, never followed.
@@ -420,7 +427,7 @@ Every vector carries a YAML comment that explains it for humans. The definition 
 - `mode` is a Git tree mode string: `100644` (the default), `100755`, `120000` (a symlink, where `content` is the target) or `160000` (a submodule, with no `content`). Git-tree runners use the mode as is. Filesystem runners create `120000` as a symlink and `160000` as an empty directory.
 
 **Error kinds** (the README defines the complete table):
-- behaviour and findings: `unlisted-record-file`, `inline-body-value`, `invalid-body-reference`, `unsafe-body-reference`, `format-unresolved`, `body-reference-mismatch`, `missing-body`, `non-regular-body`, `invalid-utf8`, `body-not-string`;
+- behaviour and findings: `unlisted-record-file`, `shared-body-reference`, `inline-body-value`, `invalid-body-reference`, `unsafe-body-reference`, `format-unresolved`, `body-reference-mismatch`, `missing-body`, `non-regular-body`, `invalid-utf8`, `body-not-string`;
 - validation: `body-files-record-type`, `body-files-markdown`, `body-files-record-name`, `body-files-entry`, `body-field-name`, `body-format-value`, `body-field-column`, `body-format-field-column`, `body-field-equals-suffix`, `suffix-overlap`.
 
 **Profiles.**
@@ -446,6 +453,8 @@ Implementations run profiles as follows:
 - every behaviour error kind, including an inline string, a reference with an extra `$` key, `format-unresolved`, a mismatched name (`../../x`), a missing referenced file, an invalid-UTF-8 body (`base64:`), and referenced paths of mode `120000` and `160000`;
 - an unreferenced body file that no reader fetches, and the orphan findings (`validate`);
 - `revision-input-layout`, pinning REQ `record-revision-covers-bodies`;
+- protected paths: a record whose `text` holds a stale reference to its live `q1.query.notes.md`. A `put` changing `text` writes `q1.query.text.<ext>`, leaves `q1.query.notes.md` in place (`expect_files`) and lists `shared-body-reference` under `skipped`, and `validate` reports the finding. A `repair` does not copy the notes body into `text`;
+- a flat `{key}.query.json` template with `body_files`, rejected at load with `body-files-record-name` (validation vector);
 - the access guard: a `delete`, and a `put` that changes `textFormat`, each on a record whose stored `text` reference is `../../x`, with a sentinel file at that path. In both, the sentinel is untouched (`expect_files`), the plan lists the `skipped` reference, and `validate` beforehand reports `unsafe-body-reference`;
 - `repair` of three kinds of drift, each renaming the body inside the directory and leaving validation clean: an extension change (`notes` from `md` to `txt`), a body field rename (`notes` to `memo`, the stored reference still `q1.query.notes.md`), and a suffix change (template `{key}/{key}.q.json`, with the record file already at `q1/q1.q.json` and a reference still to `q1.query.text.sql`);
 - an `unlisted-record-file` finding for `q2/q2.query.json` after a suffix change, which repair does not touch;
@@ -475,8 +484,10 @@ Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore
 **Given** a table of definitions, one per rule in REQ `body-files-definition-validated`:
 - `type: '[]map[string]any'`;
 - `format: markdown`;
-- record name `{key}.json` (no suffix);
-- record name `{key}.a.b.json` (a multi-segment suffix);
+- record name `{key}.query.json` (a flat layout);
+- record name `x/{key}.query.json` (a directory that is not the key);
+- record name `{key}/{key}.json` (no suffix);
+- record name `{key}/{key}.a.b.json` (a multi-segment suffix);
 - an entry carrying a `name` key;
 - an entry with both `format` and `format_field`;
 - an entry with neither;
@@ -608,6 +619,26 @@ It names `queries/q1` as the containing directory.
 3. remove `q1/q1.query.text.sql`.
 
 Exactly one `text` body file remains after the plan is applied.
+
+### AC: flat-layout-with-body-files-rejected
+
+**Requirements:** record-body-file#req:body-files-definition-validated
+
+**Given** the reference `queries` definition with `record_file.name` changed to the flat `{key}.query.json` (with `records_dir: '.'`), and a second copy using the nested `{key}/{key}.query.json`
+**When** each is loaded through `validator.ReadDefinition`
+**Then** the flat one fails at load time with `body-files-record-name`, naming `body_files` and the required `{key}/{key}.<suffix>.<ext>` shape, and no record file is read; the nested one loads
+
+### AC: live-body-survives-shared-stale-reference
+
+**Requirements:** record-body-file#req:stored-reference-access-guard, record-body-file#req:write-plan-exposed, record-body-file#req:drifted-record-repair
+
+**Given** record `q1` (`textFormat: SQL`) whose `notes` references its live `q1.query.notes.md`, and whose `text` holds `{"$file": "q1.query.notes.md"}`
+**When** the database is validated, a put with a new `text` value is planned and applied, and, separately, the original record is repaired
+**Then** the outcomes are:
+- validation reports `shared-body-reference` for `q1`'s `text`;
+- the put plan writes `q1.query.text.sql` and the record file, removes nothing, and lists `shared-body-reference` under `skipped`;
+- after the put, `q1.query.notes.md` still exists with its original bytes, and `q1` reads with both bodies;
+- the repair does not read `q1.query.notes.md` as `text`: it writes `text` as `null`, leaves `q1.query.notes.md` untouched, and reports the skipped reference.
 
 ### AC: unsafe-stored-reference-never-followed
 
@@ -803,7 +834,7 @@ The `ingitdb-ts` run is gated on ingitdb/ingitdb-ts#104.
 - **A configurable body file name.** The founder decided on 2026-09-17 on the fixed `<key>.<record-suffix>.<field>.<ext>` name. The `$file` reference must equal it, which keeps the disjointness rule a static check and keeps references from pointing anywhere else.
 - **A rename or migration feature for body file names.** A name is a pure function of the definition and the record's values. Drift after a definition change is a validation finding (REQ `name-drift-is-a-validation-finding`), fixed per record by a put or by the repair plan (REQ `drifted-record-repair`), which is the ordinary write plan. There is no collection-wide migration transaction.
 - **Renaming DataTug's existing `.query.<type>` sidecars.** That belongs to DataTug's hard cut-over (`datatug/datatug` Feature `dalgo-project-store`).
-- **Multi-segment record suffixes, such as `{key}.a.b.json`, in body-bearing collections.** DataTug uses single-segment suffixes, and one segment keeps name parsing unambiguous.
+- **Flat layouts or multi-segment record suffixes in body-bearing collections.** Only `{key}/{key}.<suffix>.<ext>` is allowed. DataTug uses that layout, and it keeps every record's files alone in their own directory and name parsing unambiguous.
 - **Writing the vectors or the schema change here.** They are owned by `ingitdb/ingitdb` (#9) and `ingitdb/ingitdb-schema` (#9). This Feature states what they must cover.
 - **Implementing the TypeScript reader or its layout support.** Parity is proven by the shared vectors. The `ingitdb-ts` work is ingitdb/ingitdb-ts#104 plus its own body-file change.
 - **Compatibility with pre-beta data or older releases.** The project is in private beta. Every implementation moves to latest (REQ `implementations-current-and-strict`).
