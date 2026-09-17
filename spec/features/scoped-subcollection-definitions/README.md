@@ -145,8 +145,10 @@ var ErrInvalidRecordID = errors.New("ingitdb: record id cannot be stored as a pa
 
 1. reject an empty id, and an id that fails `record.ValidateStringID` (which reserves a literal `%`);
 2. reject an id containing a control character or any of `:` `*` `?` `"` `<` `>` `|`, or ending in a space;
-3. return `record.EscapeID(id)` (dal-go/record, with the escape table of dalgo REQ `path-grammar`, dal-go/record#3), which escapes `/` `\` `.` `$` `#` `[` `]` `{` `}` `,` `=`. Because `.` is escaped, the result never ends in a dot and never contains a dot, so Windows' "part before the first dot" is the whole name;
-4. reject the result when, compared case-insensitively, it equals a Windows reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`, `LPT0`-`LPT9`, including the superscript-digit variants).
+3. return `record.EscapeID(id)` (dal-go/record, with the escape table of dalgo REQ `path-grammar`, dal-go/record#3), which escapes `/` `\` (`%5C`, added to `EscapeID` and `UnescapeID` by dal-go/record#3) `.` `$` `#` `[` `]` `{` `}` `,` `=`;
+4. reject the result when it fails the **portable segment rule** below.
+
+**Portable segment rule.** A path segment (a `RecordDirName` result, a scope directory name or a subcollection directory name) MUST NOT end in `.` or a space, and the part of it before the first `.`, with trailing spaces removed and compared case-insensitively, MUST NOT be a Windows reserved device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`, `LPT0`-`LPT9`, including the superscript-digit variants). Escaped ids contain no `.`, so for them the whole name is compared; collection names are not escaped, so `queries.`, `queries `, `CON.txt`, `con.fig` and `Aux` all fail. The rule applies on every platform.
 
 Every failure MUST satisfy `errors.Is(err, ErrInvalidRecordID)` (vector kind `invalid-record-id`). The rules are the same on every platform, at load, at resolution and at write, so a database written on Linux reads identically on Windows and macOS.
 
@@ -159,7 +161,7 @@ Every reader and writer MUST use these two functions, and nothing else, wherever
 - the parent record directory of a subcollection instance (REQ `data-resolution`);
 - a concrete-id scope directory (REQ `scope-directory-names`).
 
-Examples, pinned by vectors: `a/b` is `a%2Fb`; `v1.2` is `v1%2E2`; `50%` fails (`%` is reserved); `CON`, `con` and `a:b` fail; `a ` fails.
+Examples, pinned by vectors: `a/b` is `a%2Fb`; `a\b` is `a%5Cb`; `v1.2` is `v1%2E2`; `50%` fails (`%` is reserved); `CON`, `con` and `a:b` fail; `a ` fails.
 
 Implementations that MUST switch to them: `ingitdb-go` (`RecordFileDef.GetRecordFileName`, the record readers' key extraction, `datavalidator.subCollectionDataDir`); `dalgo2ingitdb` (`recordKeyToFileName`, `recordKeyFromFileName`, `validateRecordPathSegment`, `scoped_collection.go`); `dalgo2ingitdb4github` (`query.go` `buildKeyExtractor`, record paths, `scoped_collection.go`); `dalgo2ingitdb4local` (`record_file.go` `resolveRecordPath`, `tx_query.go` glob, `scoped_collection.go`); `ingitdb-cli` (`subcollection_path.go` `resolveFromCollection`, which MUST unescape each id segment of `--from` with `record.UnescapeID` before resolving); `ingitdb-ts` `client-fs` and `client-github`; `ingitdb-ws`.
 
@@ -174,9 +176,9 @@ A scope directory name MUST be one id segment of dalgo REQ `path-grammar`, class
 - **Placeholder:** `{` + identifier + `}`, where the identifier satisfies the shared placeholder identifier rule (`^[A-Za-z_][A-Za-z0-9_]*$`, `record.ValidPlaceholderName`).
 - **Concrete id:** a name for which `RecordIDFromDirName` succeeds (REQ `record-dir-names`). So `datatug` and `v1%2E2` are valid, and `v1.2`, `a%2fb` (lower case), `CON` and `{x` are not. `EscapeID` escapes `{`, so no concrete id directory can look like a placeholder, and a concrete scope directory has exactly the name of that parent record's data directory.
 - **Composite key** (`{field=value,…}`): rejected with `reserved-key-segment`, as in dalgo.
-- Anything else is `invalid-scope-directory`.
+- Anything else, including a name that fails the portable segment rule of REQ `record-dir-names`, is `invalid-scope-directory`.
 
-A subcollection directory name MUST satisfy `ingitdb.ValidateSubCollectionName`, which is dalgo's collection-name rule (non-empty, not `.` or `..`, no leading or trailing whitespace, no control character, none of `/` `\` `{` `}` `,` `=` `%`) plus the portability rules of REQ `record-dir-names` steps 2 and 4, and additionally MUST NOT begin with `.` or `$` (reserved for ignored entries and for `$views`). Otherwise it is `invalid-collection-name`. dalgo accepts `-`, and so does this rule; the root-collection id rule `ValidateCollectionID` is unchanged. `dalgo2ingitdb` MUST map `invalid-collection-name` to an error that satisfies `errors.Is(err, dbschema.ErrInvalidCollectionPath)`, so a name dalgo accepts but inGitDB refuses (for example `.hidden`) fails as a typed path error.
+A subcollection directory name MUST satisfy `ingitdb.ValidateSubCollectionName`, which is dalgo's collection-name rule (non-empty, not `.` or `..`, no leading or trailing whitespace, no control character, none of `/` `\` `{` `}` `,` `=` `%`) plus REQ `record-dir-names` step 2 (no `:` `*` `?` `"` `<` `>` `|`) and its portable segment rule (no trailing `.` or space; no reserved device name before the first `.`, case-insensitively), and additionally MUST NOT begin with `.` or `$` (reserved for ignored entries and for `$views`). Otherwise it is `invalid-collection-name`. dalgo accepts `-`, and so does this rule; the root-collection id rule `ValidateCollectionID` is unchanged. `dalgo2ingitdb` MUST map `invalid-collection-name` to an error that satisfies `errors.Is(err, dbschema.ErrInvalidCollectionPath)`, so a name dalgo accepts but inGitDB refuses (for example `.hidden`) fails as a typed path error.
 
 Two sibling scope directories whose names are equal under Unicode simple case folding MUST be rejected at load as `scope-case-collision`, because they name one directory on case-insensitive filesystems (NTFS, default APFS). Two sibling collection directories are held to the same rule. `PlanCreateCollection` MUST refuse to introduce such a pair (REQ `definition-path-addressing`).
 
@@ -224,7 +226,7 @@ Further rules:
 
 The shared-directory layout (`.collections/<name>/definition.yaml`) MUST use the same `subcollections/<scope>/<collection>/` tree inside `.collections/<name>/`. Its implicit discovery of any child directory holding a `definition.yaml` (`loadSubCollectionsShared`) is removed. In that layout, the allowed entries of a collection schema directory are `definition.yaml`, `subcollections/`, `$views/`, `README.md` and ignored entries.
 
-Recommendation over keeping implicit discovery: implicit discovery is name-keyed by construction, so it cannot hold scopes. Keeping it would leave one layout that silently cannot express `ext/datatug/projects`. No database in the `ingitdb` organisation uses this layout for subcollections today (checked on 2026-09-17 across the `ingitdb` checkouts on host `ai`).
+Recommendation over keeping implicit discovery: implicit discovery is name-keyed by construction, so it cannot hold scopes. Keeping it would leave one layout that silently cannot express `ext/datatug/projects`. No database or writer found uses this layout for subcollections today (searched on 2026-09-17 across the `ingitdb`, `sneat-co`, `openvaultdb` and `datatug` checkouts on host `ai`). `sneat-co/ovdb` `onboarding4ovdb` and openvaultdb Feature `sneat-space-export` use it for root collections only, and are listed in REQ `dependents-move-together`.
 
 #### REQ: scoping-parent-not-required
 
@@ -463,12 +465,13 @@ Implementations run them as follows:
 - a placeholder scope `{extID}/settings` beside the concrete scope `datatug/projects`, loading cleanly and resolving `ext/datatug/settings` to the placeholder definition;
 - a scoping parent with no record: `resolve` of `ext/datatug/projects/p1/queries` giving `ext/datatug/projects/p1/queries`, with `setup_files` holding no `ext` record, and a `validate` whose findings are empty;
 - the data directory for a parent without `records_dir` (`orders/o1/order_details`, provisional on option A) and for a parent with `records_dir: '.'`;
-- `record-dir-name` for `a/b` (`a%2Fb`), `v1.2` (`v1%2E2`), `50%`, `CON`, `con`, `a:b` and `a ` (the last five `invalid-record-id`), and a `resolve` and a `plan-create` using the id `v1.2`, whose data directory and scope directory are both `v1%2E2`;
+- `record-dir-name` for `a/b` (`a%2Fb`), `a\b` (`a%5Cb`), `v1.2` (`v1%2E2`), `50%`, `CON`, `con`, `a:b` and `a ` (the last five `invalid-record-id`), and a `resolve` and a `plan-create` using the id `v1.2`, whose data directory and scope directory are both `v1%2E2`;
 - a `list` of `ext/datatug/projects` whose tree also holds `p1/queries/q1/q1.query.json`, another extension's `ext/sneat/projects/s1/s1.yaml` and `.collection/definition.yaml`, returning only the project keys, and a GitHub-tree runner applying the same vector;
 - a `validate` finding whose `collection_id` is a scoped schema path;
 - every load error kind, including two placeholder directories, both overlap directions, a non-canonical concrete id (`v1.2`), a composite key directory, a case collision (`DataTug` beside `datatug`), a file inside `subcollections/`, a directory without `definition.yaml`, and the legacy `subcollections/order_details/definition.yaml`;
 - `README.md` and `.DS_Store` entries at every level, ignored;
 - `plan-create` success at depth 2 (`.../environments/{envID}/servers`), and each create failure in the check order of REQ `definition-path-addressing`: an invalid collection name (`.hidden`), a missing ancestor, a conflicting placeholder name (`{pid}/entities` when `{projectID}` exists), an existing definition, a case collision (`ext/DataTug/projects` beside `datatug`), and overlap in both directions;
+- subcollection names failing the portable segment rule, at load and in `plan-create`: `queries.`, `queries `, `CON.txt`, `con.fig`, `Aux` and `nul` (all `invalid-collection-name`);
 - a legacy `subcollections/order_details/definition.yaml` whose directory name is also a valid concrete id, reported as `legacy-subcollection-layout`;
 - a `$`-prefixed directory in a `.collection/` schema directory, rejected with `unexpected-schema-entry`;
 - `plan-drop` of the last definition under a placeholder scope, removing the scope directory, and of a non-last one, keeping it.
@@ -534,7 +537,7 @@ Known dependents (2026-09-17, checkouts on host `ai`):
 
 **Given** the database of AC `datatug-tree-loads`, and a copy of it without the `environments` definition and its subtree
 **When** `PlanCreateCollection` is called with `ext/datatug/projects/{pid}/environments/{envID}/servers` on the copy, with `ext/datatug/projects/{pid}/queries` on the original, and with `ext/datatug/projects/{projectID}/queries` on the original
-**Then** the first fails with `errors.Is(err, ingitdb.ErrAncestorNotFound)` naming `ext/datatug/projects/{pid}/environments`, not with a placeholder conflict; the second fails with `ErrPlaceholderNameConflict`, not with `ErrCollectionExists`; the third fails with `ErrCollectionExists`; `PlanCreateCollection("ext/DataTug/projects")` on the original fails with `ErrScopeCaseCollision`; and `PlanCreateCollection("ext/datatug/projects/{projectID}/.hidden")` fails with `invalid-collection-name`, which `dalgo2ingitdb` reports as `dbschema.ErrInvalidCollectionPath`; every failing call returns an empty `defFile`
+**Then** the first fails with `errors.Is(err, ingitdb.ErrAncestorNotFound)` naming `ext/datatug/projects/{pid}/environments`, not with a placeholder conflict; the second fails with `ErrPlaceholderNameConflict`, not with `ErrCollectionExists`; the third fails with `ErrCollectionExists`; `PlanCreateCollection("ext/DataTug/projects")` on the original fails with `ErrScopeCaseCollision`; and `PlanCreateCollection("ext/datatug/projects/{projectID}/.hidden")` fails with `invalid-collection-name`, which `dalgo2ingitdb` reports as `dbschema.ErrInvalidCollectionPath`, as do `.../{projectID}/queries.`, `.../{projectID}/con.fig` and `.../{projectID}/queries ` (trailing space); every failing call returns an empty `defFile`
 
 ### AC: scoping-parent-need-not-exist
 
@@ -560,9 +563,9 @@ Provisional on Open Question `subcollection-data-directory-rule`, option A.
 
 **Requirements:** scoped-subcollection-definitions#req:record-dir-names, scoped-subcollection-definitions#req:scope-directory-names
 
-**Given** the ids `a/b`, `v1.2`, `50%`, `CON`, `con`, `a:b` and `a `, and a database whose `ext` scope tree holds a concrete scope for `v1.2`
+**Given** the ids `a/b`, `a\b`, `v1.2`, `50%`, `CON`, `con`, `a:b` and `a `, and a database whose `ext` scope tree holds a concrete scope for `v1.2`
 **When** `RecordDirName` is called on each, `RecordIDFromDirName` on each successful result, the database is loaded, and a record with key `v1.2` is written to `ext` through `dalgo2ingitdb`
-**Then** the results are `a%2Fb` and `v1%2E2`, the others fail with `ErrInvalidRecordID`; each successful result round-trips; the scope directory is `ext/.collection/subcollections/v1%2E2/` while a `v1.2/` scope directory fails with `invalid-scope-directory`; and the written record file is `ext/$records/v1%2E2.yaml`
+**Then** the results are `a%2Fb`, `a%5Cb` and `v1%2E2`, the others fail with `ErrInvalidRecordID`; each successful result round-trips; the scope directory is `ext/.collection/subcollections/v1%2E2/` while a `v1.2/` scope directory fails with `invalid-scope-directory`; and the written record file is `ext/$records/v1%2E2.yaml`
 
 ### AC: listing-returns-only-own-records
 
@@ -576,9 +579,9 @@ Provisional on Open Question `subcollection-data-directory-rule`, option A.
 
 **Requirements:** scoped-subcollection-definitions#req:strict-tree-reading, scoped-subcollection-definitions#req:scope-directory-names
 
-**Given** databases whose `subcollections/` directory holds, one per database: `v1.2/x/`, `CON/x/`, `{a=b}/x/`, `{1x}/x/`, `{x/`, both `DataTug/x/` and `datatug/x/`, a regular file `notes.txt`, `{id}/x/` with no `definition.yaml`, `{id}/Bad:Name/definition.yaml`, `order_details/definition.yaml` (whose name is also a valid concrete id), and, in a `.collection/` directory, a `$tmp/` directory
+**Given** databases whose `subcollections/` directory holds, one per database: `v1.2/x/`, `CON/x/`, `{a=b}/x/`, `{1x}/x/`, `{x/`, both `DataTug/x/` and `datatug/x/`, a regular file `notes.txt`, `{id}/x/` with no `definition.yaml`, `{id}/Bad:Name/definition.yaml`, `{id}/queries./definition.yaml`, `{id}/CON.txt/definition.yaml`, `order_details/definition.yaml` (whose name is also a valid concrete id), and, in a `.collection/` directory, a `$tmp/` directory
 **When** each is loaded
-**Then** they fail with `invalid-scope-directory`, `invalid-scope-directory`, `reserved-key-segment`, `invalid-scope-directory`, `invalid-scope-directory`, `scope-case-collision`, `unexpected-schema-entry`, `missing-definition`, `invalid-collection-name`, `legacy-subcollection-layout` and `unexpected-schema-entry` respectively; each error names its offending path and satisfies `errors.Is` with that kind's exported sentinel; and none loads with the entry skipped
+**Then** they fail with `invalid-scope-directory`, `invalid-scope-directory`, `reserved-key-segment`, `invalid-scope-directory`, `invalid-scope-directory`, `scope-case-collision`, `unexpected-schema-entry`, `missing-definition`, `invalid-collection-name`, `invalid-collection-name`, `invalid-collection-name`, `legacy-subcollection-layout` and `unexpected-schema-entry` respectively; each error names its offending path and satisfies `errors.Is` with that kind's exported sentinel; and none loads with the entry skipped
 
 ### AC: ignored-entries-and-empty-scopes
 
