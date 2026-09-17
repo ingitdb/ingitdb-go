@@ -256,7 +256,7 @@ It returns an ordered list of operations, plus a `skipped` list of unsafe stored
 The order is fixed:
 
 - **Put:** (1) write each body file whose name or bytes change, in `body_files` order; (2) write the record file, if its bytes change; (3) remove each stale body file, in `body_files` order, except a protected path (REQ `stored-reference-access-guard`).
-- **Delete:** (1) remove the record file; (2) remove each referenced body file that is present, in `body_files` order.
+- **Delete:** (1) remove the record file; (2) remove each present body file behind a safe reference, in `body_files` order. Each distinct path is removed **once**: when several entries reference the same path, only the first entry in `body_files` order emits the `remove`, and unsafe references are skipped (REQ `stored-reference-access-guard`).
 
 Writing bodies before the record file means a record file never references a file that has not yet been written. An unchanged put returns an empty list. Every path in a plan shares one containing directory, and the plan names that directory. The guard is what keeps this invariant true for removals driven by stored references.
 
