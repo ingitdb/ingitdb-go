@@ -104,6 +104,8 @@ Formally, take a body-bearing collection D with record suffix `s` and a body fie
 - n = 2 and x1 = `f`: for example C's `{key}.text.json` matches `x.query.text.json`; or
 - n ≥ 3, x(n-1) = `f` and x(n-2) = `s`.
 
+When C's record basename has **no** `{key}`, as in `{key}/record.json` or `all.json`, the part matched against a basename is a fixed literal, y1.….ym. C then conflicts only when m ≥ 4, y(m-1) = `f` and y(m-2) = `s`, for example the literal `a.query.text.json`. REQ `body-files-isolated-from-listing` explains why no other literal can match.
+
 The body type is an open per-record value, so any `ext` can occur. That is why the check is on the name segments alone and ignores `ext`. The error names both collections, the record template and the body field.
 
 With the rule enforced, a body file cannot match any record matcher, neither the local glob (`{key}` → `*`) nor the GitHub template regex (`dalgo2ingitdb4github/query.go` `buildKeyExtractor`). For example, `x.query.text.json` matches neither `*.query.json` nor `\.query\.json$`.
@@ -194,30 +196,72 @@ Writers MUST apply this plan instead of re-deriving body names. ingitdb/dalgo2in
 
 A torn multi-file change must never be read as a valid state. This module MUST export a pending-change recovery hook: an interface that a driver implements, for example `RecoverPendingChanges(ctx, dbRoot) error`. The hook exists because `ingitdb-go` cannot import `dalgo2ingitdb`, the owner of the journal (ingitdb/dalgo2ingitdb#15).
 
+**Locking.** The hook MUST acquire the driver's transaction lock for the whole of recovery. The driver chooses shared or exclusive, and #15 defines which. A writer holds that lock while its change and journal are live, so a hook that waits for the lock can never roll back or roll forward a write that is still in flight. It acts only on a journal whose writer has released the lock or died. The reader then reads under the driver's shared lock, so no new change can start between recovery and read.
+
+**Single-operation plans.** A plan with one operation, such as a body-only edit or a record-only edit, has no multi-file journal. It relies on #15's per-file temp file, fsync and rename (and directory fsync) to be crash-atomic.
+
 Every reader of a working-tree database MUST do the following before it reads any record of a collection that declares `body_files`:
 
 - If a recovery hook is configured, invoke it, and proceed only when it returns without error. On error, fail with that error.
 - If no hook is configured, refuse with a typed error (for example `ErrPendingChangeRecoveryUnavailable`) that names the collection. The reader MUST NOT read records without the hook.
 
-This applies to the `datavalidator` pass, the materializer's records reader, the foreign-key index, and the drivers' own reads. `ingitdb-cli` MUST configure `dalgo2ingitdb`'s hook for its validate and materialize commands.
-
 Reads of a committed Git tree, such as `dalgo2ingitdb4github` or a read at a commit, are exempt. A commit is written atomically, and no journal is attached to it. Collections without `body_files` are unaffected: their changes touch one file each, and #15 makes those atomic by rename.
+
+#### REQ: every-body-files-reader-configures-recovery
+
+Every caller that reads records of a working-tree database MUST configure the recovery hook, because it may meet a `body_files` collection. The callers below were found by searching the Go checkouts under `/home/ai/projects` (worktrees excluded) on 2026-09-17 for imports of `ingitdb-go/ingitdb/datavalidator`, `materializer` and `docsbuilder`.
+
+**Entry points in `ingitdb-go` that read records**, which MUST accept a hook and apply REQ `pending-changes-recovered-before-read`:
+
+- `datavalidator.NewValidator().Validate`, including its foreign-key index pass;
+- `datavalidator.NewIncrementalValidator(...).ValidateChanges`;
+- `materializer.NewFileRecordsReader().ReadRecords`, and through it `materializer.NewViewBuilder`;
+- `docsbuilder.UpdateDocs`.
+
+**Callers**, which MUST pass `dalgo2ingitdb`'s hook:
+
+- **`ingitdb/ingitdb-cli`**, in `cmd/ingitdb/main.go` (wiring), and in `commands/`: `validate.go`, `diff.go`, `pull.go`, `ci.go`, `materialize.go`, `docs_update.go`, `conflict_resolver.go`, `record_merge_resolver.go`, `select_output.go`, `view_builder_helper.go` and `seams.go`.
+- **`ingitdb/ingitdb-action`**, which runs `ingitdb validate` from a pinned `ingitdb-cli` release (`scripts/validate.sh:234`). It is covered through the CLI, and its pinned `cli-version` MUST be a release that configures the hook.
+- **`synchestra-io/synchestra`**, in `pkg/cli/main.go`, which embeds `ingitdb-cli` commands and imports `materializer` directly.
+
+Importers of only `ingitdb-go/ingitdb/validator`, which reads definitions but not records, read records through `dalgo2ingitdb`. That driver runs its own recovery before its reads, so they need no separate wiring. They are `openvaultdb-go` (`pkg/mount`), `sneat-go` (`pkg/sneatstorage`), `specscore-cli` (`pkg/journal`), `wb` (`internal/hubstore`), `synchestra` (`pkg/state/gitstore`, `pkg/cli/state`) and `datatug-cli` (`pkg/incidentstore`, `pkg/dbcopy`).
 
 #### REQ: record-revision-covers-bodies
 
-Any revision, etag or change token that `ingitdb-go` or a driver computes for a record in a collection that declares `body_files` MUST change whenever any of the following changes:
+Any revision, etag or change token that `ingitdb-go` or a driver computes for a record in a collection that declares `body_files` MUST be a hash of the **canonical revision input** below. It therefore changes whenever the record file's existence or bytes change, or any body's type, existence or bytes change.
 
-- the record file's existence or bytes;
-- the resolved name of any body file, or its absence;
-- the existence or bytes of any body file.
+This module MUST export a function that builds this input. Drivers hash it, with an HMAC where they need one, and never frame the parts themselves. The layout uses these building blocks:
 
-This module MUST export the canonical revision input: the byte sequence to hash, with the record file first and then each body in `body_files` order. Each part is length-prefixed, so bytes moving between files also change the input. Drivers hash that sequence, with an HMAC where they need one, and do not frame the parts themselves. Today `dalgo2ingitdb/protected.go` (`revision`, `:482-494`) hashes the record file bytes only, so an edit to a body alone would not change the revision. `datatug-core` already hashes both (`query_revision.go`).
+- `u64` means an unsigned 64-bit integer, **big-endian**.
+- `lp(x)` means `u64(len(x))` followed by the bytes of `x`.
+- A presence byte is `0x00` for absent and `0x01` for present.
+
+The layout, in order:
+
+1. The magic `ingitdb-record-revision-v1`, as ASCII bytes, followed by one `0x00` byte.
+2. `lp(record path)`: the record file path, slash-separated and relative to the database root, as UTF-8.
+3. The record file: a presence byte, then `lp(record file bytes)` if present, or nothing if absent.
+4. For each entry, in `body_files` order:
+   1. `lp(field name)`;
+   2. a presence byte, which is `0x01` only when the entry is typed and its resolved body file exists;
+   3. if present, `lp(lowercased body type)` and then `lp(body file bytes)`.
+
+An untyped or unnameable entry, and a typed entry whose body file is missing, both encode as `lp(field name) 0x00`.
+
+The vector `revision-input-layout` pins the layout. For record `queries/q1/q1.query.json` with bytes `{"notes_format":"","type":"SQL"}\n`, entry `text` with body `select 1` (no trailing newline), and untyped entry `notes`:
+
+- the input is 155 bytes; in base64 it is `aW5naXRkYi1yZWNvcmQtcmV2aXNpb24tdjEAAAAAAAAAABhxdWVyaWVzL3ExL3ExLnF1ZXJ5Lmpzb24BAAAAAAAAACF7Im5vdGVzX2Zvcm1hdCI6IiIsInR5cGUiOiJTUUwifQoAAAAAAAAABHRleHQBAAAAAAAAAANzcWwAAAAAAAAACHNlbGVjdCAxAAAAAAAAAAVub3RlcwA=`;
+- its SHA-256 is `2c259607f17b5314a854a02fdbc6f4c4b69b9cb388839927caa5f671541a2846`.
+
+Today `dalgo2ingitdb/protected.go` (`revision`, `:482-494`) hashes the record file bytes only, so an edit to a body alone would not change the revision. It MUST switch to this input. `datatug-core` already hashes both files (`query_revision.go`).
 
 ### Isolation
 
 #### REQ: body-files-isolated-from-listing
 
 Listing, globbing and counting records MUST NOT return a body file as a record, or as part of a record key. This applies in `datavalidator` (`singleRecordGlobPattern`, record counts), the materializer, the foreign-key index, `dalgo2ingitdb` (`query.go` `readAllSingleStored`) and `dalgo2ingitdb4github` (`query.go` `scanSingleRecords`).
+
+Consider a template whose basename contains no `{key}`, such as `{key}/record.json`. Both matchers pin that basename to its literal text: the glob `*/record.json`, and the GitHub regex `^(.*?)/record\.json$`. A body basename is `<key>.<s>.<f>.<t>` with a non-empty key, so it has at least four dot-separated segments. It can therefore equal the literal only when the literal also has at least four segments and ends in `.<s>.<f>.<t>`. `record.json` has two segments and can never match. The one literal shape that could match is rejected at load time (REQ `suffix-disjointness-covers-body-files`).
 
 Record discovery keeps using only record templates. Isolation is guaranteed statically by REQ `body-files-definition-validated` rule 7 and REQ `suffix-disjointness-covers-body-files`, not by per-value refusal. `exclude_regex` continues to apply to record files only. It is not needed, and not consulted, to hide body files.
 
@@ -243,54 +287,80 @@ Separately, for correctness: every definition decode MUST be strict (`KnownField
 A schema alteration on a collection that declares `body_files` MUST leave a definition that passes REQ `body-files-definition-validated` and REQ `suffix-disjointness-covers-body-files`. Drivers MUST validate the whole altered definition before writing it. The rules for each operation:
 
 - `ApplyRenameField` of a `type_field` column MUST update every entry that references it, in the same definition write. No file is renamed, because body file names do not contain the type field's name.
-- `ApplyRenameField` of a body `field` column MUST be refused. The field name is part of every body file's name, so the rename would rename one file per record, a collection-wide multi-file change that this Feature does not specify.
+- `ApplyRenameField` of a body `field` column MUST be refused. **Provisional until Open Question 2 is decided.** The field name is part of every body file's name, so the rename would rename one file per record.
 - `ApplyModifyField` that would make a body `field` or `type_field` column non-`string` or computed MUST be refused before any write.
 - `ApplyDropField` of a column that any entry references MUST be refused.
-- Any alteration that changes `record_file.name` on a collection with `body_files` MUST be refused, because it would change the record suffix in every body file name.
+- Any alteration that changes `record_file.name` on a collection with `body_files` MUST be refused, because it would change every record and body file name. **Provisional until Open Question 2 is decided.**
 
 ### Cross-language contract
 
 #### REQ: conformance-vectors-are-the-contract
 
-The normative on-disk contract MUST be YAML, not Markdown (founder, 2026-09-17: *"Yaml can have comments for humans. Let's go with yaml."*). It has two parts, each owned once:
+The normative on-disk contract MUST be YAML, not Markdown (founder, 2026-09-17: *"Yaml can have comments for humans. Let's go with yaml."*). It lives in `conformance/record-layout/` in the standard repository `ingitdb/ingitdb` (tracked as ingitdb/ingitdb#9) and follows the `conformance/computed-columns/` pattern. The directory holds:
 
-- **Conformance vectors:** `conformance/record-layout/vectors.yaml` in the standard repository `ingitdb/ingitdb` (tracked as ingitdb/ingitdb#9). It follows the `conformance/computed-columns/` pattern. Its YAML comments are the human documentation. Additional Markdown MAY come later and is never normative.
-- **Definition shape:** `record_file.records_dir` and `record_file.body_files` in `ingitdb/ingitdb-schema`'s `ingitdb-collection.schema.json` (tracked as ingitdb/ingitdb-schema#9). Cross-field rules that JSON Schema cannot express are carried by the vectors.
+- `README.md`: **normative**, as in computed-columns. It defines the vector format, the error kinds and the profiles below.
+- `vectors.yaml`: behaviour vectors.
+- `validation_vectors.yaml`: definition and load rejections.
 
-Each vector MUST be a `definition` (the collection definition, plus any sibling collections needed for a disjointness case), then one operation, then one expectation. The operation is one of:
+Every vector carries a YAML comment that explains it for humans. The definition shape, `record_file.records_dir` and `record_file.body_files`, is also added to `ingitdb/ingitdb-schema`'s `ingitdb-collection.schema.json` (tracked as ingitdb/ingitdb-schema#9). Every vector's definition MUST validate against that schema, except definitions a validation vector expects to be rejected.
 
-- a load (the definition alone);
-- a `put`, with prior files, key and data;
-- a `delete`, with prior files and key;
-- a `read`, with files and key.
+**File format.** Both files have the top-level keys `version` (an integer, `1`) and `vectors` (a list). Each vector in `vectors.yaml` has the keys below. Exactly one `expect_*` key is present.
 
-The expectation is one of:
+| Key | Meaning |
+|-----|---------|
+| `name` | A unique kebab-case id. |
+| `definition` | The collection definition, exactly as in `.collection/definition.yaml`, for the collection `queries` at directory `queries`. |
+| `setup_files` | The files present before the operation (see "File entries"). |
+| `op` | `{kind, key?, data?, action?}`, where `kind` is one of `put`, `delete`, `read`, `list`, `validate`, `plan` or `revision`, and `action` (`put` or `delete`) applies to `plan`. |
+| `expect_files` | For `put` and `delete`: the complete set of files after the operation. |
+| `expect_record` | For `read`: the exact field map returned. |
+| `expect_list` | For `list`: the sorted record keys. |
+| `expect_findings` | For `validate`: a list of `{kind, path}`. |
+| `expect_plan` | For `plan`: the ordered operations, each `{kind: write\|remove, path, content?, prior}`, where `prior` is `absent` or `sha256:<hex>`. |
+| `expect_revision` | For `revision`: `{input: base64:<...>, sha256: <hex>}`. |
+| `expect_error` | An error kind. Kinds are compared, never message text. |
 
-- `expect_files`: the exact set of paths and bytes after the operation;
-- `expect_record`: the field map a read returns;
-- `expect_error`: an error kind, such as `definition-invalid`, `suffix-overlap`, `missing-body`, `body-without-type`, `unnameable-type`, `invalid-utf8` or `field-in-record-file`.
+`validation_vectors.yaml` vectors have `name`, `collections` (a map from collection id to `{dir, definition}`, so disjointness cases can declare several collections) and `expect_error`, plus `target` (the offending collection id), mirroring computed-columns' `target`.
 
-The vectors MUST cover at least:
+**File entries.** Each entry is `{path, content?, mode?}`:
 
-- `records_dir: '.'` with a `{key}/{key}.query.json` name, placing records at `<collection>/<key>/<key>.query.json` with no `$records` segment;
-- body naming `<key>.<suffix>.<field>.<type>` with the lowercased type, and exact raw bytes (a trailing newline kept, one absent, a non-ASCII character intact);
+- `path` is slash-separated and relative to the database root.
+- `content` is a string. By default it is UTF-8 text, and its bytes are exactly the YAML string value. No implementation adds or strips a trailing newline, so authors use the `|` block scalar for exactly one final newline and `|-` for none. A value that starts with `base64:` is decoded from standard base64 into arbitrary bytes; the invalid-UTF-8 case uses this. Text that itself begins with `base64:` MUST be written in base64.
+- `mode` is a Git tree mode string: `100644` (the default), `100755`, `120000` (a symlink, where `content` is the target) or `160000` (a submodule, with no `content`). Git-tree runners use the mode as is. Filesystem runners create `120000` as a symlink and `160000` as an empty directory.
+
+**Error kinds** (the README defines the complete table):
+- behaviour: `missing-body`, `body-without-type`, `unnameable-type`, `invalid-utf8`, `non-regular-body`, `field-in-record-file`, `body-not-string`;
+- validation: `body-files-record-type`, `body-files-markdown`, `body-files-record-name`, `body-files-entry`, `body-field-name`, `body-field-column`, `body-field-equals-suffix`, `suffix-overlap`.
+
+**Profiles.**
+- The **writer** profile is the `put`, `delete`, `plan` and `revision` vectors.
+- The **reader** profile is the `read`, `list` and `validate` vectors, plus every validation vector.
+
+Implementations run profiles as follows:
+- `ingitdb-go` runs both profiles: `plan` and `revision` against its exported functions, and reads through its validator and readers.
+- `dalgo2ingitdb` runs both profiles.
+- `dalgo2ingitdb4github` runs both profiles against an in-memory Git tree.
+- The `ingitdb-ts` clients run the **reader profile only**.
+
+**Required coverage.** The vectors MUST cover at least:
+
+- `records_dir: '.'` with a `{key}/{key}.query.json` name, placing records at `queries/<key>/<key>.query.json` with no `$records` segment;
+- body naming `<key>.<suffix>.<field>.<type>` with the lowercased type, and exact raw bytes: a trailing newline kept, one absent, a non-ASCII character intact;
 - several bodies per record (`.query.text.dtql` and `.query.notes.md`);
-- a JSON-typed body, `x.query.text.json`, that is not listed as a record;
-- a put that splits bodies out of the record file, and a put that changes type and removes the stale body;
-- a delete that removes the record and every body;
-- the untyped entry, the typed entry with a missing body and the unnameable type (REQ `body-presence-follows-type`);
-- every definition rejection in REQ `body-files-definition-validated`, and the suffix-disjointness rejections in REQ `suffix-disjointness-covers-body-files`.
+- a JSON-typed body, `x.query.text.json`, absent from `expect_list`;
+- a `put` that splits bodies out of the record file, a type change that removes the stale body, and the matching `expect_plan` order and `prior` hashes;
+- a `delete` that removes the record and every body;
+- the untyped entry, the typed entry with a missing body, and the unnameable type (REQ `body-presence-follows-type`);
+- an invalid-UTF-8 body (`base64:`), and body paths of mode `120000` and `160000`;
+- orphan and stale body findings (`validate`);
+- `revision-input-layout`, pinning REQ `record-revision-covers-bodies`;
+- every rejection in REQ `body-files-definition-validated`, and the `suffix-overlap` rejections in REQ `suffix-disjointness-covers-body-files`, including the bare-template ancestor and the literal-basename case.
 
-Each implementation (`dalgo2ingitdb`, `dalgo2ingitdb4github`, the `ingitdb-go` validator and readers, `ingitdb-ts`) MUST do two things:
-
-- vendor the file under a header naming the source and saying "re-sync from the standard, do not edit", as `dalgo2ingitdb/testdata/conformance_vectors.yaml` does;
-- run every vector in CI, with a check that fails when the vendored copy differs from the standard's.
-
-`FORMAT.md` is retired as a contract. The `dalgo2ingitdb` and `ingitdb-ts` `format-fixtures` trees MAY be generated from the vectors, or dropped.
+**Vendoring.** Each implementation MUST vendor both YAML files under a header that names the source and says "re-sync from the standard, do not edit", as `dalgo2ingitdb/testdata/conformance_vectors.yaml` does. Each MUST run its profiles in CI, with a check that fails when a vendored copy differs from the standard's. `FORMAT.md` is retired as a contract. The `format-fixtures` trees in `dalgo2ingitdb` and `ingitdb-ts` MAY be generated from the vectors, or dropped.
 
 #### REQ: ts-layout-prerequisite-recorded
 
-Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore `records_dir` and nested name templates (`client-fs/src/client.ts:248-260`, `client-github/src/collection/collection.ts:237`), so they cannot pass the `records_dir: '.'` vectors. That support is tracked as ingitdb/ingitdb-ts#104. The `ingitdb-ts` half of AC `every-implementation-runs-vendored-vectors` MUST NOT be recorded as passing before #104 and the `ingitdb-ts` body-file reader both land.
+Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore `records_dir` and nested name templates (`client-fs/src/client.ts:248-260`, `client-github/src/collection/collection.ts:237`), so they cannot pass the reader-profile `records_dir: '.'` vectors. That support is tracked as ingitdb/ingitdb-ts#104. The `ingitdb-ts` reader-profile run in AC `every-implementation-runs-vendored-vectors` MUST NOT be recorded as passing before #104 and the `ingitdb-ts` body-file reader both land.
 
 ## Acceptance Criteria
 
@@ -509,15 +579,39 @@ Exactly one `text` body file remains after the plan is applied.
 
 **Requirements:** record-body-file#req:conformance-vectors-are-the-contract, record-body-file#req:implementations-current-and-strict, record-body-file#req:ts-layout-prerequisite-recorded
 
-**Given** `conformance/record-layout/vectors.yaml` in `ingitdb/ingitdb`, covering every case listed in REQ `conformance-vectors-are-the-contract`, and the `record_file` fields in `ingitdb-collection.schema.json`
+**Given** `conformance/record-layout/` in `ingitdb/ingitdb` with a normative `README.md`, `vectors.yaml` and `validation_vectors.yaml` in the format of REQ `conformance-vectors-are-the-contract`, covering every required case, and the `record_file` fields in `ingitdb-collection.schema.json`
 **When** CI runs in `ingitdb-go`, `dalgo2ingitdb`, `dalgo2ingitdb4github` and `ingitdb-ts`
 **Then** in each repository:
-- a vendored copy with the re-sync header is present;
+- both vendored files carry the re-sync header;
 - the re-sync check passes;
-- every vector passes;
-- every vector's `definition` validates against the JSON Schema.
+- the repository's profiles pass: both profiles for the three Go implementations, and the reader profile only for `ingitdb-ts`;
+- every accepted definition validates against the JSON Schema.
 
 The `ingitdb-ts` run is gated on ingitdb/ingitdb-ts#104.
+
+### AC: revision-input-layout-pinned
+
+**Requirements:** record-body-file#req:record-revision-covers-bodies
+
+**Given** the `revision-input-layout` vector: record `queries/q1/q1.query.json` with bytes `{"notes_format":"","type":"SQL"}\n`, `text` body `select 1` of type `SQL`, and untyped `notes`
+**When** the exported revision-input function builds the input
+**Then** the input is 155 bytes, equal to the vector's base64, and its SHA-256 is `2c259607f17b5314a854a02fdbc6f4c4b69b9cb388839927caa5f671541a2846`
+
+### AC: recovery-hook-holds-transaction-lock
+
+**Requirements:** record-body-file#req:pending-changes-recovered-before-read
+
+**Given** a writer that holds the driver's transaction lock with a live two-operation journal, paused after its first operation
+**When** a reader with the driver's recovery hook starts reading the collection
+**Then** the hook waits for the lock and does not touch the journal or either file while the writer holds it; once the writer completes and releases the lock, the reader sees the complete new state
+
+### AC: every-caller-configures-recovery
+
+**Requirements:** record-body-file#req:every-body-files-reader-configures-recovery
+
+**Given** a working-tree database whose `queries` collection declares `body_files`
+**When** each of these is run against it: `ingitdb validate`, `ingitdb diff`, `ingitdb pull`, `ingitdb ci`, `ingitdb materialize`, `ingitdb docs update`, a conflict resolution, `ingitdb-action` on a pinned `cli-version`, and `synchestra`'s embedded commands
+**Then** each invokes `dalgo2ingitdb`'s recovery hook before reading `queries`, and none fails with the recovery-unavailable error
 
 ### AC: schema-alteration-keeps-body-files-consistent
 
@@ -531,7 +625,15 @@ The `ingitdb-ts` run is gated on ingitdb/ingitdb-ts#104.
 - `text` is dropped;
 - `record_file.name` is changed to `{key}/{key}.q.json`
 
-**Then** the rename of `type` rewrites the entry's `type_field` to `kind` and leaves every file in place. Every other alteration is refused, and `definition.yaml` and every file stay unchanged.
+**Then** the rename of `type` rewrites the entry's `type_field` to `kind` and leaves every file in place. The modify and the drop are refused. The rename of `text` and the `record_file.name` change are also refused, provisionally, until Open Question 2 is decided. Every refusal leaves `definition.yaml` and every file unchanged.
+
+### AC: literal-basename-template-cannot-match-body
+
+**Requirements:** record-body-file#req:body-files-isolated-from-listing, record-body-file#req:suffix-disjointness-covers-body-files
+
+**Given** a collection with record name `{key}/record.json` whose records base directory is the reference `queries` directory, and a second database where that literal is `a.query.text.json` instead
+**When** each definition is loaded and, for the first, `queries` holds `x/x.query.text.json` and `x/x.query.json`
+**Then** the first loads, and its listing never returns `x.query.text.json`; the second fails with `suffix-overlap`
 
 ### AC: listing-never-returns-body-files
 
@@ -562,7 +664,6 @@ The `ingitdb-ts` run is gated on ingitdb/ingitdb-ts#104.
 - **Designing the multi-file journal and its recovery.** ingitdb/dalgo2ingitdb#15 owns crash-safe multi-file changes. This Feature fixes only what #15 consumes: the ordered, complete write plan with expected prior states, the recovery hook every reader calls, and the refusal of multi-operation plans until #15 lands.
 - **A configurable body file name.** The founder decided on 2026-09-17 on the fixed `<key>.<record-suffix>.<field>.<body-type>` name. It is what makes the disjointness rule a static check.
 - **Renaming DataTug's existing `.query.<type>` sidecars to `.query.text.<type>`.** That belongs to DataTug's hard cut-over (`datatug/datatug` Feature `dalgo-project-store`).
-- **Renaming a body field.** That renames one file per record. It needs a collection-wide multi-file change, so the rename is refused for now.
 - **Multi-segment record suffixes, such as `{key}.a.b.json`, in body-bearing collections.** DataTug uses single-segment suffixes, and one segment keeps name parsing unambiguous.
 - **Writing the vectors or the schema change here.** They are owned by `ingitdb/ingitdb` (#9) and `ingitdb/ingitdb-schema` (#9). This Feature states what they must cover.
 - **Implementing the TypeScript reader or its layout support.** Parity is proven by the shared vectors. The `ingitdb-ts` work is ingitdb/ingitdb-ts#104 plus its own body-file change.
@@ -579,7 +680,7 @@ No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configur
 
 ## Dependent Modules
 
-- **`ingitdb/ingitdb`** owns `conformance/record-layout/vectors.yaml` (#9).
+- **`ingitdb/ingitdb`** owns `conformance/record-layout/` (`README.md`, `vectors.yaml`, `validation_vectors.yaml`), tracked as #9.
 - **`ingitdb/ingitdb-schema`** adds `records_dir` and `body_files` to `ingitdb-collection.schema.json` (#9).
 - **`ingitdb/dalgo2ingitdb`** vendors and runs the vectors, and retires `FORMAT.md` as a contract. It:
   - applies the write plan, refusing multi-operation plans until #15;
@@ -597,7 +698,9 @@ No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configur
   - moves to the latest `ingitdb-go/ingitdb`.
 - **`ingitdb/ingitdb-ts`** needs ingitdb/ingitdb-ts#104 (`records_dir` and nested templates). It then reads body files in `client-fs` and `client-github`, and vendors and runs the vectors.
 - **`ingitdb-go`** itself vendors and runs the vectors against its validator, readers and write plan.
-- **`ingitdb/ingitdb-cli`** writes records through `dalgo2ingitdb`, so it inherits body-file handling. It configures `dalgo2ingitdb`'s recovery hook for validate and materialize. Any direct file write it keeps must use the write plan.
+- **`ingitdb/ingitdb-cli`** writes records through `dalgo2ingitdb`, so it inherits body-file handling. It configures `dalgo2ingitdb`'s recovery hook at every record-reading entry point listed in REQ `every-body-files-reader-configures-recovery`. Any direct file write it keeps must use the write plan.
+- **`ingitdb/ingitdb-action`** pins an `ingitdb-cli` release that configures the hook.
+- **`synchestra-io/synchestra`** configures the hook where it embeds `ingitdb-cli` commands and `materializer`.
 - **`datatug/datatug-core`**:
   - declares `body_files: [{field: text, type_field: type}]` on its queries collection (`dalgo-project-store`);
   - renames its sidecars to `.query.text.<type>` under its hard cut-over.
@@ -614,6 +717,12 @@ No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configur
    - Recovery before read (REQ `pending-changes-recovered-before-read`) ensures a torn write is never mistaken for corruption.
 
    Under B, a record that has lost its body is indistinguishable from one that never had a body. REQ `body-presence-follows-type` is written as A, provisionally.
+
+2. **Renaming a body field, or changing `record_file.name`, on a collection with body files.** Choose one:
+   - (A) Refuse the alteration. This is the current, provisional text of REQ `schema-alteration-keeps-body-files-consistent`.
+   - (B) Support it as a schema operation. The operation renames every affected record and body file across the collection, together with the definition, in one crash-safe transaction. That needs ingitdb/dalgo2ingitdb#15's multi-file journal, extended to collection scope.
+
+   **Recommendation: B.** It matches the founder's stance of fixing at source during the private beta, rather than leaving a permanent refusal that pushes authors into manual file moves. B's cost is that it depends on #15 and needs a vector that pins the rename plan. Until this is decided, the refusal stays, marked provisional.
 
 Resolved on 2026-09-17 by founder decision:
 - body file names are fixed, `<key>.<record-suffix>.<field>.<body-type>`;
