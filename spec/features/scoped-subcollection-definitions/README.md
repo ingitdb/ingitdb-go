@@ -35,7 +35,7 @@ This has three consequences:
 - The placeholder name is persisted exactly once for each parent definition, as the name of its single `{name}` directory. A different name is a conflict.
 - A concrete-id scope and the placeholder scope of the same parent may not both define a collection with the same name, so every data path resolves to at most one definition.
 
-Every implementation turns a record id into a directory or file name segment with one exported function, `ingitdb.RecordDirName`, aligned with `record.EscapeID`, and concrete scope directories use the same function. Reading is strict: every entry in the tree is either a known shape or a load error. `CollectionDef.SubCollections` changes from a name-keyed map to a list of scopes. One exported resolver replaces the per-driver `resolveScopedCollection` walks. Where a subcollection's data directory sits relative to its parent collection's `records_dir` is an open founder decision (Open Question `subcollection-data-directory-rule`); the REQs and ACs that depend on it are written for the recommended option A and marked provisional. A scoping parent record such as `ext/datatug` need not exist, and nothing creates it. The contract is YAML conformance vectors in `ingitdb/ingitdb` plus the JSON Schema in `ingitdb/ingitdb-schema`.
+Every implementation turns a record id into a directory or file name segment with one exported function, `ingitdb.RecordDirName`, aligned with `record.EscapeID`, and concrete scope directories use the same function. Reading is strict: every entry in the tree is either a known shape or a load error. `CollectionDef.SubCollections` changes from a name-keyed map to a list of scopes. One exported resolver replaces the per-driver `resolveScopedCollection` walks. A subcollection's data directory is `<parent instance data dir>/<parent id dir>/<name>`, independent of the parent collection's `records_dir` (founder decision "A", 2026-09-17). A scoping parent record such as `ext/datatug` need not exist, and nothing creates it. The contract is YAML conformance vectors in `ingitdb/ingitdb` plus the JSON Schema in `ingitdb/ingitdb-schema`.
 
 This Feature is the inGitDB side of dal-go/dalgo Feature `schema-subcollections-extensions` (REQ `ingitdb-format-dependency`), and it unblocks ingitdb/dalgo2ingitdb#16. The project is in private beta, so the old name-keyed layout is replaced, not kept alongside (founder, 2026-09-17: "Fix at source, no temporary solutions"; "We are still in private beta, don't worry about what already exists").
 
@@ -354,7 +354,7 @@ func (d *Definition) ResolveCollection(parents []DataStep, name string) (*Collec
 
 Resolution MUST, level by level, look `name` (or the next ancestor collection) up in the scope whose `ID` equals the parent record id byte for byte, and then in the placeholder scope. By REQ `scopes-must-not-overlap` at most one of them defines it, so the order does not change the result. It only avoids a second lookup in the common case. If neither scope defines it, resolution MUST return `ErrCollectionNotFound`, naming the data path. It MUST NOT fall back to a same-named definition in another concrete scope. So `ext/other/projects/p1` is not found when only `ext/datatug/projects` is defined.
 
-**Provisional on Open Question `subcollection-data-directory-rule`, option A.** The data directory of an instance MUST be:
+Founder decision "A", 2026-09-17: the data directory of an instance MUST be:
 
 ```
 <parent instance data dir>/<RecordDirName(parent record id)>/<name>
@@ -370,13 +370,11 @@ where a root collection's instance data dir is its `DirPath`. The parent collect
 
 Vectors and runners express every `data_dir` and finding `path` relative to the database root, with `/` separators.
 
-Under option B, the formula would instead insert `<parent RecordFile.RecordsBasePath()>` after the parent instance data dir (today's `datavalidator.subCollectionDataDir`), and `ext` would have to declare `records_dir: '.'`.
+The rejected alternative (option B) inserted `<parent RecordFile.RecordsBasePath()>` after the parent instance data dir, as today's `datavalidator.subCollectionDataDir` does. It would let whichever extension created `ext` first fix the data layout of every extension, and would move all descendant data whenever `ext`'s `records_dir` changed. `datavalidator.subCollectionDataDir` MUST move to `ResolveCollection`.
 
 `dalgo2ingitdb`, `dalgo2ingitdb4github`, `dalgo2ingitdb4local` and `ingitdb-cli` (`subcollection_path.go` `resolveFromCollection`) MUST call `ResolveCollection` instead of walking `SubCollections` themselves. This retires their `resolveScopedCollection` copies and removes the data-directory and escaping disagreements described in Problem.
 
 #### REQ: validation-walks-scopes
-
-**Provisional on Open Question `subcollection-data-directory-rule`, option A** (for the data directories it walks).
 
 Whole-database validation (Feature `subcollection-record-validation`) MUST enumerate subcollection instances per scope, for each instance of the parent collection:
 
@@ -464,7 +462,7 @@ Implementations run them as follows:
 - `ext/datatug/projects` and `ext/sneat/projects` with different columns and `record_file`, each resolving to its own definition, and `ext/other/projects/p1` resolving to `collection-not-found`;
 - a placeholder scope `{extID}/settings` beside the concrete scope `datatug/projects`, loading cleanly and resolving `ext/datatug/settings` to the placeholder definition;
 - a scoping parent with no record: `resolve` of `ext/datatug/projects/p1/queries` giving `ext/datatug/projects/p1/queries`, with `setup_files` holding no `ext` record, and a `validate` whose findings are empty;
-- the data directory for a parent without `records_dir` (`orders/o1/order_details`, provisional on option A) and for a parent with `records_dir: '.'`;
+- the data directory for a parent without `records_dir` (`orders/o1/order_details`) and for a parent with `records_dir: '.'`;
 - `record-dir-name` for `a/b` (`a%2Fb`), `a\b` (`a%5Cb`), `v1.2` (`v1%2E2`), `50%`, `CON`, `con`, `a:b` and `a ` (the last five `invalid-record-id`), and a `resolve` and a `plan-create` using the id `v1.2`, whose data directory and scope directory are both `v1%2E2`;
 - a `list` of `ext/datatug/projects` whose tree also holds `p1/queries/q1/q1.query.json`, another extension's `ext/sneat/projects/s1/s1.yaml` and `.collection/definition.yaml`, returning only the project keys, and a GitHub-tree runner applying the same vector;
 - a `validate` finding whose `collection_id` is a scoped schema path;
@@ -489,7 +487,7 @@ In line with `record-body-file` REQ `implementations-current-and-strict`, there 
 Known dependents (2026-09-17, checkouts on host `ai`):
 
 - **Databases and fixtures:**
-  - `demo-ingitdb/modules/commerce/collections/orders/.collection/subcollections/order_details/` moves to `subcollections/{orderID}/order_details/`. Provisional on option A, its data moves from `orders/$records/<id>/order_details/` to `orders/<id>/order_details/`;
+  - `demo-ingitdb/modules/commerce/collections/orders/.collection/subcollections/order_details/` moves to `subcollections/{orderID}/order_details/`. Its data moves from `orders/$records/<id>/order_details/` to `orders/<id>/order_details/`;
   - the `spaces/.collection/subcollections/` format fixtures in `dalgo2ingitdb/testdata/format-fixtures`, `ingitdb-ts/packages/client-fs/src/__fixtures__/format-fixtures` and `ingitdb-ts/packages/client-github/src/__fixtures__/format-fixtures`;
   - any record whose key contains a character `RecordDirName` escapes (for example `.`) is renamed to the escaped name.
 - **Writers of the shared layout:** `sneat-co/ovdb` `backend/onboarding4ovdb/profile.go:46` writes `sneat/.collections/spaces`, and `openvaultdb/openvaultdb` Feature `sneat-space-export` specifies that layout. Both MUST follow REQ `shared-layout-uses-same-tree` and REQ `record-dir-names`. `$`-prefixed directories, which the shared-layout reader skipped, are now `unexpected-schema-entry` except `$views/`.
@@ -543,8 +541,6 @@ Known dependents (2026-09-17, checkouts on host `ai`):
 
 **Requirements:** scoped-subcollection-definitions#req:scoping-parent-not-required, scoped-subcollection-definitions#req:data-resolution, scoped-subcollection-definitions#req:validation-walks-scopes
 
-Provisional on Open Question `subcollection-data-directory-rule`, option A.
-
 **Given** the database of AC `datatug-tree-loads` with no `ext` records at all, and the project record file `ext/datatug/projects/p1/p1.datatug-project.json` plus a query record `ext/datatug/projects/p1/queries/q1/q1.query.json`
 **When** `ResolveCollection([{ext, datatug}, {projects, p1}], "queries")` is called, whole-database validation runs, and `PlanCreateCollection("ext/datatug/projects/{projectID}/boards")` is called
 **Then** resolution returns a `DirPath` whose root-relative form is `ext/datatug/projects/p1/queries` and `SchemaPath` `ext/datatug/projects/{projectID}/queries`; validation checks `p1` and `q1` against their definitions and reports no finding about a missing `datatug` record; the plan returns `ext/.collection/subcollections/datatug/projects/subcollections/{projectID}/boards/definition.yaml`; and after all three calls the set of files in the database is unchanged, in particular no `ext/datatug.*`, `ext/datatug/datatug.*` or `ext/$records/**` file exists
@@ -552,8 +548,6 @@ Provisional on Open Question `subcollection-data-directory-rule`, option A.
 ### AC: data-dir-independent-of-parent-records-dir
 
 **Requirements:** scoped-subcollection-definitions#req:data-resolution, scoped-subcollection-definitions#req:record-dir-names
-
-Provisional on Open Question `subcollection-data-directory-rule`, option A.
 
 **Given** a root collection `orders` at `orders` whose `record_file` is `{key}.yaml` with no `records_dir`, and `orders/.collection/subcollections/{orderID}/order_details/definition.yaml`
 **When** `ResolveCollection` is called for parent `{orders, o1}`, `{orders, "a/b"}`, `{orders, "v1.2"}` and `{orders, "CON"}` with name `order_details` in `ingitdb-go`, and the same keys are read through `dalgo2ingitdb`, `dalgo2ingitdb4github` and `dalgo2ingitdb4local`
@@ -610,8 +604,6 @@ Provisional on Open Question `subcollection-data-directory-rule`, option A.
 ### AC: findings-use-schema-paths
 
 **Requirements:** scoped-subcollection-definitions#req:validation-walks-scopes, scoped-subcollection-definitions#req:validation-finding-kinds
-
-Provisional on Open Question `subcollection-data-directory-rule`, option A.
 
 **Given** `demo-ingitdb` moved to the new tree, with one `order_details` record given a wrong-typed value, and a scoped `ext/datatug/projects` definition declaring `min_records_count: 1` with no project records
 **When** whole-database validation runs
@@ -689,22 +681,17 @@ No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configur
 - **`ingitdb/ingitdb-ws`** updates `app/composables/useCollection.ts`.
 - **`ingitdb/ingitdb-specs`** rewrites `docs/schema/subcollection.md`.
 - **`sneat-co/ovdb`** (`onboarding4ovdb/profile.go`) and **`openvaultdb/openvaultdb`** (Feature `sneat-space-export`) follow the shared-layout tree and naming rules.
-- **`datatug/datatug`** (`dalgo-project-store`) creates the DataTug tree through DALgo DDL. Under option A its `ext` root collection needs no `records_dir`; under option B it must declare `records_dir: '.'`, and dal-go/dalgo AC `dalgo2ingitdb-creates-datatug-queries` must create `ext` with that extension.
+- **`datatug/datatug`** (`dalgo-project-store`) creates the DataTug tree through DALgo DDL. Its `ext` root collection needs no `records_dir` (founder decision "A", 2026-09-17), so dal-go/dalgo AC `dalgo2ingitdb-creates-datatug-queries` creating `ext` with no extension is correct.
 
 ## Open Questions
 
-### Q: subcollection-data-directory-rule
+None at this time.
 
-Where does a subcollection instance's data live relative to its parent collection's `record_file.records_dir`?
+Resolved on 2026-09-17 by founder decision:
 
-Today the two rules disagree (see Problem). With the validator's rule, the root `ext` collection's record file decides where every extension's data lives: dal-go/dalgo AC `dalgo2ingitdb-creates-datatug-queries` creates `ext` with no extension, so `dalgo2ingitdb` writes the default `{key}.yaml` and all DataTug data would sit under `ext/$records/datatug/…`. Whichever extension creates `ext` first fixes the layout for all others, and a later `records_dir` change on `ext` moves all descendant data.
+- **Subcollection data-directory rule:** "A". A subcollection instance's data directory is `<parent instance data dir>/<RecordDirName(parent id)>/<name>`, independent of the parent collection's `records_dir` (REQ `data-resolution`, REQ `validation-walks-scopes`, AC `scoping-parent-need-not-exist`, AC `data-dir-independent-of-parent-records-dir`, AC `findings-use-schema-paths`). Option B, the validator's current rule that inserts the parent's records base directory, was rejected.
 
-- **A (recommended):** `dalgo2ingitdb`'s rule. The data directory is `<parent instance data dir>/<RecordDirName(parent id)>/<name>`, independent of the parent's `records_dir`. DataTug's layout is unchanged, `ext` needs no extension, and no extension can move another's data. The cost is that `demo-ingitdb`'s `order_details` data moves out of `orders/$records/`.
-- **B:** the validator's rule, `<parent instance data dir>/<parent RecordsBasePath()>/<RecordDirName(parent id)>/<name>`. `ext` must then declare `records_dir: '.'`, and dal-go/dalgo AC `dalgo2ingitdb-creates-datatug-queries` and `datatug/datatug` `dalgo-project-store` are bound to that.
-
-REQ `data-resolution`, REQ `validation-walks-scopes` and ACs `scoping-parent-need-not-exist`, `data-dir-independent-of-parent-records-dir` and `findings-use-schema-paths` are written for A and are provisional until this is decided.
-
-Decisions this Feature relies on, already made by the founder on 2026-09-17:
+Earlier decisions this Feature relies on, made by the founder on 2026-09-17:
 
 - placeholder-name enforcement is mandatory, with no optional path (dal-go/dalgo `schema-subcollections-extensions`, decision "A");
 - private beta, so there are no compatibility constraints, and fixes are made at source;
