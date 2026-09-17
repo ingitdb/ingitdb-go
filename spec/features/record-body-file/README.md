@@ -174,23 +174,29 @@ A missing referenced file can be judged corrupt only when no multi-file change i
 
 #### REQ: stored-reference-access-guard
 
-A stored `$file` value is record content, and so it is untrusted. Before **any** file operation that follows a stored reference, an implementation MUST check that the reference is **safe**. The operations covered are: a read, computing the write plan (reading prior bytes, removing a stale body), a delete, a repair (REQ `drifted-record-repair`), validation, and #15's recovery (every body path a journal names).
+A stored `$file` value is record content, and so it is untrusted. Before **any** file operation that follows a stored reference, an implementation MUST classify the reference. The operations covered are: a read, computing the write plan (reading prior bytes, removing a stale body), a delete, a repair (REQ `drifted-record-repair`), validation, and #15's recovery (every body path a journal names).
 
-A reference is safe when it is a plain basename matching:
+A reference is **safe** when it is a plain basename, resolved in the record's own directory, that matches:
 
 ```
-^<key>\.<record-suffix>\.<field>\.[a-z0-9_-]{1,32}$
+^<key>\.[a-z0-9_-]+\.[a-z0-9_-]{1,64}\.[a-z0-9_-]{1,32}$
 ```
 
-Here `<key>`, `<record-suffix>` and `<field>` are this record's key, its collection's suffix and this entry's field, each matched literally. Such a name always resolves inside the record's own directory.
+Here `<key>` is this record's key, matched literally. The pattern then allows any single-segment suffix, any single-segment field and any extension. This is deliberately wider than the current definition, so references left behind by a permitted definition change stay reachable. Examples are a body field renamed from `notes` to `memo`, a record suffix change, or a `format` change. A safe name has no separator and no `..` segment, so it always resolves inside the record's directory.
 
-For an unsafe reference, such as `../../x`, `a/b`, another record's key, another field, or an extension with a dot or uppercase letter, the implementation MUST NOT open, stat, read, write or remove the named path:
+A reference is **current** when it is safe and equals the name that REQ `body-file-naming` derives from the definition and the record now.
 
-- **Read:** the read fails with `unsafe-body-reference`.
-- **Write plan, delete or repair:** the plan proceeds without any operation on that path, and lists the reference under `skipped`, as `{field, reference, kind: unsafe-body-reference}`. The driver surfaces `skipped` entries to its caller.
-- **Validation:** `unsafe-body-reference` is reported as a finding on the record.
+Rules:
 
-A safe reference that differs from the currently derived name is **drift** (REQ `name-drift-is-a-validation-finding`). Plans, deletes and repairs follow it, because it is inside the directory. Reads refuse it with `body-reference-mismatch`.
+- **Read:** requires current. A safe reference that is not current fails with `body-reference-mismatch`, and no file is opened.
+- **Plans, deletes, repair, validation and recovery:** they MAY follow any safe reference, current or not.
+- **File-type check:** before following a safe reference, the implementation MUST check the file's type with `lstat` (or the Git tree entry's mode), never with a call that follows symlinks. Only a regular file (`100644` or `100755` in a Git tree) is followed. Anything else is `non-regular-body` and is never opened.
+- **Unsafe references:** such as `../../x`, `a/b`, another record's key, or an extension with a dot or uppercase letter. The implementation MUST NOT open, stat, read, write or remove the named path:
+  - **Read:** the read fails with `unsafe-body-reference`.
+  - **Write plan, delete or repair:** the plan proceeds without any operation on that path, and lists the reference under `skipped`, as `{field, reference, kind: unsafe-body-reference}`. The driver surfaces `skipped` entries to its caller.
+  - **Validation:** `unsafe-body-reference` is reported as a finding on the record.
+
+A safe reference that is not current is **drift** (REQ `name-drift-is-a-validation-finding`).
 
 ### Reading
 
@@ -204,9 +210,9 @@ A read MUST fail, with an error of the given kind naming the record key, the fie
 - `invalid-body-reference`: the record file holds any other non-null, non-reference value for a body field, or a reference with extra or `$`-prefixed keys, or a non-string `$file`;
 - `unsafe-body-reference`: the reference fails REQ `stored-reference-access-guard`. No file is opened;
 - `format-unresolved`: a reference is present and the entry's extension is unresolved. No file is opened;
-- `body-reference-mismatch`: the reference is safe but differs from the derived name. No file is opened;
+- `body-reference-mismatch`: the reference is safe but not current. No file is opened;
 - `missing-body`: the referenced file does not exist;
-- `non-regular-body`: the referenced path is not a regular file. On a filesystem that means a directory or a symlink. In a Git tree it means an entry whose mode is not `100644` or `100755`, for example `120000` (a symlink) or `160000` (a submodule);
+- `non-regular-body`: the referenced path is not a regular file, as determined by `lstat` or the tree entry mode, without following symlinks. On a filesystem that means a directory or a symlink. In a Git tree it means an entry whose mode is not `100644` or `100755`, for example `120000` (a symlink) or `160000` (a submodule);
 - `invalid-utf8`: the referenced file is not valid UTF-8, since records are text-only per `ingitdb/ingitdb` Feature `storage-format`, REQ `text-only`.
 
 ### Writing and deleting
@@ -327,11 +333,12 @@ Record discovery keeps using only record templates. Isolation is guaranteed stat
 
 #### REQ: orphan-body-files-reported
 
-Whole-database validation MUST report a finding for each **orphan body file**: a file in a body-bearing collection's record directory named `<k>.<record-suffix>.<f>.<ext>`, where `f` is a declared body field, that no record references. Examples:
+Whole-database validation MUST report a finding for each **orphan body file**. An orphan is a file in a body-bearing collection's record directory that matches the safe pattern of REQ `stored-reference-access-guard` for some key `<k>`, is not itself a listed record file, and is not referenced by any listed record. The file's suffix and field need not be current. Examples:
 
 - there is no record file for key `<k>`;
 - the record's `f` is null or absent;
-- the record references a different name, such as a stale `.query.text.sql` beside a record that references `.query.text.dtql`.
+- the record references a different name, such as a stale `.query.text.sql` beside a record that references `.query.text.dtql`;
+- a body file whose record file is no longer listed after a `record_file.name` change (REQ `name-drift-is-a-validation-finding`).
 
 The finding names the collection and the file path. It is a finding, not a read error: readers never look at unreferenced files, so the record still reads.
 
@@ -350,6 +357,7 @@ Separately, for correctness: every definition decode MUST be strict (`KnownField
 A schema alteration on a collection that declares `body_files` MUST leave a definition that passes REQ `body-files-definition-validated` and REQ `suffix-disjointness-covers-body-files`. Drivers MUST validate the whole altered definition before writing it. The rules for each operation:
 
 - `ApplyRenameField` of a `format_field` column MUST update every entry that references it, in the same definition write. No file is renamed, because body file names use the field's value, not its name.
+- `ApplyRenameField` of a body `field` column MUST update that entry's `field` in the same definition write. As today (`schema_modifier.go` `rewriteRecordFiles`), it moves each record's value to the new key unchanged, so the stored `$file` reference keeps its old name and becomes drift, which repair fixes. No body file is renamed by the alteration itself.
 - `ApplyModifyField` that would make a body `field` or `format_field` column non-`string` or computed MUST be refused before any write.
 - `ApplyDropField` of a column that any entry references MUST be refused.
 - Alterations that change body file names are neither special-cased nor refused. They include renaming a body `field` column, changing `record_file.name`, changing an entry's `format`, and switching between `format` and `format_field`. REQ `name-drift-is-a-validation-finding` covers them.
@@ -360,16 +368,18 @@ A body file's name is always a pure function of the definition and the record's 
 
 - **Per-record format change.** A change to one record's format value, for example `textFormat` from `SQL` to `DTQL`, is an ordinary put (REQ `delete-and-format-change-leave-no-stale-body`).
 - **Definition change.** A definition change can leave existing records whose `$file` references or body files no longer match the naming rule. Ordinary whole-database validation catches this, with no special refusal or rename logic: each such reference is reported as a `body-reference-mismatch` finding (REQ `read-merges-referenced-bodies`), and each file left unreferenced as an orphan finding (REQ `orphan-body-files-reported`). A drifted record cannot be read (`body-reference-mismatch`), so a caller that does not already hold its body values fixes it with REQ `drifted-record-repair`.
+- **Record file moves are out of scope.** A `record_file.name` change also changes the record file's own name, for example `q1/q1.query.json` to `q1/q1.q.json`. This Feature takes the smaller option: repair never moves a record file. Existing record files that the new template no longer matches are not listed, so they are invisible to reads, repair and record-scoped validation. Whole-database validation MUST report each as an `unlisted-record-file` finding: a file under the records base directory that sits at the template's directory depth, ends in the template's file extension, does not match the template, is not safe-referenced by a listed record, and is not excluded by `exclude_regex`. Their body files are reported as orphans. Once the author moves a record file to its current name, for example with `git mv`, its body references with the old suffix are safe drift, and repair fixes them.
 
 #### REQ: drifted-record-repair
 
 This module MUST export a **repair plan** function for one record, and drivers MUST expose it as a repair operation. It is not a migration feature. It is the ordinary write plan with a different source for body values:
 
-- For each entry whose stored reference is safe but drifted, the new value is the bytes of the file behind the stored reference. The same checks apply: the file exists, is a regular file, and is valid UTF-8. Otherwise the repair of that record fails with that error kind.
+- For each entry whose stored reference is safe but not current, whatever differs (extension, field or suffix), the new value is the bytes of the file behind the stored reference. The same checks apply: the file exists, `lstat` shows a regular file, and it is valid UTF-8. Otherwise the repair of that record fails with that error kind.
 - Every other field keeps its stored value.
 - The plan is then computed exactly as for a put: write the body at the derived name, rewrite the reference, and remove the drifted file. Every file stays inside the record's directory, and the plan is applied under #15 like any put.
 - Unsafe references are skipped and reported, never followed.
 - A record with no drift yields an empty plan.
+- Repair works only on listed records, and never moves the record file itself (REQ `name-drift-is-a-validation-finding`).
 
 Validation MAY offer a fix mode that runs the repair for each record with a drift finding. Each record is its own change. There is no collection-wide transaction.
 
@@ -410,7 +420,7 @@ Every vector carries a YAML comment that explains it for humans. The definition 
 - `mode` is a Git tree mode string: `100644` (the default), `100755`, `120000` (a symlink, where `content` is the target) or `160000` (a submodule, with no `content`). Git-tree runners use the mode as is. Filesystem runners create `120000` as a symlink and `160000` as an empty directory.
 
 **Error kinds** (the README defines the complete table):
-- behaviour: `inline-body-value`, `invalid-body-reference`, `unsafe-body-reference`, `format-unresolved`, `body-reference-mismatch`, `missing-body`, `non-regular-body`, `invalid-utf8`, `body-not-string`;
+- behaviour and findings: `unlisted-record-file`, `inline-body-value`, `invalid-body-reference`, `unsafe-body-reference`, `format-unresolved`, `body-reference-mismatch`, `missing-body`, `non-regular-body`, `invalid-utf8`, `body-not-string`;
 - validation: `body-files-record-type`, `body-files-markdown`, `body-files-record-name`, `body-files-entry`, `body-field-name`, `body-format-value`, `body-field-column`, `body-format-field-column`, `body-field-equals-suffix`, `suffix-overlap`.
 
 **Profiles.**
@@ -437,7 +447,9 @@ Implementations run profiles as follows:
 - an unreferenced body file that no reader fetches, and the orphan findings (`validate`);
 - `revision-input-layout`, pinning REQ `record-revision-covers-bodies`;
 - the access guard: a `delete`, and a `put` that changes `textFormat`, each on a record whose stored `text` reference is `../../x`, with a sentinel file at that path. In both, the sentinel is untouched (`expect_files`), the plan lists the `skipped` reference, and `validate` beforehand reports `unsafe-body-reference`;
-- a `repair` of a drifted record (`notes` switched from `md` to `txt`) that renames the body inside the directory and leaves validation clean;
+- `repair` of three kinds of drift, each renaming the body inside the directory and leaving validation clean: an extension change (`notes` from `md` to `txt`), a body field rename (`notes` to `memo`, the stored reference still `q1.query.notes.md`), and a suffix change (template `{key}/{key}.q.json`, with the record file already at `q1/q1.q.json` and a reference still to `q1.query.text.sql`);
+- an `unlisted-record-file` finding for `q2/q2.query.json` after a suffix change, which repair does not touch;
+- a safe reference to a symlink, which `lstat` classifies as `non-regular-body` without following it;
 - every rejection in REQ `body-files-definition-validated`, and the `suffix-overlap` rejections in REQ `suffix-disjointness-covers-body-files`, including the bare-template ancestor and the literal-basename case.
 
 **Vendoring.** Each implementation MUST vendor both YAML files under a header that names the source and says "re-sync from the standard, do not edit", as `dalgo2ingitdb/testdata/conformance_vectors.yaml` does. Each MUST run its profiles in CI, with a check that fails when a vendored copy differs from the standard's. `FORMAT.md` is retired as a contract. The `format-fixtures` trees in `dalgo2ingitdb` and `ingitdb-ts` MAY be generated from the vectors, or dropped.
@@ -725,15 +737,29 @@ The `ingitdb-ts` run is gated on ingitdb/ingitdb-ts#104.
 
 ### AC: definition-change-drift-reported-by-validation
 
-**Requirements:** record-body-file#req:name-drift-is-a-validation-finding, record-body-file#req:drifted-record-repair
+**Requirements:** record-body-file#req:name-drift-is-a-validation-finding, record-body-file#req:drifted-record-repair, record-body-file#req:stored-reference-access-guard
 
-**Given** a populated reference collection. Record `q1` references `q1.query.notes.md`, which exists. The definition is then changed, through an ordinary alteration that is not refused, so that `notes` has `format: txt`.
-**When** the database is validated, `q1` is read, and then `q1` is repaired
+**Given** a populated reference collection, in three separate scenarios:
+- **(a) format change:** record `q1` references `q1.query.notes.md`, and `notes` is then changed to `format: txt`;
+- **(b) field rename:** `notes` is renamed to `memo` with `ApplyRenameField`, so `q1`'s `memo` holds `{"$file": "q1.query.notes.md"}`;
+- **(c) suffix change:** `record_file.name` is changed to `{key}/{key}.q.json`. The author has moved `q1/q1.query.json` to `q1/q1.q.json`, which still references `q1.query.text.sql`, but has not moved `q2/q2.query.json`.
+
+**When** the database is validated, `q1` is read, `q1` is repaired, and the database is validated again
 **Then** the outcomes are:
-- validation reports a `body-reference-mismatch` finding for `q1`'s `notes`, and no special refusal or rename step runs;
-- the read of `q1` fails with `body-reference-mismatch`, and opens no file;
-- a repair of `q1` computes a plan that writes `q1.query.notes.txt` with the bytes of `q1.query.notes.md`, rewrites the reference, and removes `q1.query.notes.md`;
-- after the repair is applied, `q1` reads with its original `notes` text, and validation reports no finding for `q1`.
+- In every scenario, the first validation reports `body-reference-mismatch` for `q1`, and no special refusal or rename step runs.
+- In every scenario, the read of `q1` fails with `body-reference-mismatch` and opens no file.
+- In every scenario, the reference is classed safe, not unsafe.
+- The repairs write, respectively, `q1.query.notes.txt`, `q1.query.memo.md` and `q1.q.text.sql`, each with the old file's bytes. Each rewrites the reference, removes the old file, and stays inside `queries/q1/`.
+- After each repair, `q1` reads with its original text, and validation reports no finding for `q1`.
+- In (c), validation still reports `unlisted-record-file` for `q2/q2.query.json` and orphans for its body files, and repair never touches `q2`.
+
+### AC: symlinked-body-classified-by-lstat
+
+**Requirements:** record-body-file#req:stored-reference-access-guard
+
+**Given** a record whose safe `text` reference names a symlink to a regular file elsewhere in the repository
+**When** it is read, validated, deleted and repaired
+**Then** the read fails with `non-regular-body`, and validation reports it. The delete and repair plans do not read through the link, and the link target is never opened.
 
 ### AC: literal-basename-template-cannot-match-body
 
@@ -818,7 +844,11 @@ No Rehearse stubs are scaffolded: `specscore.yaml` declares no rehearse configur
 
 ## Open Questions
 
-None at this time.
+1. **Keep per-record repair, or drop it?** Choose one:
+   - (A, recommended) Keep per-record repair (REQ `drifted-record-repair`). A drifted record can then be fixed without the caller already holding its body, reusing the ordinary write plan inside one directory.
+   - (B) Drop it, and state that a re-put by a caller that already holds the body is the only fix.
+
+   **Recommendation: A.** Under B, a drifted record cannot be read, so no ordinary caller can obtain the body to re-put it. The data then stays stuck until someone edits files by hand. Repair adds no collection-wide machinery: it is the write plan with the body bytes taken from the drifted file.
 
 Resolved on 2026-09-17 by founder decision:
 - body file names are fixed, `<key>.<record-suffix>.<field>.<ext>`;
