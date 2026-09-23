@@ -437,21 +437,15 @@ func buildFKViews(
 		referredColDef := def.Collections[resolvedFK]
 		referredRelColPath, _ := filepath.Rel(outputRoot, referredColDef.DirPath)
 
-		// Exclude the FK column itself — its value is constant for every record in
-		// the file (it equals fkValue), so including it wastes space and bandwidth.
-		fkExportColumns := make([]string, 0, len(exportColumns))
-		for _, c := range exportColumns {
-			if c != colName {
-				fkExportColumns = append(fkExportColumns, c)
-			}
-		}
-
 		// Group records by FK value; skip nil/empty. A list-valued column
 		// (type: any or a list type, e.g. event_ids: [a, b]) puts the record in
 		// one group per element via ingitdb.ForeignKeyElements — the record
 		// belongs to both the "a" and "b" $fk views, rather than to a single
-		// bogus "[a b]" group.
+		// bogus "[a b]" group. isListColumn tracks whether any record's raw
+		// value for colName is list-shaped, which decides whether colName stays
+		// in the export below.
 		groups := make(map[string][]ingitdb.IRecordEntry)
+		isListColumn := false
 		for _, rec := range records {
 			d := rec.GetData()
 			if d == nil {
@@ -461,12 +455,32 @@ func buildFKViews(
 			if raw == nil {
 				continue
 			}
+			if ingitdb.ForeignKeyValueIsList(raw) {
+				isListColumn = true
+			}
 			fkVals, elementErrs := ingitdb.ForeignKeyElements(raw)
 			for _, badElem := range elementErrs {
 				errs = append(errs, fmt.Errorf("buildFKViews %s: foreign key element must be a scalar, got %s", colName, badElem))
 			}
 			for _, fkVal := range fkVals {
 				groups[fkVal] = append(groups[fkVal], rec)
+			}
+		}
+
+		// Exclude the FK column itself only when it is scalar-valued — a scalar
+		// FK column's value is constant for every record in the file (it equals
+		// fkValue), so including it wastes space and bandwidth. A list-valued FK
+		// column's value is NOT implied by the $fk partition it lands in: a
+		// record with tags: [gb, ca] belongs to both the "gb" and "ca" views, and
+		// dropping the column would silently lose "ca" from the "gb" view (and
+		// vice versa), so it is kept.
+		fkExportColumns := exportColumns
+		if !isListColumn {
+			fkExportColumns = make([]string, 0, len(exportColumns))
+			for _, c := range exportColumns {
+				if c != colName {
+					fkExportColumns = append(fkExportColumns, c)
+				}
 			}
 		}
 

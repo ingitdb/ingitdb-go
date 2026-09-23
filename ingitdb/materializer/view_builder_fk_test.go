@@ -1120,14 +1120,68 @@ func TestBuildFKViews_ListValuedColumn_NestedElementIsError(t *testing.T) {
 	if created != 1 {
 		t.Errorf("expected the scalar element (gb) to still build its view, got created=%d", created)
 	}
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Error(), "foreign key element must be a scalar") {
-			found = true
-			break
-		}
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error (the one non-scalar element), got %d: %v", len(errs), errs)
 	}
-	if !found {
-		t.Errorf("expected an error naming a non-scalar element, got: %v", errs)
+	if !strings.Contains(errs[0].Error(), "foreign key element must be a scalar") {
+		t.Errorf("expected an error naming a non-scalar element, got: %v", errs[0])
+	}
+}
+
+// REQ:foreign-key-list-elements — a list-valued FK column's value is not
+// implied by the $fk partition a record lands in (tags: [gb, ca] would lose
+// "ca" if the gb view dropped the column), so it must stay in the export.
+func TestBuildFKViews_ListValuedColumn_ColumnKeptInExport(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", "ca"}}),
+	}
+
+	_, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "tags", "gb", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if !strings.Contains(string(gbContent), "tags") || !strings.Contains(string(gbContent), "ca") {
+		t.Errorf("gb view must keep the list-valued tags column (so ca is not silently lost), got: %s", gbContent)
+	}
+}
+
+// REQ:foreign-key-list-elements — a scalar FK column's value keeps the prior
+// behaviour: excluded from the export, since it is fully implied by the $fk
+// partition the record landed in.
+func TestBuildFKViews_ScalarColumn_ExcludedFromExport(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeCompaniesCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "country": "gb"}),
+	}
+
+	_, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "country", "gb", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if strings.Contains(string(gbContent), "country") {
+		t.Errorf("gb view must exclude the redundant scalar country column, got: %s", gbContent)
 	}
 }

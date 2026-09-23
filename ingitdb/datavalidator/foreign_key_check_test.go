@@ -31,6 +31,28 @@ func writeMapCollection(t *testing.T, dir, id, recordsYAML string, cols map[stri
 	}
 }
 
+// writeMapCollectionJSON writes a MapOfRecords JSON collection and returns its
+// CollectionDef pointed at the temp dir — same shape as writeMapCollection,
+// but through the JSON parse path rather than YAML.
+func writeMapCollectionJSON(t *testing.T, dir, id, recordsJSON string, cols map[string]*ingitdb.ColumnDef) *ingitdb.CollectionDef {
+	t.Helper()
+	colDir := filepath.Join(dir, id)
+	if err := os.MkdirAll(colDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(colDir, "data.json"), []byte(recordsJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return &ingitdb.CollectionDef{
+		ID:      id,
+		DirPath: colDir,
+		RecordFile: &ingitdb.RecordFileDef{
+			Name: "data.json", Format: ingitdb.RecordFormatJSON, RecordType: ingitdb.MapOfRecords,
+		},
+		Columns: cols,
+	}
+}
+
 // REQ:foreign-key-enforced (record level) — an FK value with no matching key in
 // the target collection is an error naming the field, the value, and the target.
 func TestForeignKeyReferences_RejectsDanglingValue(t *testing.T) {
@@ -221,5 +243,99 @@ func TestForeignKeyReferences_ListValuedColumn(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Two dangling elements in the same list-valued FK column each get their own
+// error — the fix must not collapse or short-circuit after the first.
+func TestForeignKeyReferences_ListValuedColumn_TwoDanglingElementsTwoErrors(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollection(t, dir, "events", "e1:\n  name: E1\n",
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollection(t, dir, "plotlines",
+		"p1:\n  title: T1\n  event_ids: [missing-a, missing-b]\n",
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 dangling-element errors, got %d: %v", len(errs), errs)
+	}
+	joined := errs[0].Error() + " " + errs[1].Error()
+	for _, want := range []string{"missing-a", "missing-b"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("errors must together mention %q, got: %v", want, errs)
+		}
+	}
+}
+
+// A column declared with the list column type (`[]string`), not just `any`,
+// gets the same element-by-element FK checking.
+func TestForeignKeyReferences_ListColumnType_CheckedElementByElement(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollection(t, dir, "events", "e1:\n  name: E1\ne2:\n  name: E2\n",
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollection(t, dir, "plotlines",
+		"p1:\n  title: T1\n  event_ids: [e1, no-such-event]\n",
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnType("[]string"), ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error naming the dangling element, got %d: %v", len(errs), errs)
+	}
+	msg := errs[0].Error()
+	for _, want := range []string{"event_ids", "no-such-event"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error must mention %q, got: %v", want, msg)
+		}
+	}
+}
+
+// The list-element FK check works the same over a JSON-formatted record file,
+// not just YAML.
+func TestForeignKeyReferences_ListValuedColumn_JSONRecordFile(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollectionJSON(t, dir, "events",
+		`{"e1": {"name": "E1"}, "e2": {"name": "E2"}}`,
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollectionJSON(t, dir, "plotlines",
+		`{"p1": {"title": "T1", "event_ids": ["e1", "no-such-event"]}}`,
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error naming the dangling element, got %d: %v", len(errs), errs)
+	}
+	msg := errs[0].Error()
+	for _, want := range []string{"event_ids", "no-such-event"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error must mention %q, got: %v", want, msg)
+		}
 	}
 }

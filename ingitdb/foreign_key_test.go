@@ -187,6 +187,9 @@ func TestValidateForeignKeys_NoFKsIsClean(t *testing.T) {
 // real key). Table-driven per founder direction; mirrors the datavalidator and
 // materializer callers that both switched to this helper.
 func TestForeignKeyElements(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	var nilStrPtr *string
+
 	tests := []struct {
 		name        string
 		raw         any
@@ -203,6 +206,21 @@ func TestForeignKeyElements(t *testing.T) {
 		{name: "list with empty-string element", raw: []any{"a", ""}, wantValues: []string{"a"}},
 		{name: "nested list element is an error", raw: []any{"a", []any{"x", "y"}}, wantValues: []string{"a"}, wantErrsLen: 1},
 		{name: "map value stringifies whole (unchanged)", raw: map[string]any{"k": "v"}, wantValues: []string{"map[k:v]"}},
+		// Duplicate elements are deduped, preserving first-seen order — a
+		// dangling duplicate must not double-report, and a $fk view must not
+		// gain a duplicate row.
+		{name: "list with duplicate elements dedupes", raw: []any{"e1", "e1"}, wantValues: []string{"e1"}},
+		{name: "list with duplicates preserves first-seen order", raw: []any{"b", "a", "b", "a", "c"}, wantValues: []string{"b", "a", "c"}},
+		{name: "two dangling duplicate elements still dedupe to one value", raw: []any{"bad", "bad"}, wantValues: []string{"bad"}},
+		// Pointers are dereferenced; a nil pointer is skipped like a nil value.
+		{name: "top-level nil pointer is skipped", raw: nilStrPtr, wantValues: nil},
+		{name: "top-level pointer dereferences to scalar", raw: strPtr("ada"), wantValues: []string{"ada"}},
+		{name: "list element nil pointer is skipped", raw: []any{strPtr("a"), nilStrPtr, strPtr("b")}, wantValues: []string{"a", "b"}},
+		// []byte (and a fixed-size byte array) is one scalar, not walked byte by
+		// byte.
+		{name: "top-level []byte is one scalar", raw: []byte("ada"), wantValues: []string{"ada"}},
+		{name: "[]byte list element is one scalar", raw: []any{[]byte("a"), []byte("b")}, wantValues: []string{"a", "b"}},
+		{name: "byte array element is one scalar", raw: []any{[3]byte{'a', 'b', 'c'}}, wantValues: []string{"abc"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -217,6 +235,36 @@ func TestForeignKeyElements(t *testing.T) {
 			}
 			if len(elementErrs) != tt.wantErrsLen {
 				t.Errorf("elementErrs = %v, want length %d", elementErrs, tt.wantErrsLen)
+			}
+		})
+	}
+}
+
+// REQ:foreign-key-list-elements — materializer's $fk view builder needs to
+// know whether an FK column's value is list-shaped to decide whether to keep
+// the column in the export (a scalar FK column's value is implied by the $fk
+// partition; a list-valued one is not).
+func TestForeignKeyValueIsList(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+	tests := []struct {
+		name string
+		raw  any
+		want bool
+	}{
+		{name: "scalar string", raw: "ada", want: false},
+		{name: "nil", raw: nil, want: false},
+		{name: "list", raw: []any{"a", "b"}, want: true},
+		{name: "empty list", raw: []any{}, want: true},
+		{name: "typed string list", raw: []string{"a"}, want: true},
+		{name: "map", raw: map[string]any{"k": "v"}, want: false},
+		{name: "[]byte is scalar, not a list", raw: []byte("ada"), want: false},
+		{name: "pointer to list dereferences to a list", raw: &[]string{"a"}, want: true},
+		{name: "pointer to scalar dereferences to scalar", raw: strPtr("ada"), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ForeignKeyValueIsList(tt.raw); got != tt.want {
+				t.Errorf("ForeignKeyValueIsList(%#v) = %v, want %v", tt.raw, got, tt.want)
 			}
 		})
 	}
