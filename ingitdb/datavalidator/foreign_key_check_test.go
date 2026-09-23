@@ -31,6 +31,28 @@ func writeMapCollection(t *testing.T, dir, id, recordsYAML string, cols map[stri
 	}
 }
 
+// writeMapCollectionJSON writes a MapOfRecords JSON collection and returns its
+// CollectionDef pointed at the temp dir — same shape as writeMapCollection,
+// but through the JSON parse path rather than YAML.
+func writeMapCollectionJSON(t *testing.T, dir, id, recordsJSON string, cols map[string]*ingitdb.ColumnDef) *ingitdb.CollectionDef {
+	t.Helper()
+	colDir := filepath.Join(dir, id)
+	if err := os.MkdirAll(colDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(colDir, "data.json"), []byte(recordsJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return &ingitdb.CollectionDef{
+		ID:      id,
+		DirPath: colDir,
+		RecordFile: &ingitdb.RecordFileDef{
+			Name: "data.json", Format: ingitdb.RecordFormatJSON, RecordType: ingitdb.MapOfRecords,
+		},
+		Columns: cols,
+	}
+}
+
 // REQ:foreign-key-enforced (record level) — an FK value with no matching key in
 // the target collection is an error naming the field, the value, and the target.
 func TestForeignKeyReferences_RejectsDanglingValue(t *testing.T) {
@@ -142,5 +164,207 @@ func TestForeignKeyReferences_ModuleRelativeTarget(t *testing.T) {
 	}
 	if !strings.Contains(errs[0].Error(), "commerce.countries") || !strings.Contains(errs[0].Error(), "de") {
 		t.Errorf("error must show de dangling against commerce.countries, got: %v", errs[0])
+	}
+}
+
+// REQ:foreign-key-list-elements — a `type: any` or list-typed FK column
+// (event_ids: [a, b]) is checked element by element: before this, the whole
+// list stringified to "[a b]" (fmt.Sprintf("%v", raw)), which never matched
+// any real key, so every such record failed validation even when every
+// element referenced a real record. Table-driven per founder direction.
+func TestForeignKeyReferences_ListValuedColumn(t *testing.T) {
+	writeEvents := func(t *testing.T, dir string) *ingitdb.CollectionDef {
+		return writeMapCollection(t, dir, "events",
+			"e1:\n  name: E1\ne2:\n  name: E2\n",
+			map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	}
+
+	tests := []struct {
+		name           string
+		plotlinesYAML  string
+		wantErrCount   int
+		wantErrSubstrs []string // checked against the single error when wantErrCount == 1
+	}{
+		{
+			name:          "all elements ok",
+			plotlinesYAML: "p1:\n  title: T1\n  event_ids: [e1, e2]\n",
+			wantErrCount:  0,
+		},
+		{
+			name:           "one missing element names only that element",
+			plotlinesYAML:  "p1:\n  title: T1\n  event_ids: [e1, no-such-event]\n",
+			wantErrCount:   1,
+			wantErrSubstrs: []string{"event_ids", "no-such-event", "events"},
+		},
+		{
+			name:          "empty list is clean",
+			plotlinesYAML: "p1:\n  title: T1\n  event_ids: []\n",
+			wantErrCount:  0,
+		},
+		{
+			name:          "list with a nil element skips the nil",
+			plotlinesYAML: "p1:\n  title: T1\n  event_ids: [e1, null]\n",
+			wantErrCount:  0,
+		},
+		{
+			name:           "nested non-scalar element is an error",
+			plotlinesYAML:  "p1:\n  title: T1\n  event_ids: [e1, [x, y]]\n",
+			wantErrCount:   1,
+			wantErrSubstrs: []string{"event_ids", "foreign key element must be a scalar"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			events := writeEvents(t, dir)
+			plotlines := writeMapCollection(t, dir, "plotlines", tt.plotlinesYAML,
+				map[string]*ingitdb.ColumnDef{
+					"title":     {Type: ingitdb.ColumnTypeString},
+					"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+				})
+			def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+				"events": events, "plotlines": plotlines,
+			}}
+			res, err := NewValidator().Validate(context.Background(), dir, def)
+			if err != nil {
+				t.Fatal(err)
+			}
+			errs := res.Errors()
+			if len(errs) != tt.wantErrCount {
+				t.Fatalf("expected %d error(s), got %d: %v", tt.wantErrCount, len(errs), errs)
+			}
+			if tt.wantErrCount == 1 {
+				msg := errs[0].Error()
+				for _, want := range tt.wantErrSubstrs {
+					if !strings.Contains(msg, want) {
+						t.Errorf("error must mention %q, got: %v", want, msg)
+					}
+				}
+			}
+		})
+	}
+}
+
+// Two dangling elements in the same list-valued FK column each get their own
+// error — the fix must not collapse or short-circuit after the first.
+func TestForeignKeyReferences_ListValuedColumn_TwoDanglingElementsTwoErrors(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollection(t, dir, "events", "e1:\n  name: E1\n",
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollection(t, dir, "plotlines",
+		"p1:\n  title: T1\n  event_ids: [missing-a, missing-b]\n",
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 2 {
+		t.Fatalf("expected 2 dangling-element errors, got %d: %v", len(errs), errs)
+	}
+	joined := errs[0].Error() + " " + errs[1].Error()
+	for _, want := range []string{"missing-a", "missing-b"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("errors must together mention %q, got: %v", want, errs)
+		}
+	}
+}
+
+// A column declared with the list column type (`[]string`), not just `any`,
+// gets the same element-by-element FK checking.
+func TestForeignKeyReferences_ListColumnType_CheckedElementByElement(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollection(t, dir, "events", "e1:\n  name: E1\ne2:\n  name: E2\n",
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollection(t, dir, "plotlines",
+		"p1:\n  title: T1\n  event_ids: [e1, no-such-event]\n",
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnType("[]string"), ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error naming the dangling element, got %d: %v", len(errs), errs)
+	}
+	msg := errs[0].Error()
+	for _, want := range []string{"event_ids", "no-such-event"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error must mention %q, got: %v", want, msg)
+		}
+	}
+}
+
+// The list-element FK check works the same over a JSON-formatted record file,
+// not just YAML.
+func TestForeignKeyReferences_ListValuedColumn_JSONRecordFile(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollectionJSON(t, dir, "events",
+		`{"e1": {"name": "E1"}, "e2": {"name": "E2"}}`,
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollectionJSON(t, dir, "plotlines",
+		`{"p1": {"title": "T1", "event_ids": ["e1", "no-such-event"]}}`,
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error naming the dangling element, got %d: %v", len(errs), errs)
+	}
+	msg := errs[0].Error()
+	for _, want := range []string{"event_ids", "no-such-event"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error must mention %q, got: %v", want, msg)
+		}
+	}
+}
+
+// REQ:foreign-key-list-elements — a duplicated dangling element in the same
+// list-valued FK column (event_ids: [bad, bad]) must be checked once, not
+// once per occurrence: exactly one error, not two.
+func TestForeignKeyReferences_ListValuedColumn_DuplicateDanglingElement_ExactlyOneError(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollection(t, dir, "events", "e1:\n  name: E1\n",
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollection(t, dir, "plotlines",
+		"p1:\n  title: T1\n  event_ids: [bad, bad]\n",
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error for the duplicated dangling element, got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), "bad") {
+		t.Errorf("error must mention the dangling value %q, got: %v", "bad", errs[0])
 	}
 }

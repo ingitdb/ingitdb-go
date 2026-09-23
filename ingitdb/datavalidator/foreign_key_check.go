@@ -108,13 +108,19 @@ func checkCollectionForeignKeys(fullID string, col *ingitdb.CollectionDef, def *
 			if !present || raw == nil {
 				continue // an absent FK value is a required/optional concern, not integrity
 			}
-			value := fmt.Sprintf("%v", raw)
-			if value == "" {
-				continue
-			}
-			if !idx.Contains(target, value) {
-				message := fmt.Sprintf("foreign key %q = %q has no matching record in collection %q", name, value, target)
+			// A `type: any` or list-typed FK column (e.g. event_ids: [a, b]) is
+			// checked element by element via ingitdb.ForeignKeyElements — a
+			// scalar value still yields itself, unchanged from before.
+			values, elementErrs := ingitdb.ForeignKeyElements(raw)
+			for _, badElem := range elementErrs {
+				message := fmt.Sprintf("foreign key %q has a list element that is not a scalar (%s): foreign key element must be a scalar", name, badElem)
 				errors = append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
+			}
+			for _, value := range values {
+				if !idx.Contains(target, value) {
+					message := fmt.Sprintf("foreign key %q = %q has no matching record in collection %q", name, value, target)
+					errors = append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
+				}
 			}
 		}
 	}

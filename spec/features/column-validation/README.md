@@ -55,13 +55,15 @@ This is the one constraint with demonstrated demand: `geo-ingitdb` already decla
 
 #### REQ: foreign-key-enforced
 
-When a column declares `foreign_key: <collection>`, record validation MUST verify the value exists as a key in that collection. A value with no matching key MUST produce a validation error naming the field, the value, and the referenced collection. A `foreign_key` naming a collection absent from the definition MUST be rejected at definition-load time.
+When a column declares `foreign_key: <collection>`, record validation MUST verify the value exists as a key in that collection. A value with no matching key MUST produce a validation error naming the field, the value, and the referenced collection. A `foreign_key` naming a collection absent from the definition MUST be rejected at definition-load time. When the column's value is a list (`type: any` or a list type), each element MUST be checked independently against the target collection, and a missing element MUST produce a validation error naming that element — not the list as a whole. A nil or empty element is skipped; an element that is itself a list or a map MUST be rejected as "foreign key element must be a scalar". A repeated element (e.g. `event_ids: [e1, e1]`) MUST be checked once, not once per occurrence — a dangling repeated element MUST produce exactly one error, and a live repeated element MUST NOT produce a duplicate row when the same value also groups records for a reverse-index ($fk) view.
 
 **This REQ said "via the already-declared `ForeignKeyIndex`", which was wrong and understated the work.** `ForeignKeyIndex` (`datavalidator/interfaces.go:11`) was an interface with no implementation and no callers; nothing read `ColumnDef.ForeignKey` during validation. The record-level check builds the index — record keys per root collection — in a whole-definition pass after the per-collection schema pass (`datavalidator/foreign_key_check.go`), reusing the existing parse helpers rather than threading an index through every `validateRecordData` call site.
 
 **Resolution is module-relative (ingitdb-go#11).** A `foreign_key` containing `.` is fully qualified and used as-is; a bare `foreign_key` resolves `<declaring-module>.<fk>` first, then bare (`ingitdb.ResolveForeignKey`). So `commerce.addresses`'s `foreign_key: countries` reaches `commerce.countries` without hard-coding the mount and without colliding with `geo.countries`, while can-i-use's bare `equivalence_classes` (no module) still resolves bare. Fully-qualified-only was rejected: it couples each module to its mount point and would migrate both demo databases. `materializer/view_builder.go` used a bare `def.Collections[fk]` lookup that never resolved a module-namespaced target, so FK views silently never built for `demo-ingitdb`; it now uses the same resolver.
 
 **Status: fully implemented.** Load-time resolution is wired into `ReadDefinition` under validation (a `foreign_key` resolving to no collection is a load error). Record-level integrity errors on a value with no matching key in the resolved target. Verified across the workspace: every database loads with FK validation on, and there are zero dangling FK references in demo-ingitdb, demo-commerce-ingitdb, or can-i-use — whose `equivalenceClass → equivalence_classes` references are genuinely checked.
+
+**List-valued FK columns are checked element by element (`ingitdb.ForeignKeyElements`, `foreign_key.go`).** A scalar value stringifies as before; a pointer is dereferenced first (a nil pointer is skipped, like a nil value), and a `[]byte`/byte array is treated as one scalar rather than walked byte by byte. A `type: any` or list-typed column (e.g. `event_ids: [a, b]`) used to stringify the whole list with `fmt.Sprintf("%v", raw)` — `"[a b]"` never matched any real key, so every such record failed validation even when every element referenced a real record (real repro: trakhimenok/famines-castle's `plotlines/*/README.md` `entity_ids`/`chapter_ids`/`event_ids`). A repeated element is deduped (order-preserving) before checking, so `[e1, e1]` is checked/grouped as `e1` once. `ForeignKeyElements` is shared, within this repo, by both `datavalidator/foreign_key_check.go` (the dangling-reference check) and `materializer/view_builder.go`'s `buildFKViews` (the `$fk` reverse-index view builder, which had the same stringify-the-whole-list bug and now puts a record into one `$fk` group per element, deduped). `buildFKViews` also keeps a list-valued FK column in its export — unlike a scalar FK column, its value is not fully implied by the single `$fk` partition a record lands in (`tags: [gb, ca]` would silently lose `ca` from the `gb` view if the column were dropped, as it is for a scalar FK column). A declared list column type (`[]string`, etc.) is always treated as list-valued for this decision; `type: any` falls back to inspecting each record's actual value, since the declared type alone does not say; any other declared scalar type keeps the prior exclude-it behaviour regardless of what a record happens to hold. `dalgo2ingitdb`'s own FK write/delete checks are a separate repository and do not share this helper; that gap is tracked as a follow-up there — [dalgo2ingitdb#18](https://github.com/ingitdb/dalgo2ingitdb/issues/18) — not fixed by this change.
 
 ### New primitives
 
@@ -194,6 +196,22 @@ Verification of record: 337 definition files audited across every layout (`.coll
 
 **Given** the same two collections
 **When** a `tasks` record is validated with `status: "open"`
+**Then** validation passes
+
+### AC: foreign-key-list-element-rejects-dangling-reference
+
+**Requirements:** column-validation#req:foreign-key-enforced
+
+**Given** collection `events` (containing keys `e1`, `e2`) and `plotlines` whose column `event_ids` (`type: any`) declares `foreign_key: events`
+**When** a `plotlines` record is validated with `event_ids: [e1, no-such-event]`
+**Then** validation fails with exactly one error naming `event_ids` and `no-such-event`, and `e1` is not reported
+
+### AC: foreign-key-list-element-accepts-live-references
+
+**Requirements:** column-validation#req:foreign-key-enforced
+
+**Given** the same two collections
+**When** a `plotlines` record is validated with `event_ids: [e1, e2]`
 **Then** validation passes
 
 ### AC: enum-rejects-non-member

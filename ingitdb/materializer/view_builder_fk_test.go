@@ -1045,3 +1045,288 @@ func TestBuildFKViews_EmptyFormat(t *testing.T) {
 		t.Errorf("expected FK view file at %s, got error: %v", gbPath, err)
 	}
 }
+
+// makeTagsCol builds a CollectionDef with a list-valued FK column ("tags",
+// type: any) pointing at "countries" — mirrors a `type: any` list column such
+// as StoryGrapher's plotlines.event_ids.
+func makeTagsCol(t *testing.T, dirPath string) *ingitdb.CollectionDef {
+	t.Helper()
+	return &ingitdb.CollectionDef{
+		ID:           "companies",
+		DirPath:      dirPath,
+		ColumnsOrder: []string{"$ID", "name", "tags"},
+		Columns: map[string]*ingitdb.ColumnDef{
+			"name": {Type: ingitdb.ColumnTypeString},
+			"tags": {Type: ingitdb.ColumnTypeAny, ForeignKey: "countries"},
+		},
+	}
+}
+
+// REQ:foreign-key-list-elements — a list-valued FK column (tags: [gb, ca])
+// puts the record into one $fk view per element, not into a single bogus
+// "[gb ca]" group (fmt.Sprintf("%v", []any{"gb","ca"}) before this fix).
+func TestBuildFKViews_ListValuedColumn_OneGroupPerElement(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", "ca"}}),
+		ingitdb.NewMapRecordEntry("shopify", map[string]any{"$ID": "shopify", "name": "Shopify", "tags": []any{"ca"}}),
+	}
+
+	created, updated, unchanged, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if created != 2 {
+		t.Errorf("expected 2 files created (gb, ca), got %d (updated=%d unchanged=%d)", created, updated, unchanged)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "tags", "gb", "json")
+	caPath := fkFilePath(tmpDir, "countries", "companies", "tags", "ca", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if !strings.Contains(string(gbContent), "acme") {
+		t.Errorf("gb view must contain acme (tags: [gb, ca]), got: %s", gbContent)
+	}
+	caContent, err := os.ReadFile(caPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", caPath, err)
+	}
+	if !strings.Contains(string(caContent), "acme") || !strings.Contains(string(caContent), "shopify") {
+		t.Errorf("ca view must contain both acme and shopify, got: %s", caContent)
+	}
+}
+
+// A nested non-scalar list element cannot become a $fk group key, so it is
+// reported as an error rather than silently stringified.
+func TestBuildFKViews_ListValuedColumn_NestedElementIsError(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", []any{"x", "y"}}}),
+	}
+
+	created, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if created != 1 {
+		t.Errorf("expected the scalar element (gb) to still build its view, got created=%d", created)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error (the one non-scalar element), got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), "foreign key element must be a scalar") {
+		t.Errorf("expected an error naming a non-scalar element, got: %v", errs[0])
+	}
+}
+
+// REQ:foreign-key-list-elements — a list-valued FK column's value is not
+// implied by the $fk partition a record lands in (tags: [gb, ca] would lose
+// "ca" if the gb view dropped the column), so it must stay in the export.
+func TestBuildFKViews_ListValuedColumn_ColumnKeptInExport(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", "ca"}}),
+	}
+
+	_, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "tags", "gb", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if !strings.Contains(string(gbContent), "tags") || !strings.Contains(string(gbContent), "ca") {
+		t.Errorf("gb view must keep the list-valued tags column (so ca is not silently lost), got: %s", gbContent)
+	}
+}
+
+// REQ:foreign-key-list-elements — a scalar FK column's value keeps the prior
+// behaviour: excluded from the export, since it is fully implied by the $fk
+// partition the record landed in.
+func TestBuildFKViews_ScalarColumn_ExcludedFromExport(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeCompaniesCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "country": "gb"}),
+	}
+
+	_, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "country", "gb", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if strings.Contains(string(gbContent), "country") {
+		t.Errorf("gb view must exclude the redundant scalar country column, got: %s", gbContent)
+	}
+}
+
+// makeDeclaredListTagsCol builds a CollectionDef with a list-valued FK column
+// ("tags") declared with the list column type ([]string), rather than `any`
+// — mirrors a schema that spells out the list shape explicitly.
+func makeDeclaredListTagsCol(t *testing.T, dirPath string) *ingitdb.CollectionDef {
+	t.Helper()
+	return &ingitdb.CollectionDef{
+		ID:           "companies",
+		DirPath:      dirPath,
+		ColumnsOrder: []string{"$ID", "name", "tags"},
+		Columns: map[string]*ingitdb.ColumnDef{
+			"name": {Type: ingitdb.ColumnTypeString},
+			"tags": {Type: ingitdb.ColumnType("[]string"), ForeignKey: "countries"},
+		},
+	}
+}
+
+// REQ:foreign-key-list-elements — a declared list column type is always
+// treated as list-valued for the export-keep decision, regardless of what
+// any single record's raw value looks like. This differs from `type: any`,
+// which only knows by inspecting each record. Here one record's raw value is
+// already a scalar (not wrapped in a list) — a data-driven-only
+// implementation would misclassify that record's group as scalar and drop
+// the column there; the declared-type path must not.
+func TestBuildFKViews_DeclaredListColumn_AlwaysKeptInExport(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeDeclaredListTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", "ca"}}),
+		// bmo's raw value is a bare scalar, not a list — an off-schema record a
+		// declared list type does not get to reclassify.
+		ingitdb.NewMapRecordEntry("bmo", map[string]any{"$ID": "bmo", "name": "BMO", "tags": "gb"}),
+	}
+
+	_, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "tags", "gb", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if !strings.Contains(string(gbContent), "tags") {
+		t.Errorf("gb view must keep the declared-list tags column even for bmo's scalar-shaped record, got: %s", gbContent)
+	}
+}
+
+// REQ:foreign-key-list-elements — `type: any` falls back to inspecting each
+// record's actual value: when every record's raw value is a plain scalar
+// (not a list), the column is excluded from the export, exactly like a
+// declared scalar column.
+func TestBuildFKViews_TypeAnyColumn_AllScalarValues_ExcludedFromExport(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies")) // tags: type any
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": "gb"}),
+	}
+
+	_, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "tags", "gb", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if strings.Contains(string(gbContent), "tags") {
+		t.Errorf("gb view must exclude the type:any tags column when every record's value is scalar, got: %s", gbContent)
+	}
+}
+
+// REQ:foreign-key-list-elements — a duplicate element in one record's
+// list-valued FK column (tags: [gb, gb]) must not put that record into the
+// same $fk group twice: the INGR map reader rejects a duplicate $ID, and a
+// duplicate row is wrong in every format.
+func TestBuildFKViews_ListValuedColumn_DuplicateElement_OneRow(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("jsonl")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", "gb"}}),
+	}
+
+	created, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if created != 1 {
+		t.Errorf("expected exactly 1 file created (one gb group), got %d", created)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "tags", "gb", "jsonl")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	lines := strings.Split(strings.TrimRight(string(gbContent), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected exactly 1 row in the gb view (deduped), got %d: %s", len(lines), gbContent)
+	}
+}
+
+// REQ:foreign-key-list-elements — two non-scalar elements within the SAME
+// record's list that stringify identically must report once, not twice; the
+// message names the offending record.
+func TestBuildFKViews_ElementErrs_DedupedAndNameRecordKey(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{
+			"$ID": "acme", "name": "Acme",
+			"tags": []any{"gb", []any{"x", "y"}, []any{"x", "y"}}, // same bad element twice
+		}),
+	}
+
+	_, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 deduped error for the repeated non-scalar element, got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), "acme") {
+		t.Errorf("error must name the offending record (acme), got: %v", errs[0])
+	}
+	if !strings.Contains(errs[0].Error(), "foreign key element must be a scalar") {
+		t.Errorf("error must still say the element must be a scalar, got: %v", errs[0])
+	}
+}

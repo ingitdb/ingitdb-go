@@ -437,17 +437,26 @@ func buildFKViews(
 		referredColDef := def.Collections[resolvedFK]
 		referredRelColPath, _ := filepath.Rel(outputRoot, referredColDef.DirPath)
 
-		// Exclude the FK column itself — its value is constant for every record in
-		// the file (it equals fkValue), so including it wastes space and bandwidth.
-		fkExportColumns := make([]string, 0, len(exportColumns))
-		for _, c := range exportColumns {
-			if c != colName {
-				fkExportColumns = append(fkExportColumns, c)
-			}
-		}
+		// isListColumn decides whether colName stays in the export below. A
+		// declared list column type ([]string, etc., per ingitdb.ListElementType)
+		// is always list-valued — the schema says so, regardless of what any one
+		// record happens to hold (a record whose stored value doesn't match its
+		// declared shape is a schema-validation problem elsewhere, not something
+		// this decision should second-guess). `type: any` is ambiguous at the
+		// schema level, so it falls back to inspecting each record's actual raw
+		// value (ingitdb.ForeignKeyValueIsList) below. Any other declared scalar
+		// type keeps the prior exclude-it behaviour regardless of runtime shape.
+		_, isDeclaredListType := ingitdb.ListElementType(colDef.Type)
+		isListColumn := isDeclaredListType
+		checkRuntimeShape := !isDeclaredListType && colDef.Type == ingitdb.ColumnTypeAny
 
-		// Group records by FK value; skip nil/empty.
+		// Group records by FK value; skip nil/empty. A list-valued column
+		// (type: any or a list type, e.g. event_ids: [a, b]) puts the record in
+		// one group per element via ingitdb.ForeignKeyElements — the record
+		// belongs to both the "a" and "b" $fk views, rather than to a single
+		// bogus "[a b]" group.
 		groups := make(map[string][]ingitdb.IRecordEntry)
+		seenElementErrs := make(map[string]bool)
 		for _, rec := range records {
 			d := rec.GetData()
 			if d == nil {
@@ -457,11 +466,38 @@ func buildFKViews(
 			if raw == nil {
 				continue
 			}
-			fkVal := fmt.Sprintf("%v", raw)
-			if fkVal == "" {
-				continue
+			if checkRuntimeShape && ingitdb.ForeignKeyValueIsList(raw) {
+				isListColumn = true
 			}
-			groups[fkVal] = append(groups[fkVal], rec)
+			fkVals, elementErrs := ingitdb.ForeignKeyElements(raw)
+			for _, badElem := range elementErrs {
+				msg := fmt.Sprintf("buildFKViews %s: record %q: foreign key element must be a scalar, got %s", colName, rec.GetID(), badElem)
+				if seenElementErrs[msg] {
+					continue // the same record can repeat the same non-scalar element
+				}
+				seenElementErrs[msg] = true
+				errs = append(errs, fmt.Errorf("%s", msg))
+			}
+			for _, fkVal := range fkVals {
+				groups[fkVal] = append(groups[fkVal], rec)
+			}
+		}
+
+		// Exclude the FK column itself only when it is scalar-valued — a scalar
+		// FK column's value is constant for every record in the file (it equals
+		// fkValue), so including it wastes space and bandwidth. A list-valued FK
+		// column's value is NOT implied by the $fk partition it lands in: a
+		// record with tags: [gb, ca] belongs to both the "gb" and "ca" views, and
+		// dropping the column would silently lose "ca" from the "gb" view (and
+		// vice versa), so it is kept.
+		fkExportColumns := exportColumns
+		if !isListColumn {
+			fkExportColumns = make([]string, 0, len(exportColumns))
+			for _, c := range exportColumns {
+				if c != colName {
+					fkExportColumns = append(fkExportColumns, c)
+				}
+			}
 		}
 
 		for fkValue, fkRecords := range groups {
