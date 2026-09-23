@@ -1045,3 +1045,89 @@ func TestBuildFKViews_EmptyFormat(t *testing.T) {
 		t.Errorf("expected FK view file at %s, got error: %v", gbPath, err)
 	}
 }
+
+// makeTagsCol builds a CollectionDef with a list-valued FK column ("tags",
+// type: any) pointing at "countries" — mirrors a `type: any` list column such
+// as StoryGrapher's plotlines.event_ids.
+func makeTagsCol(t *testing.T, dirPath string) *ingitdb.CollectionDef {
+	t.Helper()
+	return &ingitdb.CollectionDef{
+		ID:           "companies",
+		DirPath:      dirPath,
+		ColumnsOrder: []string{"$ID", "name", "tags"},
+		Columns: map[string]*ingitdb.ColumnDef{
+			"name": {Type: ingitdb.ColumnTypeString},
+			"tags": {Type: ingitdb.ColumnTypeAny, ForeignKey: "countries"},
+		},
+	}
+}
+
+// REQ:foreign-key-list-elements — a list-valued FK column (tags: [gb, ca])
+// puts the record into one $fk view per element, not into a single bogus
+// "[gb ca]" group (fmt.Sprintf("%v", []any{"gb","ca"}) before this fix).
+func TestBuildFKViews_ListValuedColumn_OneGroupPerElement(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", "ca"}}),
+		ingitdb.NewMapRecordEntry("shopify", map[string]any{"$ID": "shopify", "name": "Shopify", "tags": []any{"ca"}}),
+	}
+
+	created, updated, unchanged, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if created != 2 {
+		t.Errorf("expected 2 files created (gb, ca), got %d (updated=%d unchanged=%d)", created, updated, unchanged)
+	}
+
+	gbPath := fkFilePath(tmpDir, "countries", "companies", "tags", "gb", "json")
+	caPath := fkFilePath(tmpDir, "countries", "companies", "tags", "ca", "json")
+	gbContent, err := os.ReadFile(gbPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", gbPath, err)
+	}
+	if !strings.Contains(string(gbContent), "acme") {
+		t.Errorf("gb view must contain acme (tags: [gb, ca]), got: %s", gbContent)
+	}
+	caContent, err := os.ReadFile(caPath)
+	if err != nil {
+		t.Fatalf("expected FK view file at %s, got error: %v", caPath, err)
+	}
+	if !strings.Contains(string(caContent), "acme") || !strings.Contains(string(caContent), "shopify") {
+		t.Errorf("ca view must contain both acme and shopify, got: %s", caContent)
+	}
+}
+
+// A nested non-scalar list element cannot become a $fk group key, so it is
+// reported as an error rather than silently stringified.
+func TestBuildFKViews_ListValuedColumn_NestedElementIsError(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeTagsCol(t, filepath.Join(tmpDir, "companies"))
+	view := makeDefaultView("json")
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "tags": []any{"gb", []any{"x", "y"}}}),
+	}
+
+	created, _, _, errs := buildFKViews(tmpDir, "", col, makeDefWithCountries(tmpDir), view, records, nil, defaultFSops())
+	if created != 1 {
+		t.Errorf("expected the scalar element (gb) to still build its view, got created=%d", created)
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "foreign key element must be a scalar") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected an error naming a non-scalar element, got: %v", errs)
+	}
+}

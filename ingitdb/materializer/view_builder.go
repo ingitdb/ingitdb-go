@@ -446,7 +446,11 @@ func buildFKViews(
 			}
 		}
 
-		// Group records by FK value; skip nil/empty.
+		// Group records by FK value; skip nil/empty. A list-valued column
+		// (type: any or a list type, e.g. event_ids: [a, b]) puts the record in
+		// one group per element via ingitdb.ForeignKeyElements — the record
+		// belongs to both the "a" and "b" $fk views, rather than to a single
+		// bogus "[a b]" group.
 		groups := make(map[string][]ingitdb.IRecordEntry)
 		for _, rec := range records {
 			d := rec.GetData()
@@ -457,11 +461,13 @@ func buildFKViews(
 			if raw == nil {
 				continue
 			}
-			fkVal := fmt.Sprintf("%v", raw)
-			if fkVal == "" {
-				continue
+			fkVals, elementErrs := ingitdb.ForeignKeyElements(raw)
+			for _, badElem := range elementErrs {
+				errs = append(errs, fmt.Errorf("buildFKViews %s: foreign key element must be a scalar, got %s", colName, badElem))
 			}
-			groups[fkVal] = append(groups[fkVal], rec)
+			for _, fkVal := range fkVals {
+				groups[fkVal] = append(groups[fkVal], rec)
+			}
 		}
 
 		for fkValue, fkRecords := range groups {

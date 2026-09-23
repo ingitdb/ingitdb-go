@@ -180,3 +180,44 @@ func TestValidateForeignKeys_NoFKsIsClean(t *testing.T) {
 		t.Errorf("a definition with no foreign keys must be clean, got: %v", err)
 	}
 }
+
+// REQ:foreign-key-list-elements — a `type: any` or list-typed foreign_key
+// column (event_ids: [a, b]) is checked element by element rather than
+// stringified whole (fmt.Sprintf("%v", []any{"a","b"}) == "[a b]", never a
+// real key). Table-driven per founder direction; mirrors the datavalidator and
+// materializer callers that both switched to this helper.
+func TestForeignKeyElements(t *testing.T) {
+	tests := []struct {
+		name        string
+		raw         any
+		wantValues  []string
+		wantErrsLen int
+	}{
+		{name: "scalar string ok", raw: "ada", wantValues: []string{"ada"}},
+		{name: "scalar empty string", raw: "", wantValues: nil},
+		{name: "scalar int", raw: 42, wantValues: []string{"42"}},
+		{name: "list all scalars", raw: []any{"a", "b"}, wantValues: []string{"a", "b"}},
+		{name: "typed string list", raw: []string{"a", "b"}, wantValues: []string{"a", "b"}},
+		{name: "empty list", raw: []any{}, wantValues: nil},
+		{name: "list with nil element", raw: []any{"a", nil, "b"}, wantValues: []string{"a", "b"}},
+		{name: "list with empty-string element", raw: []any{"a", ""}, wantValues: []string{"a"}},
+		{name: "nested list element is an error", raw: []any{"a", []any{"x", "y"}}, wantValues: []string{"a"}, wantErrsLen: 1},
+		{name: "map value stringifies whole (unchanged)", raw: map[string]any{"k": "v"}, wantValues: []string{"map[k:v]"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			values, elementErrs := ForeignKeyElements(tt.raw)
+			if len(values) != len(tt.wantValues) {
+				t.Fatalf("values = %v, want %v", values, tt.wantValues)
+			}
+			for i, v := range values {
+				if v != tt.wantValues[i] {
+					t.Errorf("values[%d] = %q, want %q", i, v, tt.wantValues[i])
+				}
+			}
+			if len(elementErrs) != tt.wantErrsLen {
+				t.Errorf("elementErrs = %v, want length %d", elementErrs, tt.wantErrsLen)
+			}
+		})
+	}
+}

@@ -4,6 +4,7 @@ package ingitdb
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 )
@@ -50,6 +51,58 @@ func ResolveForeignKey(declaringFullID, fk string, collections map[string]*Colle
 		return fk, true
 	}
 	return "", false
+}
+
+// ForeignKeyElements normalizes a foreign_key column's raw record value into
+// the scalar values that a caller checks or groups against the target
+// collection. Every caller that resolves FK values (the dangling-reference
+// check in datavalidator, and the reverse-index $fk view builder in
+// materializer) shares this so a list-valued column behaves the same way in
+// both: previously each stringified the whole raw value with
+// fmt.Sprintf("%v", raw), so a `type: any` or list column (`event_ids: [a,
+// b]`) turned into the single literal value "[a b]" — never a real key, so
+// every such record either failed FK validation or fell into one bogus $fk
+// group.
+//
+//   - A scalar value (string, number, bool, ...) stringifies to itself, exactly
+//     as fmt.Sprintf("%v", raw) always has — unchanged behaviour.
+//   - A list value ([]any, []string, or any other slice/array) is walked
+//     element by element: a nil element is skipped, a scalar element
+//     stringifies on its own (so it is checked/grouped independently), and a
+//     non-scalar element (a nested list or map) cannot be turned into a key at
+//     all, so it is reported back via elementErrs instead of silently
+//     stringifying into something like "[a b]".
+//   - A map value keeps prior behaviour unchanged: the whole value stringifies
+//     as one unit, the same as any other non-slice value.
+//
+// An element (or the whole scalar value) that stringifies to "" is omitted
+// from values, matching the empty-string skip every caller already performed.
+func ForeignKeyElements(raw any) (values []string, elementErrs []string) {
+	rv := reflect.ValueOf(raw)
+	if !rv.IsValid() {
+		return nil, nil
+	}
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
+		if s := fmt.Sprintf("%v", raw); s != "" {
+			values = append(values, s)
+		}
+		return values, nil
+	}
+	for i := 0; i < rv.Len(); i++ {
+		elem := rv.Index(i).Interface()
+		if elem == nil {
+			continue
+		}
+		ev := reflect.ValueOf(elem)
+		if ev.Kind() == reflect.Slice || ev.Kind() == reflect.Array || ev.Kind() == reflect.Map {
+			elementErrs = append(elementErrs, fmt.Sprintf("%v", elem))
+			continue
+		}
+		if s := fmt.Sprintf("%v", elem); s != "" {
+			values = append(values, s)
+		}
+	}
+	return values, elementErrs
 }
 
 // ValidateForeignKeys checks that every foreign_key in the definition resolves

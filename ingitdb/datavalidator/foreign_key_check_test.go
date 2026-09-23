@@ -144,3 +144,82 @@ func TestForeignKeyReferences_ModuleRelativeTarget(t *testing.T) {
 		t.Errorf("error must show de dangling against commerce.countries, got: %v", errs[0])
 	}
 }
+
+// REQ:foreign-key-list-elements — a `type: any` or list-typed FK column
+// (event_ids: [a, b]) is checked element by element: before this, the whole
+// list stringified to "[a b]" (fmt.Sprintf("%v", raw)), which never matched
+// any real key, so every such record failed validation even when every
+// element referenced a real record. Table-driven per founder direction.
+func TestForeignKeyReferences_ListValuedColumn(t *testing.T) {
+	writeEvents := func(t *testing.T, dir string) *ingitdb.CollectionDef {
+		return writeMapCollection(t, dir, "events",
+			"e1:\n  name: E1\ne2:\n  name: E2\n",
+			map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	}
+
+	tests := []struct {
+		name           string
+		plotlinesYAML  string
+		wantErrCount   int
+		wantErrSubstrs []string // checked against the single error when wantErrCount == 1
+	}{
+		{
+			name:          "all elements ok",
+			plotlinesYAML: "p1:\n  title: T1\n  event_ids: [e1, e2]\n",
+			wantErrCount:  0,
+		},
+		{
+			name:           "one missing element names only that element",
+			plotlinesYAML:  "p1:\n  title: T1\n  event_ids: [e1, no-such-event]\n",
+			wantErrCount:   1,
+			wantErrSubstrs: []string{"event_ids", "no-such-event", "events"},
+		},
+		{
+			name:          "empty list is clean",
+			plotlinesYAML: "p1:\n  title: T1\n  event_ids: []\n",
+			wantErrCount:  0,
+		},
+		{
+			name:          "list with a nil element skips the nil",
+			plotlinesYAML: "p1:\n  title: T1\n  event_ids: [e1, null]\n",
+			wantErrCount:  0,
+		},
+		{
+			name:           "nested non-scalar element is an error",
+			plotlinesYAML:  "p1:\n  title: T1\n  event_ids: [e1, [x, y]]\n",
+			wantErrCount:   1,
+			wantErrSubstrs: []string{"event_ids", "foreign key element must be a scalar"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			events := writeEvents(t, dir)
+			plotlines := writeMapCollection(t, dir, "plotlines", tt.plotlinesYAML,
+				map[string]*ingitdb.ColumnDef{
+					"title":     {Type: ingitdb.ColumnTypeString},
+					"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+				})
+			def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+				"events": events, "plotlines": plotlines,
+			}}
+			res, err := NewValidator().Validate(context.Background(), dir, def)
+			if err != nil {
+				t.Fatal(err)
+			}
+			errs := res.Errors()
+			if len(errs) != tt.wantErrCount {
+				t.Fatalf("expected %d error(s), got %d: %v", tt.wantErrCount, len(errs), errs)
+			}
+			if tt.wantErrCount == 1 {
+				msg := errs[0].Error()
+				for _, want := range tt.wantErrSubstrs {
+					if !strings.Contains(msg, want) {
+						t.Errorf("error must mention %q, got: %v", want, msg)
+					}
+				}
+			}
+		})
+	}
+}
