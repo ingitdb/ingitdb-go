@@ -437,15 +437,26 @@ func buildFKViews(
 		referredColDef := def.Collections[resolvedFK]
 		referredRelColPath, _ := filepath.Rel(outputRoot, referredColDef.DirPath)
 
+		// isListColumn decides whether colName stays in the export below. A
+		// declared list column type ([]string, etc., per ingitdb.ListElementType)
+		// is always list-valued — the schema says so, regardless of what any one
+		// record happens to hold (a record whose stored value doesn't match its
+		// declared shape is a schema-validation problem elsewhere, not something
+		// this decision should second-guess). `type: any` is ambiguous at the
+		// schema level, so it falls back to inspecting each record's actual raw
+		// value (ingitdb.ForeignKeyValueIsList) below. Any other declared scalar
+		// type keeps the prior exclude-it behaviour regardless of runtime shape.
+		_, isDeclaredListType := ingitdb.ListElementType(colDef.Type)
+		isListColumn := isDeclaredListType
+		checkRuntimeShape := !isDeclaredListType && colDef.Type == ingitdb.ColumnTypeAny
+
 		// Group records by FK value; skip nil/empty. A list-valued column
 		// (type: any or a list type, e.g. event_ids: [a, b]) puts the record in
 		// one group per element via ingitdb.ForeignKeyElements — the record
 		// belongs to both the "a" and "b" $fk views, rather than to a single
-		// bogus "[a b]" group. isListColumn tracks whether any record's raw
-		// value for colName is list-shaped, which decides whether colName stays
-		// in the export below.
+		// bogus "[a b]" group.
 		groups := make(map[string][]ingitdb.IRecordEntry)
-		isListColumn := false
+		seenElementErrs := make(map[string]bool)
 		for _, rec := range records {
 			d := rec.GetData()
 			if d == nil {
@@ -455,12 +466,17 @@ func buildFKViews(
 			if raw == nil {
 				continue
 			}
-			if ingitdb.ForeignKeyValueIsList(raw) {
+			if checkRuntimeShape && ingitdb.ForeignKeyValueIsList(raw) {
 				isListColumn = true
 			}
 			fkVals, elementErrs := ingitdb.ForeignKeyElements(raw)
 			for _, badElem := range elementErrs {
-				errs = append(errs, fmt.Errorf("buildFKViews %s: foreign key element must be a scalar, got %s", colName, badElem))
+				msg := fmt.Sprintf("buildFKViews %s: record %q: foreign key element must be a scalar, got %s", colName, rec.GetID(), badElem)
+				if seenElementErrs[msg] {
+					continue // the same record can repeat the same non-scalar element
+				}
+				seenElementErrs[msg] = true
+				errs = append(errs, fmt.Errorf("%s", msg))
 			}
 			for _, fkVal := range fkVals {
 				groups[fkVal] = append(groups[fkVal], rec)

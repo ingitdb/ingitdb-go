@@ -339,3 +339,32 @@ func TestForeignKeyReferences_ListValuedColumn_JSONRecordFile(t *testing.T) {
 		}
 	}
 }
+
+// REQ:foreign-key-list-elements — a duplicated dangling element in the same
+// list-valued FK column (event_ids: [bad, bad]) must be checked once, not
+// once per occurrence: exactly one error, not two.
+func TestForeignKeyReferences_ListValuedColumn_DuplicateDanglingElement_ExactlyOneError(t *testing.T) {
+	dir := t.TempDir()
+	events := writeMapCollection(t, dir, "events", "e1:\n  name: E1\n",
+		map[string]*ingitdb.ColumnDef{"name": {Type: ingitdb.ColumnTypeString}})
+	plotlines := writeMapCollection(t, dir, "plotlines",
+		"p1:\n  title: T1\n  event_ids: [bad, bad]\n",
+		map[string]*ingitdb.ColumnDef{
+			"title":     {Type: ingitdb.ColumnTypeString},
+			"event_ids": {Type: ingitdb.ColumnTypeAny, ForeignKey: "events"},
+		})
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{
+		"events": events, "plotlines": plotlines,
+	}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error for the duplicated dangling element, got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), "bad") {
+		t.Errorf("error must mention the dangling value %q, got: %v", "bad", errs[0])
+	}
+}

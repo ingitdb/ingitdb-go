@@ -64,7 +64,7 @@ func ResolveForeignKey(declaringFullID, fk string, collections map[string]*Colle
 // every such record either failed FK validation or fell into one bogus $fk
 // group. (dalgo2ingitdb's own write/delete FK checks are a separate repo and
 // do not go through this helper; that is tracked as a follow-up there, not
-// fixed here.)
+// fixed here: https://github.com/ingitdb/dalgo2ingitdb/issues/18.)
 //
 //   - A scalar value (string, number, bool, ...) stringifies to itself, exactly
 //     as fmt.Sprintf("%v", raw) always has — unchanged behaviour.
