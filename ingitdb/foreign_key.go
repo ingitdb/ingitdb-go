@@ -62,9 +62,8 @@ func ResolveForeignKey(declaringFullID, fk string, collections map[string]*Colle
 // fmt.Sprintf("%v", raw), so a `type: any` or list column (`event_ids: [a,
 // b]`) turned into the single literal value "[a b]" — never a real key, so
 // every such record either failed FK validation or fell into one bogus $fk
-// group. (dalgo2ingitdb's own write/delete FK checks are a separate repo and
-// do not go through this helper; that is tracked as a follow-up there, not
-// fixed here: https://github.com/ingitdb/dalgo2ingitdb/issues/18.)
+// group. dalgo2ingitdb's write/delete FK checks use this helper too
+// (https://github.com/ingitdb/dalgo2ingitdb/pull/19).
 //
 //   - A scalar value (string, number, bool, ...) stringifies to itself, exactly
 //     as fmt.Sprintf("%v", raw) always has — unchanged behaviour.
