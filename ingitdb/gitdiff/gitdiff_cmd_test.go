@@ -95,3 +95,25 @@ func TestCmdGitDiffer_DiffFiles_RealRepo(t *testing.T) {
 		t.Errorf("b.yaml kind = %q, want added", kinds["b.yaml"])
 	}
 }
+
+func TestParseNameStatus_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	out := "invalid-line-no-tab\n" +
+		"R100\tonly-one-path\n" +
+		"C100\tonly-one-path\n"
+	got := parseNameStatus(out)
+	if len(got) != 0 {
+		t.Fatalf("expected 0 entries for invalid lines, got %d: %+v", len(got), got)
+	}
+}
+
+func TestCmdGitDiffer_DiffFiles_Error(t *testing.T) {
+	t.Parallel()
+
+	// An invalid repo path or non-existent commit ref causes git diff to fail
+	_, err := NewGitDiffer().DiffFiles(context.Background(), t.TempDir(), "nonexistent-from-ref", "HEAD")
+	if err == nil {
+		t.Fatal("expected error from git diff with non-existent ref")
+	}
+}

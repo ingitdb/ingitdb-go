@@ -65,10 +65,7 @@ func CollectionForRecordFile(def *ingitdb.Definition, absPath string) (string, *
 		}
 		switch colDef.RecordFile.RecordType {
 		case ingitdb.SingleRecord:
-			pattern, err := singleRecordGlobPattern(colDef)
-			if err != nil {
-				continue
-			}
+			pattern := singleRecordGlobPattern(colDef)
 			matched, matchErr := filepath.Match(filepath.Clean(pattern), absPath)
 			if matchErr == nil && matched && !skipRecordPath(absPath, colDef.RecordFile) {
 				return id, colDef

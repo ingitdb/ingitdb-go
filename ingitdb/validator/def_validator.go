@@ -92,10 +92,12 @@ func (dl defLoader) loadInheritedBase(fromFile, inherits string, seen map[string
 	return base, nil
 }
 
+var filepathAbs = filepath.Abs
+
 // absInheritPath returns the absolute form of p for cycle-detection keys,
 // falling back to p unchanged when the working directory cannot be resolved.
 func absInheritPath(p string) string {
-	if abs, err := filepath.Abs(p); err == nil {
+	if abs, err := filepathAbs(p); err == nil {
 		return abs
 	}
 	return p

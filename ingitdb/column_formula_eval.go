@@ -278,9 +278,7 @@ func goMapToStarlark(m map[string]any) (starlark.Value, error) {
 		if err != nil {
 			return nil, fmt.Errorf("key %q: %w", k, err)
 		}
-		if err := dict.SetKey(starlark.String(k), v); err != nil {
-			return nil, fmt.Errorf("key %q: %w", k, err)
-		}
+		_ = dict.SetKey(starlark.String(k), v)
 	}
 	dict.Freeze()
 	return dict, nil

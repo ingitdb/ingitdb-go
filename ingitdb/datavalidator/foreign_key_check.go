@@ -148,10 +148,7 @@ func loadCollectionRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error
 }
 
 func loadSingleRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
-	pattern, err := singleRecordGlobPattern(colDef)
-	if err != nil {
-		return nil, err
-	}
+	pattern := singleRecordGlobPattern(colDef)
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, err

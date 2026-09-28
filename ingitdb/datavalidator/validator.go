@@ -101,11 +101,7 @@ func shouldSkipRecordParsing(colDef *ingitdb.CollectionDef) bool {
 }
 
 func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionDef) (int, int, []ingitdb.ValidationError) {
-	pattern, err := singleRecordGlobPattern(colDef)
-	if err != nil {
-		validationErr := newValidationError(collectionKey, "", "", "", "invalid record file pattern", err)
-		return 0, 0, []ingitdb.ValidationError{validationErr}
-	}
+	pattern := singleRecordGlobPattern(colDef)
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		validationErr := newValidationError(collectionKey, pattern, "", "", "failed to glob record files", err)
@@ -156,14 +152,14 @@ func validateSingleRecordFile(collectionKey string, colDef *ingitdb.CollectionDe
 	return 1, 1, nil
 }
 
-func singleRecordGlobPattern(colDef *ingitdb.CollectionDef) (string, error) {
+func singleRecordGlobPattern(colDef *ingitdb.CollectionDef) string {
 	baseDir := filepath.Join(colDef.DirPath, colDef.RecordFile.RecordsBasePath())
 	fileName := colDef.RecordFile.Name
 	if strings.Contains(fileName, "{key}") {
 		globName := strings.ReplaceAll(fileName, "{key}", "*")
-		return filepath.Join(baseDir, globName), nil
+		return filepath.Join(baseDir, globName)
 	}
-	return filepath.Join(baseDir, fileName), nil
+	return filepath.Join(baseDir, fileName)
 }
 
 func skipRecordPath(filePath string, rfd *ingitdb.RecordFileDef) bool {
@@ -285,15 +281,7 @@ func parseListRows(content []byte, colDef *ingitdb.CollectionDef) ([]map[string]
 		if err != nil {
 			return nil, err
 		}
-		rawRows, ok := data[listRecordsKey]
-		if !ok {
-			return nil, fmt.Errorf("csv parser did not return %q rows", listRecordsKey)
-		}
-		rows, ok := rawRows.([]map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("csv parser returned %q as %T", listRecordsKey, rawRows)
-		}
-		return rows, nil
+		return data[listRecordsKey].([]map[string]any), nil
 	case ingitdb.RecordFormatINGR:
 		records, err := ingitdb.ParseMapOfRecordsContent(content, ingitdb.RecordFormatINGR)
 		if err != nil {
