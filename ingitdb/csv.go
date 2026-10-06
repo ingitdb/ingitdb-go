@@ -29,6 +29,10 @@ func jsonCSVCells(colDef *CollectionDef) bool {
 // declared as returning map[string]any) without losing list-of-records
 // semantics — the caller unwraps via the recordsKey constant.
 func parseCSVForCollection(content []byte, colDef *CollectionDef) (map[string]any, error) {
+	if jsonCSVCells(colDef) && colDef.SourceSchema != nil && colDef.SourceSchema.KeyMode != "" &&
+		(len(colDef.ColumnsOrder) == 0 || colDef.ColumnsOrder[0] != "$ID") {
+		return nil, fmt.Errorf("imported json-v1 CSV requires $ID first in columns_order")
+	}
 	if len(colDef.ColumnsOrder) == 0 {
 		return nil, fmt.Errorf("csv read requires non-empty columns_order on the collection definition")
 	}
@@ -141,7 +145,11 @@ func encodeCSVForCollection(value any, colDef *CollectionDef) ([]byte, error) {
 		for j, col := range colDef.ColumnsOrder {
 			raw, ok := row[col]
 			if !ok {
-				cells[j] = ""
+				if jsonCSVCells(colDef) {
+					cells[j] = "null"
+				} else {
+					cells[j] = ""
+				}
 				continue
 			}
 			var cell string

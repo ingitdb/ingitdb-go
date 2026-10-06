@@ -89,6 +89,10 @@ func mergeListSequence(base, ours, theirs []byte, col *ingitdb.CollectionDef, op
 // declared primary key, else a `$id` or `id` column, else nil when none is
 // available (in which case the conflict escalates).
 func csvKeyColumns(col *ingitdb.CollectionDef) []string {
+	if col.SourceSchema != nil && col.SourceSchema.KeyMode != "" && col.RecordFile != nil &&
+		col.RecordFile.CSVCellEncoding == "json-v1" {
+		return []string{"$ID"}
+	}
 	if len(col.PrimaryKey) > 0 {
 		return col.PrimaryKey
 	}
@@ -114,6 +118,11 @@ func parseCSVRecords(content []byte, col *ingitdb.CollectionDef, keyCols []strin
 	rows, _ := parsed["$records"].([]map[string]any)
 	records := make([]Record, 0, len(rows))
 	for _, row := range rows {
+		if len(keyCols) == 1 && keyCols[0] == "$ID" {
+			if _, ok := ingitdb.ResolveListRecordKey(row, col); !ok {
+				return nil, fmt.Errorf("imported CSV row is missing a nonempty $ID transport key")
+			}
+		}
 		parts := make([]string, len(keyCols))
 		for i, kc := range keyCols {
 			parts[i] = fmt.Sprintf("%v", row[kc])

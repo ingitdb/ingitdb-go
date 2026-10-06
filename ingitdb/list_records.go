@@ -222,6 +222,7 @@ func ResolveListRecordKey(row map[string]any, colDef *CollectionDef) (string, bo
 		if id, ok := row["$ID"].(string); ok && id != "" {
 			return id, true
 		}
+		return "", false // Imported transport identity must never fall back to source fields.
 	}
 	if colDef != nil && len(colDef.PrimaryKey) > 0 {
 		parts := make([]string, len(colDef.PrimaryKey))

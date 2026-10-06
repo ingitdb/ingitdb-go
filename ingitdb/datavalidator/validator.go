@@ -245,12 +245,20 @@ func validateListOfRecordsFile(collectionKey string, colDef *ingitdb.CollectionD
 	}
 	passed := 0
 	var errors []ingitdb.ValidationError
+	seenImportedIDs := make(map[string]bool)
 	for _, row := range rows {
 		recordKey, keyOK := ingitdb.ResolveListRecordKey(row, colDef)
 		if !keyOK {
 			validationErr = newValidationError(collectionKey, filePath, "", "", "list record has no resolvable key", nil)
 			errors = append(errors, validationErr)
 			continue
+		}
+		if colDef.SourceSchema != nil && colDef.SourceSchema.KeyMode != "" {
+			if seenImportedIDs[recordKey] {
+				errors = append(errors, newValidationError(collectionKey, filePath, recordKey, "$ID", "duplicate imported transport ID", nil))
+				continue
+			}
+			seenImportedIDs[recordKey] = true
 		}
 		recordErrors := validateRecordData(collectionKey, filePath, recordKey, colDef, row)
 		if len(recordErrors) > 0 {

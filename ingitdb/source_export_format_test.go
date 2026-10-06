@@ -25,6 +25,7 @@ func TestImportedCSVJSONCellsKeepTransportIDAndTypes(t *testing.T) {
 	rows := []map[string]any{
 		{"$ID": "pk-composite", "part_a": "A", "part_b": int64(2), "amount": "1.20", "note": "", "wide": int64(9007199254740993)},
 		{"$ID": "pk-null", "part_a": "B", "part_b": int64(3), "amount": nil, "note": "line 1,\nline 2", "wide": int64(1)},
+		{"$ID": "pk-omitted", "part_a": "C", "part_b": int64(4), "amount": "2.00", "wide": int64(2)},
 	}
 	encoded, err := EncodeRecordContentForCollection(rows, col)
 	if err != nil {
@@ -35,7 +36,7 @@ func TestImportedCSVJSONCellsKeepTransportIDAndTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := parsed[recordsKey].([]map[string]any)
-	if len(got) != 2 || got[0]["wide"] != int64(9007199254740993) || got[0]["note"] != "" || got[1]["amount"] != nil || got[1]["note"] != "line 1,\nline 2" {
+	if len(got) != 3 || got[0]["wide"] != int64(9007199254740993) || got[0]["note"] != "" || got[1]["amount"] != nil || got[1]["note"] != "line 1,\nline 2" || got[2]["note"] != nil {
 		t.Fatalf("CSV typed cells changed: %#v", got)
 	}
 	if id, ok := ResolveListRecordKey(got[0], col); !ok || id != "pk-composite" {
@@ -110,5 +111,28 @@ func TestImportedJSONListsRejectTrailingValues(t *testing.T) {
 		if _, err := ParseListOfRecordsContent([]byte(test.data), test.format); err == nil || !strings.Contains(err.Error(), "trailing content") {
 			t.Fatalf("%s accepted trailing JSON value: %v", test.format, err)
 		}
+	}
+}
+
+func TestImportedListIdentityFailsClosed(t *testing.T) {
+	col := &CollectionDef{PrimaryKey: []string{"native_id"}, SourceSchema: &SourceSchemaDef{KeyMode: "source-primary-key"}}
+	for _, row := range []map[string]any{
+		{"native_id": int64(1)},
+		{"$ID": "", "native_id": int64(1)},
+		{"$ID": int64(1), "native_id": int64(1)},
+	} {
+		if id, ok := ResolveListRecordKey(row, col); ok {
+			t.Fatalf("damaged imported identity fell back to source PK: %q %#v", id, row)
+		}
+	}
+	col.RecordFile = &RecordFileDef{Name: "records.csv", Format: RecordFormatCSV, RecordType: ListOfRecords, CSVCellEncoding: "json-v1"}
+	col.ID = "test"
+	col.Columns = map[string]*ColumnDef{"native_id": {Type: ColumnTypeInt}}
+	col.ColumnsOrder = []string{"native_id"}
+	if err := col.Validate(); err == nil || !strings.Contains(err.Error(), "requires $ID first") {
+		t.Fatalf("imported CSV without identity header was accepted: %v", err)
+	}
+	if _, err := parseCSVForCollection([]byte("native_id\n1\n"), col); err == nil || !strings.Contains(err.Error(), "requires $ID first") {
+		t.Fatalf("imported CSV parse without identity header was accepted: %v", err)
 	}
 }

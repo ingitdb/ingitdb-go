@@ -66,6 +66,27 @@ func TestImportedFormatsValidateTransportIDsAndWideValues(t *testing.T) {
 			if passed, total := result.GetRecordCounts("items"); passed != 1 || total != 1 || len(result.Errors()) != 0 {
 				t.Fatalf("native %s validation: passed=%d total=%d errors=%v", format, passed, total, result.Errors())
 			}
+			if format != ingitdb.RecordFormatINGR {
+				var duplicate []byte
+				if format == ingitdb.RecordFormatCSV {
+					duplicate, err = ingitdb.EncodeRecordContentForCollection([]map[string]any{row, row}, col)
+				} else {
+					duplicate, err = ingitdb.EncodeListOfRecordsContent([]map[string]any{row, row}, format, col.ColumnsOrder)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(colDir, recordFile.Name), duplicate, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				result, err = NewValidator().Validate(context.Background(), root, def)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if passed, total := result.GetRecordCounts("items"); passed != 1 || total != 2 || len(result.Errors()) == 0 {
+					t.Fatalf("duplicate imported %s ID accepted: passed=%d total=%d errors=%v", format, passed, total, result.Errors())
+				}
+			}
 		})
 	}
 }

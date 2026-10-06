@@ -142,6 +142,11 @@ func (v *CollectionDef) Validate() error {
 	if err := v.RecordFile.Validate(); err != nil {
 		return fmt.Errorf("invalid record_file definition: %w", err)
 	}
+	if v.RecordFile.Format == RecordFormatCSV && v.RecordFile.CSVCellEncoding == "json-v1" &&
+		v.SourceSchema != nil && v.SourceSchema.KeyMode != "" &&
+		(len(v.ColumnsOrder) == 0 || v.ColumnsOrder[0] != "$ID") {
+		return fmt.Errorf("imported json-v1 CSV requires $ID first in columns_order")
+	}
 	if v.SubCollections != nil {
 		for id, subColDef := range v.SubCollections {
 			if err := subColDef.Validate(); err != nil {
