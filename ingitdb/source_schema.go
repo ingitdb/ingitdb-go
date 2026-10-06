@@ -1,6 +1,10 @@
 package ingitdb
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+)
 
 // SourceSchemaDef records the portable source schema of an imported table.
 // Foreign-key actions and secondary indexes are preserved for introspection,
@@ -11,15 +15,19 @@ type SourceSchemaDef struct {
 	// without making the native schema depend on a particular SQL dialect.
 	SourceDefinitionJSON string `yaml:"source_definition_json,omitempty" json:"source_definition_json,omitempty"`
 	SourceRightsJSON     string `yaml:"source_rights_json,omitempty" json:"source_rights_json,omitempty"`
-	// ConstraintValidation records a provider-side source snapshot audit.
+	// ConstraintValidation records a provider-side preflight audit. The source
+	// may change afterward unless the caller holds its own stable snapshot.
 	// It does not mean native write-time enforcement.
 	ConstraintValidation string `yaml:"constraint_validation,omitempty" json:"constraint_validation,omitempty"`
 	// Raw tuple comparison is opt-in because SQL equality may apply collation
 	// and affinity rules that differ from stored Go-value equality.
-	RelationshipComparison string                `yaml:"relationship_comparison,omitempty" json:"relationship_comparison,omitempty"`
-	Fields                 []SourceFieldDef      `yaml:"fields,omitempty" json:"fields,omitempty"`
-	Indexes                []SourceIndexDef      `yaml:"indexes,omitempty" json:"indexes,omitempty"`
-	ForeignKeys            []SourceForeignKeyDef `yaml:"foreign_keys,omitempty" json:"foreign_keys,omitempty"`
+	RelationshipComparison string `yaml:"relationship_comparison,omitempty" json:"relationship_comparison,omitempty"`
+	// StorageClassFiles map record IDs to original provider storage classes
+	// where the exported scalar value alone cannot retain them.
+	StorageClassFiles []string              `yaml:"storage_class_files,omitempty" json:"storage_class_files,omitempty"`
+	Fields            []SourceFieldDef      `yaml:"fields,omitempty" json:"fields,omitempty"`
+	Indexes           []SourceIndexDef      `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	ForeignKeys       []SourceForeignKeyDef `yaml:"foreign_keys,omitempty" json:"foreign_keys,omitempty"`
 }
 
 type SourceFieldDef struct {
@@ -62,6 +70,13 @@ func (s *SourceSchemaDef) Validate(columns map[string]*ColumnDef) error {
 	}
 	if s.RelationshipComparison != "" && s.RelationshipComparison != "raw" && s.RelationshipComparison != "provider-native" && s.RelationshipComparison != "unverified" {
 		return fmt.Errorf("invalid source_schema.relationship_comparison %q", s.RelationshipComparison)
+	}
+	seenFiles := map[string]bool{}
+	for _, name := range s.StorageClassFiles {
+		if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".jsonl") || seenFiles[name] {
+			return fmt.Errorf("invalid source_schema storage class file %q", name)
+		}
+		seenFiles[name] = true
 	}
 	seen := map[string]bool{}
 	for _, f := range s.Fields {
