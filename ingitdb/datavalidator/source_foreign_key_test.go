@@ -16,7 +16,7 @@ func TestSourceForeignKeysValidateCompositeTargetColumns(t *testing.T) {
 	children := writeMapCollectionJSON(t, dir, "children", `{"c1":{"parent_code":"A","parent_revision":1},"c2":{"parent_code":"A","parent_revision":2},"c3":{"parent_code":null,"parent_revision":9}}`, map[string]*ingitdb.ColumnDef{
 		"parent_code": {Type: ingitdb.ColumnTypeString}, "parent_revision": {Type: ingitdb.ColumnTypeInt},
 	})
-	children.SourceSchema = &ingitdb.SourceSchemaDef{ForeignKeys: []ingitdb.SourceForeignKeyDef{{
+	children.SourceSchema = &ingitdb.SourceSchemaDef{RelationshipComparison: "raw", ForeignKeys: []ingitdb.SourceForeignKeyDef{{
 		Fields: []string{"parent_code", "parent_revision"}, ReferencedCollection: "parents",
 		ReferencedFields: []string{"code", "revision"}, SourceEnforcement: "disabled",
 	}}}
@@ -34,7 +34,7 @@ func TestSourceForeignKeysDoNotMisjudgeNativeSQLCollation(t *testing.T) {
 	dir := t.TempDir()
 	parent := writeMapCollectionJSON(t, dir, "p", `{"p1":{"k":"A"}}`, map[string]*ingitdb.ColumnDef{"k": {Type: ingitdb.ColumnTypeString}})
 	child := writeMapCollectionJSON(t, dir, "c", `{"c1":{"v":"a"}}`, map[string]*ingitdb.ColumnDef{"v": {Type: ingitdb.ColumnTypeString}})
-	child.SourceSchema = &ingitdb.SourceSchemaDef{SourceDefinitionJSON: `{"dialect":"sqlite","createSql":"CREATE TABLE c(v TEXT REFERENCES p(k))"}`,
+	child.SourceSchema = &ingitdb.SourceSchemaDef{RelationshipComparison: "provider-native", SourceDefinitionJSON: `{"dialect":"sqlite","createSql":"CREATE TABLE c(v TEXT REFERENCES p(k))"}`,
 		ForeignKeys: []ingitdb.SourceForeignKeyDef{{Fields: []string{"v"}, ReferencedCollection: "p", ReferencedFields: []string{"k"}}}}
 	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{"p": parent, "c": child}}
 	result, err := NewValidator().Validate(context.Background(), dir, def)

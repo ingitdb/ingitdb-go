@@ -13,10 +13,13 @@ type SourceSchemaDef struct {
 	SourceRightsJSON     string `yaml:"source_rights_json,omitempty" json:"source_rights_json,omitempty"`
 	// ConstraintValidation records a provider-side source snapshot audit.
 	// It does not mean native write-time enforcement.
-	ConstraintValidation string                `yaml:"constraint_validation,omitempty" json:"constraint_validation,omitempty"`
-	Fields               []SourceFieldDef      `yaml:"fields,omitempty" json:"fields,omitempty"`
-	Indexes              []SourceIndexDef      `yaml:"indexes,omitempty" json:"indexes,omitempty"`
-	ForeignKeys          []SourceForeignKeyDef `yaml:"foreign_keys,omitempty" json:"foreign_keys,omitempty"`
+	ConstraintValidation string `yaml:"constraint_validation,omitempty" json:"constraint_validation,omitempty"`
+	// Raw tuple comparison is opt-in because SQL equality may apply collation
+	// and affinity rules that differ from stored Go-value equality.
+	RelationshipComparison string                `yaml:"relationship_comparison,omitempty" json:"relationship_comparison,omitempty"`
+	Fields                 []SourceFieldDef      `yaml:"fields,omitempty" json:"fields,omitempty"`
+	Indexes                []SourceIndexDef      `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	ForeignKeys            []SourceForeignKeyDef `yaml:"foreign_keys,omitempty" json:"foreign_keys,omitempty"`
 }
 
 type SourceFieldDef struct {
@@ -56,6 +59,9 @@ func (s *SourceSchemaDef) Validate(columns map[string]*ColumnDef) error {
 	}
 	if s.KeyMode != "" && s.KeyMode != "source-primary-key" && s.KeyMode != "export-ordinal" {
 		return fmt.Errorf("invalid source_schema.key_mode %q", s.KeyMode)
+	}
+	if s.RelationshipComparison != "" && s.RelationshipComparison != "raw" && s.RelationshipComparison != "provider-native" && s.RelationshipComparison != "unverified" {
+		return fmt.Errorf("invalid source_schema.relationship_comparison %q", s.RelationshipComparison)
 	}
 	seen := map[string]bool{}
 	for _, f := range s.Fields {
