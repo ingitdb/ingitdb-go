@@ -25,6 +25,7 @@ type SourceFieldDef struct {
 	Scale         int    `yaml:"scale,omitempty" json:"scale,omitempty"`
 	Length        *int   `yaml:"length,omitempty" json:"length,omitempty"`
 	DefaultKind   string `yaml:"default_kind,omitempty" json:"default_kind,omitempty"`
+	DefaultType   string `yaml:"default_type,omitempty" json:"default_type,omitempty"`
 	DefaultJSON   string `yaml:"default_json,omitempty" json:"default_json,omitempty"`
 	Encoding      string `yaml:"encoding,omitempty" json:"encoding,omitempty"`
 }

@@ -65,6 +65,9 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 	for _, validationErr := range validateForeignKeyReferences(def) {
 		result.Append(validationErr)
 	}
+	for _, validationErr := range validateSourceForeignKeys(def) {
+		result.Append(validationErr)
+	}
 
 	return result, nil
 }
