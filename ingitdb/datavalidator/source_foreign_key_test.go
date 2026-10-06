@@ -29,3 +29,19 @@ func TestSourceForeignKeysValidateCompositeTargetColumns(t *testing.T) {
 		t.Fatalf("want only composite orphan c2; got %v", errs)
 	}
 }
+
+func TestSourceForeignKeysDoNotMisjudgeNativeSQLCollation(t *testing.T) {
+	dir := t.TempDir()
+	parent := writeMapCollectionJSON(t, dir, "p", `{"p1":{"k":"A"}}`, map[string]*ingitdb.ColumnDef{"k": {Type: ingitdb.ColumnTypeString}})
+	child := writeMapCollectionJSON(t, dir, "c", `{"c1":{"v":"a"}}`, map[string]*ingitdb.ColumnDef{"v": {Type: ingitdb.ColumnTypeString}})
+	child.SourceSchema = &ingitdb.SourceSchemaDef{SourceDefinitionJSON: `{"dialect":"sqlite","createSql":"CREATE TABLE c(v TEXT REFERENCES p(k))"}`,
+		ForeignKeys: []ingitdb.SourceForeignKeyDef{{Fields: []string{"v"}, ReferencedCollection: "p", ReferencedFields: []string{"k"}}}}
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{"p": parent, "c": child}}
+	result, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Errors()) != 0 {
+		t.Fatalf("source SQL semantics must not be reinterpreted as raw native equality: %v", result.Errors())
+	}
+}

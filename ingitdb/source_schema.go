@@ -9,8 +9,11 @@ type SourceSchemaDef struct {
 	KeyMode string `yaml:"key_mode,omitempty" json:"key_mode,omitempty"`
 	// The following JSON payloads retain optional DALgo provider metadata
 	// without making the native schema depend on a particular SQL dialect.
-	SourceDefinitionJSON string                `yaml:"source_definition_json,omitempty" json:"source_definition_json,omitempty"`
-	SourceRightsJSON     string                `yaml:"source_rights_json,omitempty" json:"source_rights_json,omitempty"`
+	SourceDefinitionJSON string `yaml:"source_definition_json,omitempty" json:"source_definition_json,omitempty"`
+	SourceRightsJSON     string `yaml:"source_rights_json,omitempty" json:"source_rights_json,omitempty"`
+	// ConstraintValidation records a provider-side source snapshot audit.
+	// It does not mean native write-time enforcement.
+	ConstraintValidation string                `yaml:"constraint_validation,omitempty" json:"constraint_validation,omitempty"`
 	Fields               []SourceFieldDef      `yaml:"fields,omitempty" json:"fields,omitempty"`
 	Indexes              []SourceIndexDef      `yaml:"indexes,omitempty" json:"indexes,omitempty"`
 	ForeignKeys          []SourceForeignKeyDef `yaml:"foreign_keys,omitempty" json:"foreign_keys,omitempty"`

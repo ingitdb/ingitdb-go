@@ -21,6 +21,12 @@ func validateSourceForeignKeys(def *ingitdb.Definition) []ingitdb.ValidationErro
 		if collection.SourceSchema == nil {
 			continue
 		}
+		// SQL collations and type affinity can make raw Go-value comparisons
+		// disagree with the source database (for example SQLite NOCASE). The
+		// provider's native constraint checker owns exact SQL semantics.
+		if collection.SourceSchema.SourceDefinitionJSON != "" {
+			continue
+		}
 		rows, err := loadCollectionRecords(collection)
 		if err != nil {
 			continue
