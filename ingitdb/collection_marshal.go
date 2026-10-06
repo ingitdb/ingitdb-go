@@ -62,6 +62,13 @@ func (c *CollectionDef) MarshalYAML() (interface{}, error) {
 		_ = pkNode.Encode(c.PrimaryKey)
 		addNode("primary_key", pkNode)
 	}
+	if c.SourceSchema != nil {
+		schemaNode := &yaml.Node{}
+		if err := schemaNode.Encode(c.SourceSchema); err != nil {
+			return nil, err
+		}
+		addNode("source_schema", schemaNode)
+	}
 	if c.DefaultView != nil {
 		dvNode := &yaml.Node{}
 		_ = dvNode.Encode(c.DefaultView)

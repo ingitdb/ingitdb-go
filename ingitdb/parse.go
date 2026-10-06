@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"sort"
 
@@ -26,9 +27,21 @@ func ParseRecordContent(content []byte, format RecordFormat) (map[string]any, er
 			return nil, fmt.Errorf("failed to parse YAML record: %w", err)
 		}
 	case RecordFormatJSON:
-		err := json.Unmarshal(content, &data)
+		decoder := json.NewDecoder(bytes.NewReader(content))
+		decoder.UseNumber()
+		err := decoder.Decode(&data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse JSON record: %w", err)
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			if err == nil {
+				return nil, fmt.Errorf("failed to parse JSON record: trailing value")
+			}
+			return nil, fmt.Errorf("failed to parse JSON record: trailing content: %w", err)
+		}
+		for key, value := range data {
+			data[key] = normalizeJSONNumber(value)
 		}
 	case RecordFormatTOML:
 		err := toml.Unmarshal(content, &data)
@@ -39,6 +52,36 @@ func ParseRecordContent(content []byte, format RecordFormat) (map[string]any, er
 		return nil, fmt.Errorf("unsupported record format %q", format)
 	}
 	return data, nil
+}
+
+// normalizeJSONNumber retains integral JSON values as int64, including values
+// above the float64 exact-integer boundary. Fractional JSON values remain
+// float64 for compatibility with existing numeric validation and queries.
+func normalizeJSONNumber(value any) any {
+	switch v := value.(type) {
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			// Preserve the long-standing float64 shape for safe JSON integers.
+			// Larger values require int64 to avoid irreversible rounding.
+			if i >= -9007199254740991 && i <= 9007199254740991 {
+				return float64(i)
+			}
+			return i
+		}
+		if f, err := v.Float64(); err == nil {
+			return f
+		}
+		return v
+	case map[string]any:
+		for key, child := range v {
+			v[key] = normalizeJSONNumber(child)
+		}
+	case []any:
+		for i, child := range v {
+			v[i] = normalizeJSONNumber(child)
+		}
+	}
+	return value
 }
 
 // ParseRecordContentForCollection parses record content using the
