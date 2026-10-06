@@ -64,9 +64,7 @@ func (c *CollectionDef) MarshalYAML() (interface{}, error) {
 	}
 	if c.SourceSchema != nil {
 		schemaNode := &yaml.Node{}
-		if err := schemaNode.Encode(c.SourceSchema); err != nil {
-			return nil, err
-		}
+		_ = schemaNode.Encode(c.SourceSchema)
 		addNode("source_schema", schemaNode)
 	}
 	if c.DefaultView != nil {
