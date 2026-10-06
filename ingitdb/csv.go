@@ -5,6 +5,7 @@ package ingitdb
 import (
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,10 @@ import (
 // in the map[string]any returned by ParseRecordContentForCollection.
 // Callers reach the rows via data["$records"] (typed []map[string]any).
 const recordsKey = "$records"
+
+func jsonCSVCells(colDef *CollectionDef) bool {
+	return colDef != nil && colDef.RecordFile != nil && colDef.RecordFile.CSVCellEncoding == "json-v1"
+}
 
 // parseCSVForCollection reads RFC 4180 CSV bytes, validates the header
 // matches colDef.ColumnsOrder exactly (same names, same order), and
@@ -62,7 +67,21 @@ func parseCSVForCollection(content []byte, colDef *CollectionDef) (map[string]an
 		// }
 		row := make(map[string]any, len(header))
 		for i, col := range header {
-			row[col] = fields[i]
+			if jsonCSVCells(colDef) {
+				decoder := json.NewDecoder(bytes.NewReader([]byte(fields[i])))
+				decoder.UseNumber()
+				var value any
+				if err := decoder.Decode(&value); err != nil {
+					return nil, fmt.Errorf("csv row %d field %q: invalid json-v1 cell: %w", len(rows)+1, col, err)
+				}
+				var trailing any
+				if err := decoder.Decode(&trailing); err != io.EOF {
+					return nil, fmt.Errorf("csv row %d field %q: trailing json-v1 cell content", len(rows)+1, col)
+				}
+				row[col] = normalizeJSONNumber(value)
+			} else {
+				row[col] = fields[i]
+			}
 		}
 		rows = append(rows, row)
 	}
@@ -125,7 +144,18 @@ func encodeCSVForCollection(value any, colDef *CollectionDef) ([]byte, error) {
 				cells[j] = ""
 				continue
 			}
-			cell, cellErr := csvCellString(raw, col, i)
+			var cell string
+			var cellErr error
+			if jsonCSVCells(colDef) {
+				encoded, err := json.Marshal(raw)
+				if err != nil {
+					cellErr = fmt.Errorf("csv row %d field %q: encode json-v1 cell: %w", i, col, err)
+				} else {
+					cell = string(encoded)
+				}
+			} else {
+				cell, cellErr = csvCellString(raw, col, i)
+			}
 			if cellErr != nil {
 				return nil, cellErr
 			}

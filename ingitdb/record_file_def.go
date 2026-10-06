@@ -22,6 +22,10 @@ const (
 type RecordFileDef struct {
 	Name   string       `yaml:"name"`
 	Format RecordFormat `yaml:"format"`
+	// CSVCellEncoding is opt-in so existing CSV collections keep their
+	// historical all-string cells. json-v1 stores each cell as a JSON literal,
+	// preserving NULL, empty string, booleans, numbers, and quoted text.
+	CSVCellEncoding string `yaml:"csv_cell_encoding,omitempty" json:"csv_cell_encoding,omitempty"`
 	// RecordsDir overrides the directory below CollectionDef.DirPath where
 	// record files live. Nil preserves the historical implicit behavior:
 	// keyed filenames live under $records and static filenames live directly
@@ -83,6 +87,9 @@ func (rfd RecordFileDef) Validate() error {
 	if rfd.Format == RecordFormatCSV && rfd.RecordType != ListOfRecords {
 		return fmt.Errorf("format %q requires record type %q, got %q",
 			RecordFormatCSV, ListOfRecords, rfd.RecordType)
+	}
+	if rfd.CSVCellEncoding != "" && (rfd.Format != RecordFormatCSV || rfd.CSVCellEncoding != "json-v1") {
+		return fmt.Errorf("unsupported csv_cell_encoding %q for format %q", rfd.CSVCellEncoding, rfd.Format)
 	}
 	if rfd.Format == RecordFormatJSONL && rfd.RecordType != ListOfRecords {
 		return fmt.Errorf("format %q requires record type %q, got %q",

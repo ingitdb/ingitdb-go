@@ -122,6 +122,11 @@ func (v *CollectionDef) Validate() error {
 		}
 	}
 	for i, colName := range v.ColumnsOrder {
+		if colName == "$ID" && i == 0 && v.RecordFile != nil &&
+			v.RecordFile.Format == RecordFormatCSV && v.RecordFile.CSVCellEncoding == "json-v1" &&
+			v.SourceSchema != nil && v.SourceSchema.KeyMode != "" {
+			continue // Transport identity is reserved metadata, never a source column.
+		}
 		if _, ok := v.Columns[colName]; !ok {
 			return fmt.Errorf("columns_order[%d] references unspecified column: %s", i, colName)
 		}

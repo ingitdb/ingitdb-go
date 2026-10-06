@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -49,8 +50,19 @@ func parseJSONList(content []byte) ([]map[string]any, error) {
 		return nil, nil
 	}
 	var rows []map[string]any
-	if err := json.Unmarshal(content, &rows); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	if err := decoder.Decode(&rows); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON list: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, fmt.Errorf("failed to parse JSON list: trailing content")
+	}
+	for _, row := range rows {
+		for key, value := range row {
+			row[key] = normalizeJSONNumber(value)
+		}
 	}
 	return rows, nil
 }
@@ -63,8 +75,17 @@ func parseJSONLList(content []byte) ([]map[string]any, error) {
 			continue
 		}
 		var row map[string]any
-		if err := json.Unmarshal(line, &row); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(line))
+		decoder.UseNumber()
+		if err := decoder.Decode(&row); err != nil {
 			return nil, fmt.Errorf("failed to parse JSONL line %d: %w", i+1, err)
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			return nil, fmt.Errorf("failed to parse JSONL line %d: trailing content", i+1)
+		}
+		for key, value := range row {
+			row[key] = normalizeJSONNumber(value)
 		}
 		rows = append(rows, row)
 	}
@@ -197,6 +218,11 @@ func encodeYAMLList(rows []map[string]any, columnsOrder []string) ([]byte, error
 // column (e.g. demo-ingitdb's order_details subcollection) would resolve to no
 // key and every record would be reported unkeyed.
 func ResolveListRecordKey(row map[string]any, colDef *CollectionDef) (string, bool) {
+	if colDef != nil && colDef.SourceSchema != nil && colDef.SourceSchema.KeyMode != "" {
+		if id, ok := row["$ID"].(string); ok && id != "" {
+			return id, true
+		}
+	}
 	if colDef != nil && len(colDef.PrimaryKey) > 0 {
 		parts := make([]string, len(colDef.PrimaryKey))
 		for i, col := range colDef.PrimaryKey {
