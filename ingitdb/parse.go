@@ -59,6 +59,8 @@ func ParseRecordContent(content []byte, format RecordFormat) (map[string]any, er
 // float64 for compatibility with existing numeric validation and queries.
 func normalizeJSONNumber(value any) any {
 	switch v := value.(type) {
+	case ingr.Number:
+		return normalizeJSONNumber(json.Number(v))
 	case json.Number:
 		if i, err := v.Int64(); err == nil {
 			// Preserve the long-standing float64 shape for safe JSON integers.
@@ -321,7 +323,9 @@ func resolveINGRColumns(data map[string]map[string]any, columnsOrder []string) [
 // by the reserved `$ID` column.
 func parseINGRAsMap(content []byte) (map[string]map[string]any, error) {
 	var rows []map[string]any
-	if err := ingr.Unmarshal(content, &rows); err != nil {
+	decoder := ingr.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	if err := decoder.Decode(&rows); err != nil {
 		return nil, fmt.Errorf("failed to parse INGR records: %w", err)
 	}
 	result := make(map[string]map[string]any, len(rows))
@@ -342,7 +346,7 @@ func parseINGRAsMap(content []byte) (map[string]map[string]any, error) {
 			if k == "$ID" {
 				continue
 			}
-			fields[k] = v
+			fields[k] = normalizeJSONNumber(v)
 		}
 		result[id] = fields
 	}

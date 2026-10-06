@@ -122,6 +122,11 @@ func (v *CollectionDef) Validate() error {
 		}
 	}
 	for i, colName := range v.ColumnsOrder {
+		if colName == "$ID" && i == 0 && v.RecordFile != nil &&
+			v.RecordFile.Format == RecordFormatCSV && v.RecordFile.CSVCellEncoding == "json-v1" &&
+			v.SourceSchema != nil && v.SourceSchema.KeyMode != "" {
+			continue // Transport identity is reserved metadata, never a source column.
+		}
 		if _, ok := v.Columns[colName]; !ok {
 			return fmt.Errorf("columns_order[%d] references unspecified column: %s", i, colName)
 		}
@@ -136,6 +141,11 @@ func (v *CollectionDef) Validate() error {
 	}
 	if err := v.RecordFile.Validate(); err != nil {
 		return fmt.Errorf("invalid record_file definition: %w", err)
+	}
+	if v.RecordFile.Format == RecordFormatCSV && v.RecordFile.CSVCellEncoding == "json-v1" &&
+		v.SourceSchema != nil && v.SourceSchema.KeyMode != "" &&
+		(len(v.ColumnsOrder) == 0 || v.ColumnsOrder[0] != "$ID") {
+		return fmt.Errorf("imported json-v1 CSV requires $ID first in columns_order")
 	}
 	if v.SubCollections != nil {
 		for id, subColDef := range v.SubCollections {
