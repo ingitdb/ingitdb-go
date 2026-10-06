@@ -38,6 +38,9 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 		for _, validationErr := range errors {
 			result.Append(validationErr)
 		}
+		for _, validationErr := range validateStorageClassFiles(collectionKey, colDef) {
+			result.Append(validationErr)
+		}
 		// Record-count bounds are a collection-level invariant checked against
 		// the record count the schema pass just produced. Only root collections
 		// are walked here (this loop, like the schema pass, iterates
@@ -63,6 +66,9 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 	// per-collection schema pass, once every collection's keys are known. It
 	// covers both root and subcollection records (shared walk).
 	for _, validationErr := range validateForeignKeyReferences(def) {
+		result.Append(validationErr)
+	}
+	for _, validationErr := range validateSourceForeignKeys(def) {
 		result.Append(validationErr)
 	}
 

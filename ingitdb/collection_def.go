@@ -34,8 +34,11 @@ type CollectionDef struct {
 	// DescribeCollection can round-trip the real PK column names instead of
 	// the synthesized "$key" placeholder. Omitted from older
 	// definition.yaml files; callers should fall back to "$key" when empty.
-	PrimaryKey  []string `yaml:"primary_key,omitempty"`
-	DefaultView *ViewDef `yaml:"default_view,omitempty"`
+	PrimaryKey []string `yaml:"primary_key,omitempty"`
+	// SourceSchema preserves the relational schema of an imported collection.
+	// Its indexes and foreign-key actions are descriptive, not write constraints.
+	SourceSchema *SourceSchemaDef `yaml:"source_schema,omitempty" json:"source_schema,omitempty"`
+	DefaultView  *ViewDef         `yaml:"default_view,omitempty"`
 	// SubCollections are not part of the collection definition file,
 	// they are stored in the "subcollections" subdirectory as directories,
 	// each containing their own .collection/definition.yaml.
@@ -99,6 +102,9 @@ func (v *CollectionDef) Validate() error {
 	var allErrors []error
 	if len(v.Columns) == 0 {
 		return fmt.Errorf("missing 'columns' in collection definition")
+	}
+	if err := v.SourceSchema.Validate(v.Columns); err != nil {
+		return err
 	}
 	for id, col := range v.Columns {
 		if err := col.Validate(); err != nil {
