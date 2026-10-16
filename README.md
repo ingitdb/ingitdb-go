@@ -2,6 +2,12 @@
 
 inGitDB schema & config types.
 
+## Flagship ecosystem product
+
+DataTug is exploring inGitDB for project definitions and version-controlled content. That integration work is ongoing; this repository contains the Go schema and configuration types.
+
+DataTug is the flagship ecosystem product. [Explore DataTug](https://datatug.app), and read [how we built its development tools](https://datatug.app/en/under-the-hood/tools-we-built/) for the open-source tools and standards behind it.
+
 ## Schema types
 
 - type [Definition](definition.go) — top-level schema definition; holds all collection definitions
