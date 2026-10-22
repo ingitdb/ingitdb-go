@@ -212,7 +212,8 @@ The parse outcomes and the freshness decisions are fixed by the shared vectors i
 
 ## Open Questions
 
-None at this time.
+- `ingitdb-ts` does not yet apply the setting to foreign-key views (`$ingitdb/<collection>/$fk`), which are cached on their own TTLs; they are materialized views of the owning collection and should follow its value. Follow-up.
+- The shared vectors live in `ingitdb/ingitdb` (PR ingitdb/ingitdb#10); until it lands, the vendored copies are the reference.
 
 ---
 *This document follows the https://specscore.md/feature-specification*
