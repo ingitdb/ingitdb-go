@@ -42,7 +42,7 @@ A declared value MUST be a comma-separated list of RFC 9111 directives, each `na
 - `max-age`, `s-maxage`, `stale-while-revalidate` or `stale-if-error` without a non-negative integer number of seconds;
 - `no-store`, `must-revalidate`, `proxy-revalidate`, `immutable`, `public`, `no-transform` or `must-understand` given an argument.
 
-Directive names are case-insensitive. A directive the reader does not know MUST be ignored, never rejected, as RFC 9111 requires of every cache, so a newer database stays readable by an older reader.
+Directive names are case-insensitive. A directive the reader does not know MUST be ignored, never rejected, as RFC 9111 requires of every cache, so a newer database stays readable by an older reader. A reader that meets a malformed directive despite validation MUST drop that directive and keep reading; it never fails a read over `cache_control`.
 
 ### REQ: cache-control-precedence
 
