@@ -49,6 +49,11 @@ type Settings struct {
 	DefaultRecordFormat ingitdb.RecordFormat `yaml:"default_record_format,omitempty"`
 
 	Languages []Language `yaml:"languages,omitempty"`
+
+	// CacheControl is an optional HTTP Cache-Control directive string
+	// (RFC 9111) that applies to every collection's files unless the
+	// collection declares its own. See ingitdb.ParseCacheControl.
+	CacheControl string `yaml:"cache_control,omitempty"`
 }
 
 // supportedRecordFormats is the closed set of record formats accepted by
@@ -73,6 +78,9 @@ var supportedRecordFormats = []ingitdb.RecordFormat{
 func (s *Settings) Validate() error {
 	if s == nil {
 		return nil
+	}
+	if err := ingitdb.ValidateCacheControl(s.CacheControl); err != nil {
+		return err
 	}
 	if s.DefaultRecordFormat == "" {
 		return nil
