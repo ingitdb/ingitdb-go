@@ -138,3 +138,16 @@ func TestDecodeCollectionDef_AcceptsInherits(t *testing.T) {
 		t.Errorf("inherits must survive decoding, got %q", colDef.Inherits)
 	}
 }
+
+// REQ:cache-control-declarable — a definition declaring cache_control decodes
+// under the strict KnownFields(true) decoder.
+func TestDecodeCollectionDef_AcceptsCacheControl(t *testing.T) {
+	var colDef ingitdb.CollectionDef
+	src := "cache_control: \"public, max-age=31536000, immutable\"\ncolumns:\n  id:\n    type: string\n"
+	if err := decodeCollectionDef([]byte(src), &colDef); err != nil {
+		t.Fatalf("cache_control must decode: %v", err)
+	}
+	if colDef.CacheControl != "public, max-age=31536000, immutable" {
+		t.Errorf("CacheControl = %q", colDef.CacheControl)
+	}
+}

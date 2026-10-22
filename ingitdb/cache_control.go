@@ -19,6 +19,15 @@ type CacheControl struct {
 	Directives map[string]string
 }
 
+// MaxDeltaSeconds is the largest delta-seconds value: RFC 9111 section 1.2.2
+// tells recipients to treat anything larger as 2^31. Validation rejects a
+// larger value; readers clamp it.
+const MaxDeltaSeconds int64 = 1 << 31
+
+// ImmutableTTLSeconds is the freshness a SHA-pinned read gets from `immutable`
+// when no max-age is declared: one year.
+const ImmutableTTLSeconds int64 = 31536000
+
 // deltaSecondsDirectives are the directives whose argument is a non-negative
 // integer number of seconds (RFC 9111 section 1.2.2).
 var deltaSecondsDirectives = []string{"max-age", "s-maxage", "stale-while-revalidate", "stale-if-error"}
@@ -89,6 +98,23 @@ func isQuotedString(s string) bool {
 	return true
 }
 
+// unquote strips the quotes of a quoted-string argument and resolves its
+// backslash escapes; any other argument is returned unchanged.
+func unquote(s string) string {
+	if !isQuotedString(s) {
+		return s
+	}
+	var b strings.Builder
+	body := s[1 : len(s)-1]
+	for i := 0; i < len(body); i++ {
+		if body[i] == '\\' {
+			i++
+		}
+		b.WriteByte(body[i])
+	}
+	return b.String()
+}
+
 func contains(list []string, s string) bool {
 	for _, x := range list {
 		if x == s {
@@ -98,48 +124,113 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// ParseCacheControl parses and validates a Cache-Control directive string.
-// It rejects syntactically invalid input: an empty value, a directive name
-// that is not an RFC 9110 token, an unterminated quoted string, a
-// delta-seconds directive whose argument is not a non-negative integer, a
-// delta-seconds directive without an argument, or a flag directive (for
-// example `immutable`) given an argument. Unknown directives are accepted and
-// ignored. Duplicate directives are rejected as ambiguous.
-func ParseCacheControl(value string) (CacheControl, error) {
-	raw := strings.TrimSpace(value)
-	if raw == "" {
-		return CacheControl{}, fmt.Errorf("cache_control must not be empty")
+func isDigits(s string) bool {
+	if s == "" {
+		return false
 	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// deltaSeconds parses a delta-seconds argument (quoted form accepted), clamped
+// to MaxDeltaSeconds. over reports that the clamp applied.
+func deltaSeconds(arg string) (n int64, over, ok bool) {
+	arg = unquote(arg)
+	if !isDigits(arg) {
+		return 0, false, false
+	}
+	n, err := strconv.ParseInt(arg, 10, 64)
+	if err != nil || n > MaxDeltaSeconds {
+		return MaxDeltaSeconds, true, true
+	}
+	return n, false, true
+}
+
+// ParseCacheControl parses and strictly validates a Cache-Control directive
+// string, for authoring time (validate). It rejects: an empty value, an empty
+// element, a directive name that is not an RFC 9110 token, a malformed
+// argument, a repeated directive, a delta-seconds directive (max-age, s-maxage,
+// stale-while-revalidate, stale-if-error) whose argument is missing, not a
+// non-negative integer (quoted form accepted) or above MaxDeltaSeconds, and a
+// flag directive (for example `immutable`) given an argument. Unknown
+// directives are accepted and ignored. Readers use ReadCacheControl instead,
+// which never fails.
+func ParseCacheControl(value string) (CacheControl, error) {
+	return parseCacheControl(value, true)
+}
+
+// ReadCacheControl parses a Cache-Control value the way a reader must: leniently.
+// A malformed directive is dropped, the first of a repeated directive wins, a
+// flag directive given an argument still counts as present, and a delta-seconds
+// value above MaxDeltaSeconds is clamped. It never fails; a value with nothing
+// usable yields an empty CacheControl.
+func ReadCacheControl(value string) CacheControl {
+	cc, _ := parseCacheControl(value, false)
+	return cc
+}
+
+func parseCacheControl(value string, strict bool) (CacheControl, error) {
+	raw := strings.TrimSpace(value)
 	cc := CacheControl{Raw: raw, Directives: map[string]string{}}
+	if raw == "" {
+		if strict {
+			return CacheControl{}, fmt.Errorf("cache_control must not be empty")
+		}
+		return cc, nil
+	}
 	for _, part := range splitDirectives(raw) {
 		part = strings.TrimSpace(part)
 		if part == "" {
-			return CacheControl{}, fmt.Errorf("cache_control %q has an empty directive", raw)
+			if strict {
+				return CacheControl{}, fmt.Errorf("cache_control %q has an empty directive", raw)
+			}
+			continue
 		}
 		name, arg, hasArg := strings.Cut(part, "=")
 		name = strings.ToLower(strings.TrimSpace(name))
 		arg = strings.TrimSpace(arg)
 		if !isToken(name) {
-			return CacheControl{}, fmt.Errorf("cache_control %q has an invalid directive name %q", raw, name)
+			if strict {
+				return CacheControl{}, fmt.Errorf("cache_control %q has an invalid directive name %q", raw, name)
+			}
+			continue
 		}
 		if _, dup := cc.Directives[name]; dup {
-			return CacheControl{}, fmt.Errorf("cache_control %q repeats directive %q", raw, name)
+			if strict {
+				return CacheControl{}, fmt.Errorf("cache_control %q repeats directive %q", raw, name)
+			}
+			continue
 		}
-		if hasArg && !isToken(arg) && !isQuotedString(arg) {
+		if strict && hasArg && !isToken(arg) && !isQuotedString(arg) {
 			return CacheControl{}, fmt.Errorf("cache_control %q has an invalid argument for directive %q", raw, name)
 		}
 		if contains(deltaSecondsDirectives, name) {
-			if !hasArg {
+			n, over, ok := deltaSeconds(arg)
+			switch {
+			case !hasArg && strict:
 				return CacheControl{}, fmt.Errorf("cache_control directive %q requires a number of seconds", name)
-			}
-			if n, err := strconv.ParseUint(arg, 10, 63); err != nil || n > 1<<62 {
+			case !ok && strict:
 				return CacheControl{}, fmt.Errorf("cache_control directive %q needs a non-negative integer number of seconds, got %q", name, arg)
+			case over && strict:
+				return CacheControl{}, fmt.Errorf("cache_control directive %q is above the maximum of %d seconds", name, MaxDeltaSeconds)
+			case !ok:
+				continue
 			}
+			cc.Directives[name] = strconv.FormatInt(n, 10)
+			continue
 		}
-		if contains(flagDirectives, name) && hasArg {
-			return CacheControl{}, fmt.Errorf("cache_control directive %q takes no argument", name)
+		if contains(flagDirectives, name) {
+			if hasArg && strict {
+				return CacheControl{}, fmt.Errorf("cache_control directive %q takes no argument", name)
+			}
+			cc.Directives[name] = ""
+			continue
 		}
-		cc.Directives[name] = arg
+		cc.Directives[name] = unquote(arg)
 	}
 	return cc, nil
 }
@@ -169,6 +260,47 @@ func (c CacheControl) MaxAgeSeconds() (int64, bool) {
 	}
 	n, _ := strconv.ParseInt(arg, 10, 64) // validated by ParseCacheControl
 	return n, true
+}
+
+// NoStore reports whether the value forbids storing the file.
+func (c CacheControl) NoStore() bool { return c.Has("no-store") }
+
+// NoCache reports whether the value forbids reusing a stored file without revalidation.
+func (c CacheControl) NoCache() bool { return c.Has("no-cache") }
+
+// Immutable reports whether the immutable directive is present.
+func (c CacheControl) Immutable() bool { return c.Has("immutable") }
+
+// FreshnessSeconds decides how long a reader may reuse a fetched file, in
+// seconds; 0 means do not store or reuse it. declared is the effective
+// cache_control, origin is the origin's own Cache-Control header ("" when
+// absent) and defaultSeconds is the freshness assumed when the origin says
+// nothing. pinned must be true only when the caller knows the read is of an
+// immutable commit SHA; anything uncertain is unpinned.
+//
+// An unpinned read may only be tightened by the declared value. A pinned read
+// may also be relaxed by it. no-store and no-cache on either side always win.
+// must-revalidate needs no handling: readers never serve a stale entry.
+func FreshnessSeconds(declared string, pinned bool, origin string, defaultSeconds int64) int64 {
+	d := ReadCacheControl(declared)
+	o := ReadCacheControl(origin)
+	if d.NoStore() || d.NoCache() || o.NoStore() || o.NoCache() {
+		return 0
+	}
+	originMax := defaultSeconds
+	if n, ok := o.MaxAgeSeconds(); ok {
+		originMax = n
+	}
+	n, hasMax := d.MaxAgeSeconds()
+	switch {
+	case pinned && hasMax:
+		return n
+	case pinned && d.Immutable():
+		return ImmutableTTLSeconds
+	case hasMax && n < originMax:
+		return n
+	}
+	return originMax
 }
 
 // EffectiveCacheControl resolves the value that applies to a collection: the

@@ -1467,3 +1467,23 @@ func TestSettings_Validate_CacheControl(t *testing.T) {
 		t.Fatal("RootConfig.Validate must surface the invalid cache_control")
 	}
 }
+
+func TestReadSettingsFromFile_CacheControl_LoadsFromYAML(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, ".ingitdb", "settings.yaml")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := "cache_control: \"public, max-age=31536000, immutable\"\n"
+	if err := os.WriteFile(settingsPath, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := ReadSettingsFromFile(dir, ingitdb.NewReadOptions())
+	if err != nil {
+		t.Fatalf("cache_control must decode under the strict decoder: %v", err)
+	}
+	if s.CacheControl != "public, max-age=31536000, immutable" {
+		t.Errorf("CacheControl = %q", s.CacheControl)
+	}
+}

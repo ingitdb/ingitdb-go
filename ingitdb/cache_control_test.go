@@ -1,83 +1,127 @@
 package ingitdb
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
-func TestParseCacheControl_Valid(t *testing.T) {
-	t.Parallel()
-	cc, err := ParseCacheControl(`  Public, max-age=31536000 , IMMUTABLE, x-custom="a,b\"c", private=token `)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !cc.Has("public") || !cc.Has("immutable") || !cc.Has("x-custom") || cc.Has("no-store") {
-		t.Fatalf("unexpected directives: %v", cc.Directives)
-	}
-	if n, ok := cc.MaxAgeSeconds(); !ok || n != 31536000 {
-		t.Fatalf("max-age = %d, %v", n, ok)
-	}
-	if strings.HasPrefix(cc.Raw, " ") || strings.HasSuffix(cc.Raw, " ") {
-		t.Fatalf("Raw not trimmed: %q", cc.Raw)
-	}
+type ccVectors struct {
+	Parse []struct {
+		Input     string `yaml:"input"`
+		Valid     bool   `yaml:"valid"`
+		MaxAge    *int64 `yaml:"maxAge"`
+		NoStore   bool   `yaml:"noStore"`
+		NoCache   bool   `yaml:"noCache"`
+		Immutable bool   `yaml:"immutable"`
+	} `yaml:"parse"`
+	Freshness []struct {
+		Name     string  `yaml:"name"`
+		Declared *string `yaml:"declared"`
+		Ref      string  `yaml:"ref"`
+		Origin   *string `yaml:"origin"`
+		Default  int64   `yaml:"default"`
+		Expect   int64   `yaml:"expect"`
+	} `yaml:"freshness"`
 }
 
-func TestCacheControl_NoMaxAge(t *testing.T) {
-	t.Parallel()
-	cc, err := ParseCacheControl("no-store")
+func loadCCVectors(t *testing.T) ccVectors {
+	t.Helper()
+	data, err := os.ReadFile("testdata/cache_control_vectors.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := cc.MaxAgeSeconds(); ok {
-		t.Fatal("max-age must be absent")
+	var v ccVectors
+	if err := yaml.Unmarshal(data, &v); err != nil {
+		t.Fatal(err)
 	}
+	return v
 }
 
-func TestParseCacheControl_UnknownDirectivesIgnored(t *testing.T) {
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// Runs the shared conformance vectors (ingitdb/ingitdb conformance/cache-control).
+func TestCacheControl_ConformanceParse(t *testing.T) {
 	t.Parallel()
-	if _, err := ParseCacheControl("max-age=60, future-directive=7"); err != nil {
-		t.Fatalf("unknown directives must be accepted: %v", err)
+	v := loadCCVectors(t)
+	if len(v.Parse) == 0 {
+		t.Fatal("no vectors")
+	}
+	for _, row := range v.Parse {
+		_, err := ParseCacheControl(row.Input)
+		if (err == nil) != row.Valid {
+			t.Errorf("%q: valid = %v, want %v (err %v)", row.Input, err == nil, row.Valid, err)
+		}
+		cc := ReadCacheControl(row.Input)
+		n, ok := cc.MaxAgeSeconds()
+		if ok != (row.MaxAge != nil) || (ok && n != *row.MaxAge) {
+			t.Errorf("%q: maxAge = %d,%v, want %v", row.Input, n, ok, row.MaxAge)
+		}
+		if cc.NoStore() != row.NoStore || cc.NoCache() != row.NoCache || cc.Immutable() != row.Immutable {
+			t.Errorf("%q: flags = %v %v %v, want %v %v %v", row.Input, cc.NoStore(), cc.NoCache(), cc.Immutable(), row.NoStore, row.NoCache, row.Immutable)
+		}
 	}
 }
 
-func TestParseCacheControl_Invalid(t *testing.T) {
+func TestCacheControl_ConformanceFreshness(t *testing.T) {
+	t.Parallel()
+	v := loadCCVectors(t)
+	if len(v.Freshness) == 0 {
+		t.Fatal("no vectors")
+	}
+	for _, row := range v.Freshness {
+		got := FreshnessSeconds(deref(row.Declared), row.Ref == "pinned", deref(row.Origin), row.Default)
+		if got != row.Expect {
+			t.Errorf("%s: got %d, want %d", row.Name, got, row.Expect)
+		}
+	}
+}
+
+func TestParseCacheControl_ErrorMessages(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
-		"":                             "must not be empty",
 		"   ":                          "must not be empty",
 		"public,,max-age=1":            "empty directive",
-		"max-age=1,":                   "empty directive",
 		"bad name":                     "invalid directive name",
-		"=5":                           "invalid directive name",
 		"max-age=5, max-age=6":         "repeats directive",
-		`x="unterminated`:              "invalid argument",
 		`x="a\"`:                       "invalid argument",
 		`x="a"b"`:                      "invalid argument",
-		`x=a b`:                        "invalid argument",
+		`x="unterminated`:              "invalid argument",
 		"max-age":                      "requires a number of seconds",
 		"max-age=abc":                  "non-negative integer",
-		"max-age=-1":                   "non-negative integer",
-		"s-maxage=1.5":                 "non-negative integer",
-		"max-age=99999999999999999999": "non-negative integer",
+		"max-age=99999999999999999999": "above the maximum",
 		"immutable=1":                  "takes no argument",
-		"no-store=yes":                 "takes no argument",
 	}
 	for in, want := range cases {
 		_, err := ParseCacheControl(in)
-		if err == nil {
-			t.Errorf("%q: expected error", in)
-			continue
-		}
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("%q: error %q lacks %q", in, err, want)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: error %v lacks %q", in, err, want)
 		}
 	}
 }
 
-func TestParseCacheControl_QuotedEscapes(t *testing.T) {
+func TestParseCacheControl_ValidKeepsRaw(t *testing.T) {
 	t.Parallel()
-	if _, err := ParseCacheControl(`x="a\\b"`); err != nil {
+	cc, err := ParseCacheControl(`  Public, x-custom="a\\b" `)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if cc.Raw != `Public, x-custom="a\\b"` || cc.Directives["x-custom"] != `a\b` {
+		t.Fatalf("unexpected: %+v", cc)
+	}
+}
+
+func TestReadCacheControl_Empty(t *testing.T) {
+	t.Parallel()
+	if cc := ReadCacheControl(" "); len(cc.Directives) != 0 {
+		t.Fatalf("unexpected: %+v", cc)
 	}
 }
 
