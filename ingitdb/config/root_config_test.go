@@ -1450,3 +1450,20 @@ func TestWriteRootCollectionsToFile_WriteFileError(t *testing.T) {
 		t.Errorf("expected 'failed to write root collections file' in error, got %q", err.Error())
 	}
 }
+
+func TestSettings_Validate_CacheControl(t *testing.T) {
+	t.Parallel()
+	ok := &Settings{CacheControl: "public, max-age=31536000, immutable"}
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("valid cache_control rejected: %v", err)
+	}
+	bad := &Settings{CacheControl: "max-age=forever"}
+	err := bad.Validate()
+	if err == nil || !strings.Contains(err.Error(), "max-age") {
+		t.Fatalf("expected a clear cache_control error, got %v", err)
+	}
+	rc := &RootConfig{Settings: *bad}
+	if err := rc.Validate(); err == nil {
+		t.Fatal("RootConfig.Validate must surface the invalid cache_control")
+	}
+}

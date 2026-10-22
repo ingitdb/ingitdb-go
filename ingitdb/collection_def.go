@@ -70,6 +70,11 @@ type CollectionDef struct {
 	// ConflictResolution overrides the database-level conflict-resolution
 	// settings for this collection. Nil fields inherit the database default.
 	ConflictResolution *ConflictResolutionConfig `yaml:"conflict_resolution,omitempty" json:"conflict_resolution,omitempty"`
+
+	// CacheControl is an optional HTTP Cache-Control directive string
+	// (RFC 9111) that overrides the database-level `cache_control` setting
+	// for this collection's files. See ParseCacheControl.
+	CacheControl string `yaml:"cache_control,omitempty" json:"cache_control,omitempty"`
 }
 
 type CollectionReadmeDef struct {
@@ -97,6 +102,9 @@ func (v *CollectionDef) Validate() error {
 		return fmt.Errorf("missing 'id' in collection definition")
 	}
 	if err := v.validateRecordCountBounds(); err != nil {
+		return err
+	}
+	if err := ValidateCacheControl(v.CacheControl); err != nil {
 		return err
 	}
 	var allErrors []error
