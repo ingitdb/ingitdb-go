@@ -16,7 +16,7 @@ status: Draft
 
 A single-record collection may declare `record_file.body_files`: one or more string fields, each stored as a raw-text file beside the record file. The record file holds an explicit reference in place of the value, `{"$file": "<name>"}`. It holds `null` for a null value, and omits the key for an absent field.
 
-A body file's name is fixed: `<key>.<record-suffix>.<field>.<ext>`, for example `customer-invoices.query.text.dtql` beside `customer-invoices.query.json`. The extension is either hardcoded per entry (`format`) or taken per record from a field (`format_field`). One collection can therefore mix `sql`, `dtql`, `http` and `graphql` bodies.
+A body file's name is fixed: `<key>.<record-suffix>.<field>.<ext>`, for example `customer-invoices.query.text.tugql` beside `customer-invoices.query.json`. The extension is either hardcoded per entry (`format`) or taken per record from a field (`format_field`). One collection can therefore mix `sql`, `tugql`, `http` and `graphql` bodies.
 
 - **Reading:** readers fetch only referenced files and merge each one byte-for-byte.
 - **Writing:** writers split the fields out through an exported, ordered write plan. They never duplicate a body into the record file or leave a stale body behind.
@@ -32,13 +32,13 @@ Today a record is exactly one file. DataTug keeps a query as a JSON record plus 
 
 The record file is already expressible: `name: '{key}/{key}.query.json'`, `format: json`, `type: map[string]any`, `records_dir: '.'`. The body file is not.
 
-The body's text type also varies per query, and the user chooses it for each one. Founder, 2026-09-17: *"The collection can have queries with different text types - some are sql, some DTQL, some http, some graphql. It's defined by user per query."* Other body fields, such as notes, always have one type.
+The body's text type also varies per query, and the user chooses it for each one. Founder, 2026-09-17: *"The collection can have queries with different text types - some are sql, some TugQL, some http, some graphql. It's defined by user per query."* Other body fields, such as notes, always have one type.
 
 Without this Feature, DataTug must either inline the body as an escaped JSON string, which is unreadable in a diff, or keep a sidecar reader beside the driver. The second option is the machinery the cut-over is meant to retire.
 
 Two existing mechanisms come close, and neither fits:
 
-- **`format: markdown` + `content_field`** gives a body, but the body shares one file with YAML frontmatter. DataTug's record is JSON and its body is SQL, DTQL, HTTP or GraphQL, not Markdown.
+- **`format: markdown` + `content_field`** gives a body, but the body shares one file with YAML frontmatter. DataTug's record is JSON and its body is SQL, TugQL, HTTP or GraphQL, not Markdown.
 - **`{fieldName}` placeholders** in `record_file.name` (Feature `record-file-name-placeholders`) substitute a column value into the record file's own name. They name one file, not a second one. They are also case-preserving and have no character-set bound, and an extension needs both a case rule and a bound (REQ `body-extension-resolution`).
 
 ## Behavior
@@ -67,7 +67,7 @@ record_file:
   records_dir: '.'
   body_files:
     - field: text              # the query text; its type is chosen per query
-      format_field: textFormat # SQL | DTQL | HTTP | GraphQL -> sql | dtql | http | graphql
+      format_field: textFormat # SQL | TugQL | HTTP | GraphQL -> sql | tugql | http | graphql
     - field: notes             # free-form notes, always Markdown
       format: md
 columns:
@@ -95,8 +95,8 @@ One collection mixing the four query text types:
 ```
 queries/active-customers/active-customers.query.json     # {"text": {"$file": "active-customers.query.text.sql"}, "textFormat": "SQL", "notes": null}
 queries/active-customers/active-customers.query.text.sql
-queries/customer-invoices/customer-invoices.query.json   # {"text": {"$file": "customer-invoices.query.text.dtql"}, "textFormat": "DTQL", "notes": {"$file": "customer-invoices.query.notes.md"}}
-queries/customer-invoices/customer-invoices.query.text.dtql
+queries/customer-invoices/customer-invoices.query.json   # {"text": {"$file": "customer-invoices.query.text.tugql"}, "textFormat": "TugQL", "notes": {"$file": "customer-invoices.query.notes.md"}}
+queries/customer-invoices/customer-invoices.query.text.tugql
 queries/customer-invoices/customer-invoices.query.notes.md
 queries/country-facts/country-facts.query.json           # {"text": {"$file": "country-facts.query.text.http"}, "textFormat": "HTTP"}
 queries/country-facts/country-facts.query.text.http
@@ -143,7 +143,7 @@ With the rule enforced, a body file cannot match any record matcher, neither the
 
 For an entry with `format`, the extension is that value.
 
-For an entry with `format_field`, the extension MUST be the record's `format_field` value with ASCII letters lowercased. For example, `SQL` becomes `sql`, `DTQL` becomes `dtql`, `HTTP` becomes `http`, `GraphQL` becomes `graphql` and `JSON` becomes `json`. The value MUST be 1 to 32 characters, each an ASCII letter, digit, `_` or `-`. The value is record content, and so it is untrusted. Bounding it stops a value like `../../x` from addressing a file outside the collection.
+For an entry with `format_field`, the extension MUST be the record's `format_field` value with ASCII letters lowercased. For example, `SQL` becomes `sql`, `TugQL` becomes `tugql`, `HTTP` becomes `http`, `GraphQL` becomes `graphql` and `JSON` becomes `json`. The value MUST be 1 to 32 characters, each an ASCII letter, digit, `_` or `-`. The value is record content, and so it is untrusted. Bounding it stops a value like `../../x` from addressing a file outside the collection.
 
 The extension is **unresolved** when the `format_field` value is null, empty, absent or outside that set. An unresolved extension is an error only for an entry whose body is present: a referenced file on read, or a string value on write (REQ `body-field-reference-encoding`). It is not an error for an entry whose value is null or absent.
 
@@ -240,7 +240,7 @@ The stored record file never contains a body's content.
 
 A delete MUST remove the record file and every body file that the stored record references through a **safe** reference (REQ `stored-reference-access-guard`). A referenced file that is already missing is not an error for a delete. An unsafe reference is skipped and reported, never followed.
 
-A put that changes an entry's body name MUST remove the body file that the **previously stored** record referenced, as part of the same change, when that reference is safe. An unsafe one is skipped and reported. Changing `textFormat` from `SQL` to `DTQL` is one such put. After the put, each entry has at most one body file on disk, and it is exactly the one the new record references.
+A put that changes an entry's body name MUST remove the body file that the **previously stored** record referenced, as part of the same change, when that reference is safe. An unsafe one is skipped and reported. Changing `textFormat` from `SQL` to `TugQL` is one such put. After the put, each entry has at most one body file on disk, and it is exactly the one the new record references.
 
 #### REQ: write-plan-exposed
 
@@ -344,7 +344,7 @@ Whole-database validation MUST report a finding for each **orphan body file**. A
 
 - there is no record file for key `<k>`;
 - the record's `f` is null or absent;
-- the record references a different name, such as a stale `.query.text.sql` beside a record that references `.query.text.dtql`;
+- the record references a different name, such as a stale `.query.text.sql` beside a record that references `.query.text.tugql`;
 - a body file whose record file is no longer listed after a `record_file.name` change (REQ `name-drift-is-a-validation-finding`).
 
 The finding names the collection and the file path. It is a finding, not a read error: readers never look at unreferenced files, so the record still reads.
@@ -373,7 +373,7 @@ A schema alteration on a collection that declares `body_files` MUST leave a defi
 
 A body file's name is always a pure function of the definition and the record's own values: `<key>.<record-suffix>.<field>.<ext>`. There is no rename or migration feature (founder, 2026-09-17).
 
-- **Per-record format change.** A change to one record's format value, for example `textFormat` from `SQL` to `DTQL`, is an ordinary put (REQ `delete-and-format-change-leave-no-stale-body`).
+- **Per-record format change.** A change to one record's format value, for example `textFormat` from `SQL` to `TugQL`, is an ordinary put (REQ `delete-and-format-change-leave-no-stale-body`).
 - **Definition change.** A definition change can leave existing records whose `$file` references or body files no longer match the naming rule. Ordinary whole-database validation catches this, with no special refusal or rename logic: each such reference is reported as a `body-reference-mismatch` finding (REQ `read-merges-referenced-bodies`), and each file left unreferenced as an orphan finding (REQ `orphan-body-files-reported`). A drifted record cannot be read (`body-reference-mismatch`), so a caller that does not already hold its body values fixes it with REQ `drifted-record-repair`.
 - **Record file moves are out of scope.** A `record_file.name` change also changes the record file's own name, for example `q1/q1.query.json` to `q1/q1.q.json`. This Feature takes the smaller option: repair never moves a record file. Existing record files that the new template no longer matches are not listed, so they are invisible to reads, repair and record-scoped validation. Whole-database validation MUST report each as an `unlisted-record-file` finding: a file under the records base directory that sits at the template's directory depth, ends in the template's file extension, does not match the template, is not safe-referenced by a listed record, and is not excluded by `exclude_regex`. Their body files are reported as orphans. Once the author moves a record file to its current name, for example with `git mv`, its body references with the old suffix are safe drift, and repair fixes them.
 
@@ -443,10 +443,10 @@ Implementations run profiles as follows:
 **Required coverage.** The vectors MUST cover at least:
 
 - `records_dir: '.'` with a `{key}/{key}.query.json` name, placing records at `queries/<key>/<key>.query.json` with no `$records` segment;
-- one collection holding `sql`, `dtql`, `http` and `graphql` text bodies resolved from `textFormat`, and a hardcoded `format: md` notes body;
+- one collection holding `sql`, `tugql`, `http` and `graphql` text bodies resolved from `textFormat`, and a hardcoded `format: md` notes body;
 - body naming `<key>.<suffix>.<field>.<ext>`, and exact raw bytes: a trailing newline kept, one absent, a non-ASCII character intact, and a 0-byte file read as `""`;
 - the three stored states per field, reference, `null` and absent, on read and on put, including `null` versus `""`;
-- several bodies per record (`.query.text.dtql` and `.query.notes.md`);
+- several bodies per record (`.query.text.tugql` and `.query.notes.md`);
 - a `JSON` text body, `x.query.text.json`, absent from `expect_list`;
 - a `put` that splits bodies out, a `textFormat` change that removes the stale body and rewrites the reference, and the matching `expect_plan` order and `prior` hashes;
 - a `delete` that removes the record and every referenced body;
@@ -522,9 +522,9 @@ Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore
 
 **Requirements:** record-body-file#req:body-extension-resolution, record-body-file#req:body-file-naming, record-body-file#req:read-merges-referenced-bodies
 
-**Given** the reference `queries` collection holding the four records of REQ `body-file-naming`, whose `textFormat` values are `SQL`, `DTQL`, `HTTP` and `GraphQL`, each with a matching `$file` reference and body file. The `customer-invoices` DTQL body is multi-line, with a trailing newline and a non-ASCII character. The `active-customers` SQL body has no trailing newline.
+**Given** the reference `queries` collection holding the four records of REQ `body-file-naming`, whose `textFormat` values are `SQL`, `TugQL`, `HTTP` and `GraphQL`, each with a matching `$file` reference and body file. The `customer-invoices` TugQL body is multi-line, with a trailing newline and a non-ASCII character. The `active-customers` SQL body has no trailing newline.
 **When** each record is read through the Go reader
-**Then** each record's `text` equals the bytes of `<key>.query.text.<sql|dtql|http|graphql>` exactly, with the newlines and the non-ASCII character intact
+**Then** each record's `text` equals the bytes of `<key>.query.text.<sql|tugql|http|graphql>` exactly, with the newlines and the non-ASCII character intact
 
 ### AC: stored-states-read-distinctly
 
@@ -547,9 +547,9 @@ Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore
 
 **Requirements:** record-body-file#req:body-file-naming, record-body-file#req:read-merges-referenced-bodies, record-body-file#req:write-plan-exposed
 
-**Given** a record `customer-invoices` with `textFormat: DTQL` and references to `customer-invoices.query.text.dtql` and `customer-invoices.query.notes.md`
+**Given** a record `customer-invoices` with `textFormat: TugQL` and references to `customer-invoices.query.text.tugql` and `customer-invoices.query.notes.md`
 **When** it is read, and a put that changes both `text` and `notes` has its write plan computed
-**Then** the read sets `text` and `notes` each to its own file's exact bytes; the plan writes `.query.text.dtql`, then `.query.notes.md`, then the record file, whose bytes hold only the two references
+**Then** the read sets `text` and `notes` each to its own file's exact bytes; the plan writes `.query.text.tugql`, then `.query.notes.md`, then the record file, whose bytes hold only the two references
 
 ### AC: body-read-failures-are-errors
 
@@ -573,11 +573,11 @@ Today both `ingitdb-ts` clients hard-code a flat `$records/` layout. They ignore
 
 **Requirements:** record-body-file#req:write-splits-bodies-out, record-body-file#req:write-plan-exposed
 
-**Given** no stored record, and new data `{textFormat: DTQL, title: X, text: "from: invoices\n", notes: null}` for key `q1`
+**Given** no stored record, and new data `{textFormat: TugQL, title: X, text: "from: invoices\n", notes: null}` for key `q1`
 **When** the write plan is computed
 **Then** the plan is exactly two operations, in order:
-1. write `queries/q1/q1.query.text.dtql`, with bytes `from: invoices\n` and expected prior state absent;
-2. write `queries/q1/q1.query.json`, whose bytes hold `"text": {"$file": "q1.query.text.dtql"}` and `"notes": null` and no body content, with expected prior state absent.
+1. write `queries/q1/q1.query.text.tugql`, with bytes `from: invoices\n` and expected prior state absent;
+2. write `queries/q1/q1.query.json`, whose bytes hold `"text": {"$file": "q1.query.text.tugql"}` and `"notes": null` and no body content, with expected prior state absent.
 
 It names `queries/q1` as the containing directory.
 
@@ -611,11 +611,11 @@ It names `queries/q1` as the containing directory.
 
 **Requirements:** record-body-file#req:delete-and-format-change-leave-no-stale-body, record-body-file#req:write-plan-exposed
 
-**Given** a stored record `q1` with `textFormat: SQL` that references `q1/q1.query.text.sql`, and new data with `textFormat: DTQL` and a `text` value
+**Given** a stored record `q1` with `textFormat: SQL` that references `q1/q1.query.text.sql`, and new data with `textFormat: TugQL` and a `text` value
 **When** the write plan is computed
 **Then** the plan is, in order:
-1. write `q1/q1.query.text.dtql`;
-2. write the record file, now referencing `q1.query.text.dtql`;
+1. write `q1/q1.query.text.tugql`;
+2. write the record file, now referencing `q1.query.text.tugql`;
 3. remove `q1/q1.query.text.sql`.
 
 Exactly one `text` body file remains after the plan is applied.
@@ -645,11 +645,11 @@ Exactly one `text` body file remains after the plan is applied.
 **Requirements:** record-body-file#req:stored-reference-access-guard, record-body-file#req:delete-and-format-change-leave-no-stale-body, record-body-file#req:write-plan-exposed
 
 **Given** a sentinel file `outside.txt` at the database root. Record `q1` (`textFormat: SQL`) stores `"text": {"$file": "../../outside.txt"}`, and record `q2` stores the same reference.
-**When** the database is validated; then `q1` is deleted; then `q2` is put with `textFormat: DTQL` and a `text` value, through its write plan and its driver
+**When** the database is validated; then `q1` is deleted; then `q2` is put with `textFormat: TugQL` and a `text` value, through its write plan and its driver
 **Then** the outcomes are:
 - validation reports `unsafe-body-reference` for `q1` and `q2`;
 - `q1`'s delete plan removes only `queries/q1/q1.query.json`, and lists the reference under `skipped`;
-- `q2`'s put plan writes `q2.query.text.dtql` and the record file, removes nothing, and lists the reference under `skipped`;
+- `q2`'s put plan writes `q2.query.text.tugql` and the record file, removes nothing, and lists the reference under `skipped`;
 - `outside.txt` is never opened, stat'ed or changed, and every plan path stays inside the record's directory.
 
 ### AC: delete-removes-record-and-bodies
@@ -658,7 +658,7 @@ Exactly one `text` body file remains after the plan is applied.
 
 **Given** a stored `customer-invoices` that references both body files, and a stored record `q2` whose `text` reference points to a file that is already missing
 **When** the delete plans are computed and applied
-**Then** `customer-invoices`'s plan removes the record file, then `.query.text.dtql`, then `.query.notes.md`; `q2`'s plan removes only the record file; all those files are gone; and neither delete reports an error
+**Then** `customer-invoices`'s plan removes the record file, then `.query.text.tugql`, then `.query.notes.md`; `q2`'s plan removes only the record file; all those files are gone; and neither delete reports an error
 
 ### AC: unchanged-put-yields-empty-plan
 
@@ -814,11 +814,11 @@ The `ingitdb-ts` run is gated on ingitdb/ingitdb-ts#104.
 
 **Given** a `queries` directory holding three files:
 - `q9/q9.query.text.sql`, with no `q9/q9.query.json`;
-- a leftover `q1/q1.query.text.sql` beside a record `q1` that references `q1.query.text.dtql`;
+- a leftover `q1/q1.query.text.sql` beside a record `q1` that references `q1.query.text.tugql`;
 - `q2/q2.query.notes.md` beside a record `q2` whose `notes` is `null`
 
 **When** the database is validated
-**Then** validation reports exactly three orphan-body findings, one for each of those files. Records `q1` and `q2` still read: `q1` with its `.query.text.dtql` body and `q2` with `notes: null`.
+**Then** validation reports exactly three orphan-body findings, one for each of those files. Records `q1` and `q2` still read: `q1` with its `.query.text.tugql` body and `q2` with `notes: null`.
 
 ### AC: definition-without-body-files-unchanged
 
