@@ -32,7 +32,7 @@ Today a record is exactly one file. DataTug keeps a query as a JSON record plus 
 
 The record file is already expressible: `name: '{key}/{key}.query.json'`, `format: json`, `type: map[string]any`, `records_dir: '.'`. The body file is not.
 
-The body's text type also varies per query, and the user chooses it for each one. Founder, 2026-09-17: *"The collection can have queries with different text types - some are sql, some TugQL, some http, some graphql. It's defined by user per query."* Other body fields, such as notes, always have one type.
+The body's text type also varies per query, and the user chooses it for each one. Founder, 2026-09-17: *"The collection can have queries with different text types - some are sql, some DTQL, some http, some graphql. It's defined by user per query."* (DTQL has since been renamed TugQL.) Other body fields, such as notes, always have one type.
 
 Without this Feature, DataTug must either inline the body as an escaped JSON string, which is unreadable in a diff, or keep a sidecar reader beside the driver. The second option is the machinery the cut-over is meant to retire.
 
