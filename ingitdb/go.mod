@@ -9,7 +9,7 @@ require (
 	github.com/ingr-io/ingr-go v0.0.2
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.11.1
-	go.starlark.net v0.0.0-20260708150628-5395d018f003
+	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 	gopkg.in/yaml.v3 v3.0.1
 )
 
