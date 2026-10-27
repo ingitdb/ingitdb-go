@@ -2,7 +2,7 @@ module github.com/ingitdb/ingitdb-go/ingitdb
 
 go 1.26.0
 
-toolchain go1.27.0
+toolchain go1.27.3
 
 require (
 	github.com/dal-go/record v0.1.5
