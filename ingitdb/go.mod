@@ -10,6 +10,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/stretchr/testify v1.12.1
 	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
+	golang.org/x/text v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

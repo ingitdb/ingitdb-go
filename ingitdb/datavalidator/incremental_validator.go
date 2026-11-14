@@ -90,18 +90,22 @@ func (iv *incrementalValidator) ValidateChanges(
 	return result, nil
 }
 
-// changedFileCaseFindings reports a changed record file of a collection that
-// declares a key encoding when its name, or a directory on its path, differs
-// from an existing entry only in letter case.
+// changedFileCaseFindings reports a changed record file when its name, or a
+// directory on its path, is one entry with an existing one on a
+// case-insensitive or normalisation-insensitive file system, with or without
+// a key encoding, as the full pass does
+// (record-key-encoding#req:file-name-collisions-reported).
 func changedFileCaseFindings(dbPath, collectionID string, colDef *ingitdb.CollectionDef, filePath string) []ingitdb.ValidationError {
-	if !colDef.RecordFile.EncodesKeys() {
-		return nil
-	}
 	existing, found := ingitdb.PathDifferingInCase(dbPath, filePath)
 	if !found {
 		return nil
 	}
-	message := fmt.Sprintf("%s and %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one entry; give the records keys that differ in more than case", filePath, existing)
+	noun := "file"
+	if filepath.Dir(existing) != filepath.Dir(filePath) {
+		noun = "directory"
+	}
+	shown, reason := collisionReason([]string{filePath, existing}, noun)
+	message := fmt.Sprintf("%s and %s %s; rename one", shown[0], shown[1], reason)
 	return []ingitdb.ValidationError{newValidationError(collectionID, filePath, "", "", message, nil)}
 }
 

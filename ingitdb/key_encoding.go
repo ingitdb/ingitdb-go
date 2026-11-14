@@ -8,6 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 )
 
 // Record key encodings a collection can declare in record_file.key_encoding.
@@ -230,15 +234,35 @@ func (rfd RecordFileDef) validateKeyEncoding() error {
 	}
 }
 
-// CaseOnlyDifferences returns the groups of names that are equal when letter
-// case is ignored and differ otherwise. On a case-insensitive file system
-// (Windows, macOS by default) each group is one file. Groups and names are in
-// the order of names.
+// sameFileKey returns the form two names share when a case-insensitive file
+// system (Windows, macOS by default) or one that ignores Unicode
+// normalisation (macOS) stores them as one entry: Unicode canonical caseless
+// matching, NFD(fold(NFD(name))). A name that is not valid UTF-8 (only Linux
+// stores one; macOS refuses it) has only its ASCII letters folded, so invalid
+// bytes never compare equal to each other.
+func sameFileKey(name string) string {
+	if !utf8.ValidString(name) {
+		b := []byte(name)
+		for i, c := range b {
+			if 'A' <= c && c <= 'Z' {
+				b[i] = c + 'a' - 'A'
+			}
+		}
+		return string(b)
+	}
+	return norm.NFD.String(cases.Fold().String(norm.NFD.String(name)))
+}
+
+// CaseOnlyDifferences returns the groups of names that are one entry on a
+// case-insensitive or normalisation-insensitive file system (Windows, macOS
+// by default) and differ otherwise: names that differ only in letter case,
+// in Unicode normalisation (NFC against NFD), or both. Each group holds
+// every such name, however many. Groups and names are in the order of names.
 func CaseOnlyDifferences(names []string) [][]string {
 	index := map[string]int{}
 	var groups [][]string
 	for _, name := range names {
-		folded := strings.ToLower(name)
+		folded := sameFileKey(name)
 		i, seen := index[folded]
 		if !seen {
 			index[folded] = len(groups)
@@ -258,16 +282,18 @@ func CaseOnlyDifferences(names []string) [][]string {
 	return out
 }
 
-// NameDifferingInCase returns the entry of dir whose name equals name when
-// letter case is ignored but differs from it, if there is one. A writer of a
+// NameDifferingInCase returns the entry of dir whose name is one entry with
+// name on a case-insensitive or normalisation-insensitive file system (see
+// CaseOnlyDifferences) but differs from it, if there is one. A writer of a
 // collection that declares a key encoding calls it before creating a record
 // file or directory, and refuses to write when it finds one
 // (record-key-encoding#req:letter-case-kept-collisions-reported). A missing
 // directory has no entries.
 func NameDifferingInCase(dir, name string) (string, bool) {
 	entries, _ := os.ReadDir(dir)
+	key := sameFileKey(name)
 	for _, e := range entries {
-		if e.Name() != name && strings.EqualFold(e.Name(), name) {
+		if e.Name() != name && sameFileKey(e.Name()) == key {
 			return e.Name(), true
 		}
 	}
