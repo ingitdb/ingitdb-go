@@ -266,6 +266,15 @@ func TestNameDifferingInCase(t *testing.T) {
 	}
 }
 
+// Every {key} of the name is measured: drivers substitute them all.
+func TestCheckKeyFits_EveryKeyPlaceholder(t *testing.T) {
+	t.Parallel()
+	rfd := RecordFileDef{Name: "{key}-{key}.yaml", KeyEncoding: KeyEncodingTildeV1}
+	if err := rfd.CheckKeyFits(strings.Repeat("a", 130)); !errors.Is(err, ErrKeyNotStorable) {
+		t.Errorf("two 130-byte keys make a 266-byte name: %v", err)
+	}
+}
+
 func TestPathDifferingInCase(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

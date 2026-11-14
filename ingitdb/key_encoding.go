@@ -184,9 +184,10 @@ func (rfd RecordFileDef) CheckKeyFits(key string) error {
 	if err != nil {
 		return err
 	}
-	// Substituted as GetRecordFileName does: the first {key} only. Other
+	// Every {key} is substituted, as the drivers do (GetRecordFileName
+	// substitutes only the first, so this bound holds for it too). Other
 	// placeholders ({field}) are not part of the key and are not measured.
-	for _, segment := range strings.Split(strings.Replace(rfd.Name, "{key}", name, 1), "/") {
+	for _, segment := range strings.Split(strings.ReplaceAll(rfd.Name, "{key}", name), "/") {
 		if len(segment) > MaxFileNameBytes {
 			return fmt.Errorf("%w: with key_encoding %s the key %.40q... (%d bytes) makes the file name %.40q... %d bytes long, over the %d-byte limit of a file name; keys are never shortened: keep this collection's records in one file (record_file.type %q) instead of one file per record",
 				ErrKeyNotStorable, rfd.KeyEncoding, key, len(key), segment, len(segment), MaxFileNameBytes, MapOfRecords)

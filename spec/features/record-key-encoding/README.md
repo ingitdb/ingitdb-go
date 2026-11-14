@@ -94,7 +94,7 @@ So a name is pure ASCII. It is never hidden, never `.` or `..`, never ends in a 
 
 ### REQ: over-long-key-fails
 
-A collection that keeps one record per file (a `{key}` in `record_file.name`) and declares `key_encoding` stores a key only if every path segment the encoded key produces fits 255 bytes. That is the file name with its extension, and the record's subcollection directory. The first `{key}` of `record_file.name` is substituted, as the writer does. Other placeholders are not measured.
+A collection that keeps one record per file (a `{key}` in `record_file.name`) and declares `key_encoding` stores a key only if every path segment the encoded key produces fits 255 bytes. That is the file name with its extension, and the record's subcollection directory. Every `{key}` of `record_file.name` is substituted, as the drivers do. Other placeholders are not measured.
 
 A longer key is never hashed or truncated:
 
