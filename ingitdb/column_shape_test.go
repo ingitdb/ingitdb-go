@@ -26,6 +26,8 @@ func TestColumnShape_RejectedAtLoad(t *testing.T) {
 		{"nested required_when", ColumnDef{Type: "[]any", Items: &ColumnDef{Type: ColumnTypeInt, RequiredWhen: "True"}}, "invalid 'items': 'required_when' is not supported"},
 		{"nested foreign_key", ColumnDef{Type: "[]any", Items: &ColumnDef{Type: ColumnTypeString, ForeignKey: "users"}}, "'foreign_key' is not supported"},
 		{"nested locale", ColumnDef{Type: "any", Columns: map[string]*ColumnDef{"t": {Type: ColumnTypeString, Locale: "en"}}}, "'locale' is not supported"},
+		{"values contradict map value type", ColumnDef{Type: "map[string]int", Values: &ColumnDef{Type: ColumnTypeString}}, "'values' has type string, but map[string]int holds int values"},
+		{"items contradict list element type", ColumnDef{Type: "[]string", Items: &ColumnDef{Type: ColumnTypeInt}}, "'items' has type int, but []string holds string elements"},
 		{"deep invalid", ColumnDef{Type: "map[string]any", Values: &ColumnDef{Type: "map[string]any", Columns: map[string]*ColumnDef{"x": {Type: ColumnTypeInt, Items: str}}}}, "'items' requires a list type"},
 	}
 	for _, tt := range tests {
@@ -48,6 +50,8 @@ func TestColumnShape_AcceptedAtLoad(t *testing.T) {
 		{Type: ColumnTypeAny, Columns: map[string]*ColumnDef{"a": {Type: ColumnTypeString}}},
 		{Type: "[]any", Items: slot},
 		{Type: "map[string]string", Values: &ColumnDef{Type: ColumnTypeString, Enum: []any{"attended"}}},
+		{Type: "map[string]", Values: &ColumnDef{Type: ColumnTypeInt}},
+		{Type: "[]string", Items: &ColumnDef{Type: ColumnTypeString}},
 	}
 	for i, def := range defs {
 		if err := def.Validate(); err != nil {

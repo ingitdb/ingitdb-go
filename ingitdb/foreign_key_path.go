@@ -101,10 +101,19 @@ func ResolveForeignKeyPath(declaringFullID, fk string, declaring *CollectionDef,
 			step.Same = true
 		case strings.HasPrefix(keySpec, "{") && strings.HasSuffix(keySpec, "}"):
 			step.Field = keySpec[1 : len(keySpec)-1]
-			if _, declared := declaring.Columns[step.Field]; !declared {
+			column, declared := declaring.Columns[step.Field]
+			switch {
+			case step.Field == "$ID":
+				return nil, fmt.Errorf("foreign_key path %q: {$ID} is not a stored field; use %s for the referring record's own key", fk, ForeignKeySameKey)
+			case !declared:
 				return nil, fmt.Errorf("foreign_key path %q: field %q is not a column of %q", fk, step.Field, declaringFullID)
+			case column.Formula != "":
+				return nil, fmt.Errorf("foreign_key path %q: field %q is computed (formula), so records do not store it", fk, step.Field)
 			}
 		default:
+			if !IsPlainKeySegment(keySpec) {
+				return nil, fmt.Errorf("foreign_key path %q: parent key %q is not a valid record key", fk, keySpec)
+			}
 			step.Literal = keySpec
 		}
 		sub, found := current.SubCollections[subID]
@@ -116,6 +125,16 @@ func ResolveForeignKeyPath(declaringFullID, fk string, declaring *CollectionDef,
 		current = sub
 	}
 	return path, nil
+}
+
+// IsPlainKeySegment reports whether key can be a parent record key in a path:
+// non-empty, not "." or "..", and free of path separators, so a key can never
+// move a lookup outside its parent's directory.
+func IsPlainKeySegment(key string) bool {
+	if key == "" || key == "." || key == ".." {
+		return false
+	}
+	return !strings.ContainsAny(key, `/\`)
 }
 
 // hasPrefixPath reports whether prefix is a leading part of path.

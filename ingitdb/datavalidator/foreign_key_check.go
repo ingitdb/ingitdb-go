@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	ingitdb "github.com/ingitdb/ingitdb-go/ingitdb"
@@ -198,11 +199,12 @@ func checkPathForeignKey(
 		case step.Same:
 			parentKey = recordKeys[level]
 		case step.Field != "":
-			parentKey = fmt.Sprintf("%v", r.Data[step.Field])
-			if r.Data[step.Field] == nil || parentKey == "" {
-				message := fmt.Sprintf("foreign key %q = %q: field %q, which gives the parent key in %q, is empty", name, values[0], step.Field, path.String())
+			key, problem := parentKeyFromField(r.Data[step.Field])
+			if problem != "" {
+				message := fmt.Sprintf("foreign key %q = %q: field %q, which gives the parent key in %q, %s", name, values[0], step.Field, path.String(), problem)
 				return append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
 			}
+			parentKey = key
 		}
 		sub := *target.SubCollections[step.Collection]
 		sub.DirPath = subCollectionDataDir(&target, parentKey, step.Collection)
@@ -217,6 +219,34 @@ func checkPathForeignKey(
 		}
 	}
 	return errors
+}
+
+// parentKeyFromField turns the value of a {field} path segment into a parent
+// record key: a string as is, a number as written (a whole JSON number 1000000
+// is "1000000", not "1e+06"), a bool as true/false. It returns a problem
+// (completing "field X, which gives the parent key in P, ...") when the value
+// is empty, not a scalar, or not a valid record key (e.g. "..", "a/b").
+func parentKeyFromField(raw any) (string, string) {
+	var key string
+	switch v := raw.(type) {
+	case nil:
+		return "", "is empty"
+	case string:
+		key = v
+	case float64:
+		key = strconv.FormatFloat(v, 'f', -1, 64)
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, bool:
+		key = fmt.Sprintf("%v", v)
+	default:
+		return "", "must be a scalar"
+	}
+	if key == "" {
+		return "", "is empty"
+	}
+	if !ingitdb.IsPlainKeySegment(key) {
+		return "", fmt.Sprintf("is %q, which is not a valid record key", key)
+	}
+	return key, ""
 }
 
 // loadCollectionRecords reads a collection's records as key/data pairs, reusing

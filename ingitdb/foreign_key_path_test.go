@@ -12,6 +12,7 @@ func fkPathDefinition(fk string) *Definition {
 	agreements := &CollectionDef{ID: "agreements", Columns: map[string]*ColumnDef{"title": str}}
 	grants := &CollectionDef{ID: "grants", Columns: map[string]*ColumnDef{
 		"spaceID":     str,
+		"computed":    {Type: ColumnTypeString, Formula: `"s1"`},
 		"agreementID": {Type: ColumnTypeString, ForeignKey: fk},
 	}}
 	ext := &CollectionDef{ID: "ext", Columns: map[string]*ColumnDef{"title": str},
@@ -37,6 +38,9 @@ func TestValidateForeignKeys_SubcollectionPaths(t *testing.T) {
 	}
 	invalid := map[string]string{
 		"spaces/s1":                                "must alternate collection ids and parent keys",
+		"spaces/../ext/x/agreements":               `parent key ".." is not a valid record key`,
+		"spaces/{$ID}/ext/x/agreements":            "{$ID} is not a stored field; use $same",
+		"spaces/{computed}/ext/x/agreements":       `field "computed" is computed (formula)`,
 		"spaces//ext/x/agreements":                 "has an empty segment",
 		"nowhere/s1/ext":                           `root collection "nowhere" does not resolve`,
 		"spaces/s1/ext/x/missing":                  `"spaces/ext" has no subcollection "missing"`,

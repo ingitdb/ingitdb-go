@@ -125,15 +125,23 @@ func (v *ColumnDef) Validate() error {
 // validates each nested definition recursively.
 func (v *ColumnDef) validateShape() error {
 	isMap := strings.HasPrefix(string(v.Type), "map[") && v.Type != ColumnTypeL10N
-	_, isList := ListElementType(v.Type)
+	elemType, isList := ListElementType(v.Type)
 	if len(v.Columns) > 0 && !isMap && v.Type != ColumnTypeAny {
 		return fmt.Errorf("'columns' requires a map type or any, got %s", v.Type)
 	}
 	if v.Values != nil && !isMap {
 		return fmt.Errorf("'values' requires a map type, got %s", v.Type)
 	}
+	if v.Values != nil && v.Values.Type != "" {
+		if valueType := string(v.Type)[strings.Index(string(v.Type), "]")+1:]; valueType != "" && valueType != string(ColumnTypeAny) && valueType != string(v.Values.Type) {
+			return fmt.Errorf("'values' has type %s, but %s holds %s values", v.Values.Type, v.Type, valueType)
+		}
+	}
 	if v.Items != nil && !isList {
 		return fmt.Errorf("'items' requires a list type, got %s", v.Type)
+	}
+	if v.Items != nil && v.Items.Type != "" && elemType != ColumnTypeAny && elemType != v.Items.Type {
+		return fmt.Errorf("'items' has type %s, but %s holds %s elements", v.Items.Type, v.Type, elemType)
 	}
 	for _, name := range slices.Sorted(maps.Keys(v.Columns)) {
 		if err := v.Columns[name].validateNested(); err != nil {
