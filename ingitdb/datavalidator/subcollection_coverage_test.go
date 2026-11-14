@@ -11,7 +11,7 @@ import (
 func TestValidateSubCollections_Coverage(t *testing.T) {
 	// 1. def == nil
 	resNil := &ingitdb.ValidationResult{}
-	validateSubCollections(nil, resNil)
+	validateSubCollections("", nil, resNil)
 	if len(resNil.Errors()) != 0 {
 		t.Error("expected 0 errors for nil def")
 	}
@@ -77,7 +77,7 @@ func TestValidateSubCollections_Coverage(t *testing.T) {
 	}
 
 	result := &ingitdb.ValidationResult{}
-	validateSubCollections(def, result)
+	validateSubCollections("", def, result)
 
 	errs := result.Errors()
 	if len(errs) < 2 {

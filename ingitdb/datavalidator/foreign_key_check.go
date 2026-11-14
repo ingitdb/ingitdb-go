@@ -26,8 +26,9 @@ func (idx foreignKeyIndex) Contains(collectionID, key string) bool {
 
 // loadedRecord is a record's key paired with its data, used by the FK pass.
 type loadedRecord struct {
-	Key  string
-	Data map[string]any
+	Key      string
+	Data     map[string]any
+	FilePath string // the file the record was read from
 }
 
 // validateForeignKeyReferences checks that every foreign_key value in every
@@ -43,7 +44,7 @@ type loadedRecord struct {
 // Definition load already rejects a foreign_key that resolves to no collection
 // (ingitdb.ValidateForeignKeys), so here the target always resolves; what is
 // checked is the value's existence as a key.
-func validateForeignKeyReferences(def *ingitdb.Definition) []ingitdb.ValidationError {
+func validateForeignKeyReferences(root string, def *ingitdb.Definition) []ingitdb.ValidationError {
 	if def == nil {
 		return nil
 	}
@@ -72,7 +73,7 @@ func validateForeignKeyReferences(def *ingitdb.Definition) []ingitdb.ValidationE
 		// is actually checked. This shares one instance-enumeration with the
 		// schema pass (validateSubCollections), so the two passes cannot disagree
 		// on where a subcollection's records live.
-		walkSubCollectionInstances(id, col, func(inst subCollectionInstance) {
+		instanceWalk{root: root}.walk(id, col, func(inst subCollectionInstance) {
 			errors = append(errors, checkCollectionForeignKeys(inst.fullID, inst.colDef, def, idx)...)
 		})
 	}
@@ -170,7 +171,7 @@ func loadSingleRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
 		if parseErr != nil {
 			continue
 		}
-		records = append(records, loadedRecord{Key: recordKeyFromCollectionFilePath(colDef, filePath), Data: data})
+		records = append(records, loadedRecord{Key: recordKeyFromCollectionFilePath(colDef, filePath), Data: data, FilePath: filePath})
 	}
 	return records, nil
 }
@@ -187,7 +188,7 @@ func loadMapRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
 	}
 	records := make([]loadedRecord, 0, len(parsed))
 	for key, data := range parsed {
-		records = append(records, loadedRecord{Key: key, Data: data})
+		records = append(records, loadedRecord{Key: key, Data: data, FilePath: filePath})
 	}
 	return records, nil
 }
@@ -208,7 +209,7 @@ func loadListRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
 		if !keyOK {
 			continue
 		}
-		records = append(records, loadedRecord{Key: key, Data: row})
+		records = append(records, loadedRecord{Key: key, Data: row, FilePath: filePath})
 	}
 	return records, nil
 }

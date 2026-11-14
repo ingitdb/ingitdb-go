@@ -121,7 +121,13 @@ When `required_when` is present, `required` MUST NOT also be set on the same col
 
 #### REQ: record-key-type-checked
 
-A record key is always text: a file name, a key of a map-of-records file, or a `$ID` cell. When a collection declares the `$ID` column with type `int`, `float`, `bool`, `date`, `time` or `datetime`, and the record's `$ID` value is a string, the key MUST be parsed as that type instead of being compared by its Go type. The accepted text forms are: `int` a base-10 integer in canonical form (`42`, `-7`, `0`; not `+5` or `007`, so two files cannot hold one value); `float` a finite decimal number (`4.2`, `1e3`; not `NaN`, `Inf` or hex); `bool` exactly `true` or `false`; `date` `YYYY-MM-DD` (a real calendar date, so `2026-02-30` fails); `time` `H:MM` or `HH:MM:SS`, with optional fractional seconds; `datetime` `YYYY-MM-DDTHH:MM:SS` with optional fractional seconds and an optional zone (RFC 3339 `2026-11-18T07:30:00Z`, or `2026-11-24T10:00:00`). A key that does not parse MUST produce a wrong-type finding on `$ID` naming the key and the expected form. This can make a database that passed before fail, but only when it holds a key that is not a valid value of the type its own definition declares for `$ID`; no known database declares a non-string `$ID`. A key that parses MUST be passed on, parsed, to the `enum` and `min_value`/`max_value` checks, so an `int` key is compared as a number.
+A record key is always text: a file name, a key of a map-of-records file, or a `$ID` cell. When a collection declares the `$ID` column with type `int`, `float`, `bool`, `date`, `time` or `datetime`, and the record's `$ID` value is a string, the key MUST be parsed as that type instead of being compared by its Go type. The accepted text forms are: `int` a base-10 integer in canonical form (`42`, `-7`, `0`; not `+5` or `007`, so two files cannot hold one value); `float` a finite decimal number in shortest form (`4.2`, `1000`, `-2.25`; not `1.50`, `1e3`, `1e+06`, `1_000`, `+1`, `.5`, `-0`, `NaN`, `Inf` or hex, so two files cannot hold one value); `bool` exactly `true` or `false`; `date` `YYYY-MM-DD` (a real calendar date, so `2026-02-30` fails); `time` `H:MM` or `H:MM:SS` with an hour of one or two digits (`7:30`, `07:30:15`, `7:30:00`), with optional fractional seconds; `datetime` `YYYY-MM-DDTHH:MM:SS` with optional fractional seconds and an optional zone (RFC 3339 `2026-11-18T07:30:00Z`, or `2026-11-24T10:00:00`). A key that does not parse MUST produce a wrong-type finding on `$ID` naming the key and the expected form. This can make a database that passed before fail, but only when it holds a key that is not a valid value of the type its own definition declares for `$ID`; no known database declares a non-string `$ID`.
+
+**Key vs column strictness.** This parse applies to the record key only. An ordinary `date`, `time` or `datetime` column keeps its existing check (any text is accepted), so `2026-02-30` passes in a `date` column and fails as a `date` key. Tightening columns would newly reject stored values, so it is offered as an opt-in instead: [REQ: strict-temporal-opt-in](#req-strict-temporal-opt-in).
+
+#### REQ: strict-temporal-opt-in
+
+`datavalidator.StrictTemporalFindings(root, definition)` MUST report every text value of a top-level `date`, `time` or `datetime` column, in root and subcollection records, that the `$ID` key parser rejects, naming the file, record, field, value and expected form. It MUST NOT run as part of `Validate`, whose result for such columns is unchanged. A key that parses MUST be passed on, parsed, to the `enum` and `min_value`/`max_value` checks, so an `int` key is compared as a number.
 
 This applies to `$ID` only. Ordinary `date`, `time` and `datetime` columns keep accepting any string (their format is not checked); checking them is a separate, possibly breaking change. A `$ID` value that is not a string (a list-of-records row storing `"$ID": 5`) keeps the plain value type check. Before this rule, a `date` key accepted any text, and an `int`, `float` or `bool` key always failed for per-file records (the key text is a string), so the only records whose outcome changes are those whose key is not a valid value of the declared key type.
 
@@ -483,6 +489,14 @@ Verification of record: 337 definition files audited across every layout (`.coll
 **Given** a collection whose `$ID` column is `type: date`, holding per-file records `2026-11-24.json` and `notadate.json`
 **When** the database is validated
 **Then** `2026-11-24` passes and `notadate` fails with a wrong-type finding on `$ID` naming the key and `YYYY-MM-DD`; with `$ID` typed `int` and `max_value: 10`, key `3` passes and key `11` fails the range check
+
+### AC: strict-temporal-opt-in
+
+**Requirements:** column-validation#req:strict-temporal-opt-in
+
+**Given** a `date` column holding `2026-02-30` in a root record and a `time` column holding `25:00` in a subcollection record
+**When** the database is validated, and `StrictTemporalFindings` is run
+**Then** validation reports neither value, and `StrictTemporalFindings` reports both with the expected form
 
 ## Not Doing (and Why)
 

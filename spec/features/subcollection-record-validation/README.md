@@ -49,7 +49,17 @@ and its record file is that directory joined with the subcollection's own record
 
 ### REQ: parent-record-optional
 
-A parent record MAY be absent while its subcollections hold records. This is how Firestore works: `ext/commitius/cmSessions/{id}` can exist although no document `ext/commitius` was ever written. A parent key MUST therefore be taken both from the parent's records and from the per-record directories that exist under the parent's records base path: a directory `<parent DirPath>/<parent records-base-path>/<name>/` that contains a directory `<subId>/` is the parent instance `<name>` of subcollection `<subId>`, whether or not a record file for `<name>` exists. The rule applies at every depth, so a record two missing parents below a root collection is validated. Hidden entries, `$`-prefixed entries (`$records`, `$views`, ...; no record key starts with `$`), and names matched by the parent's `exclude_regex` MUST NOT be parent instances, and a directory that does not contain `<subId>/` MUST NOT create an instance (so no record-count finding is raised for it). A parent key found both ways is one instance, not two. A missing parent is not a record: it MUST NOT be counted in the parent collection's record count. If the parent's records cannot be read (a map- or list-of-records file that fails to parse), the directory-found instances MUST still be validated. Before this rule such records were never opened, so validation passed whatever they held (a database with invalid data below a missing parent therefore fails now, by design); an author had to write an empty `{}` parent record to get them validated, and that workaround keeps working.
+A parent record MAY be absent while its subcollections hold records. This is how Firestore works: `ext/commitius/cmSessions/{id}` can exist although no document `ext/commitius` was ever written. A parent key MUST therefore be taken both from the parent's records and from the per-record directories that exist under the parent's records base path: a directory `<parent DirPath>/<parent records-base-path>/<name>/` that contains a directory `<subId>/` is the parent instance `<name>` of subcollection `<subId>`, whether or not a record file for `<name>` exists. The rule applies at every depth, so a record two missing parents below a root collection is validated. Which directories are parent instances is decided by [REQ: parent-dirs-one-rule](#req-parent-dirs-one-rule), and a directory that does not contain `<subId>/` MUST NOT create an instance (so no record-count finding is raised for it). A parent key found both ways is one instance, not two. A missing parent is not a record: it MUST NOT be counted in the parent collection's record count. If the parent's records cannot be read (a map- or list-of-records file that fails to parse), the directory-found instances MUST still be validated. Before this rule such records were never opened, so validation passed whatever they held (a database with invalid data below a missing parent therefore fails now, by design); an author had to write an empty `{}` parent record to get them validated, and that workaround keeps working.
+
+**Scope.** This discovery reads the layout validation reads, `<parent DirPath>/<parent records-base-path>/<name>/<subId>/`. With `records_dir: .` (the Firestore-mirror layout) that is also where the storage drivers (dalgo2ingitdb, dalgo2ingitdb4local, `ingitdb select`) read and write, and the rule is complete. Under the default `records_dir` (`$records`) the drivers use `<parent DirPath>/<name>/<subId>/` instead; which of the two layouts applies there is an open decision, and until it is made records in the driver layout are reported, not validated ([REQ: driver-layout-records-reported](#req-driver-layout-records-reported)).
+
+### REQ: parent-dirs-one-rule
+
+One exported rule, `ingitdb.ScanParentDirs`, MUST decide which directories are parent instances, for validation and for any reader that enumerates instances (the local storage driver's collection-group read), so a reader can never return a record that validation did not consider. The rule: hidden entries are not parents; the names inGitDB itself writes in a collection directory (`$records`, `$views`, `$ingitdb`, and the parent's own `records_dir`) are not parents; every other name is a parent key, including other `$`-prefixed names, because Firestore allows document ids such as `$x`; names matched by the parent's `exclude_regex` are not parents; and an instance directory reached through a symbolic link is used only when it resolves inside the database root. One that resolves outside MUST NOT be read, and validation MUST report it as a warning naming the link. The parent directory MUST be read once per level, not once per subcollection.
+
+### REQ: driver-layout-records-reported
+
+Until the layout decision above is made, validation MUST report, for every subcollection whose parent uses a `records_dir` other than `.`, the non-empty instance directories that exist in the driver layout `<parent DirPath>/<key>/<subId>/`, as one warning per subcollection that names both locations and says the decision is open. A warning MUST NOT count as a finding: `HasErrors`, `ErrorCount`, `Errors` and the exit code are unchanged (`ValidationResult.AddWarning`, `Warnings`). Readers that print a per-collection count line SHOULD print the warning instead of `All 0 records are valid` for such a subcollection.
 
 ### REQ: subcollection-records-schema-validated
 
@@ -174,6 +184,22 @@ Adding subcollection validation MUST NOT change the findings produced for root c
 **Given** a subcollection with `min_records_count: 1` and, under the parent's records base path, a hidden directory, `$records` and `$views` directories, a name matched by `exclude_regex`, a directory without the subcollection's directory, and a file named like the subcollection
 **When** the database is validated
 **Then** none of them is a parent instance: no finding is raised for them
+
+### AC: parent-dirs-one-rule
+
+**Requirements:** subcollection-record-validation#req:parent-dirs-one-rule
+
+**Given** below a parent with `records_dir: .`: a `$x` directory, a symbolic link to a directory inside the database, a symbolic link to a directory outside it, `$views`, `$records`, `$ingitdb`, the parent's own `records_dir`, a hidden directory and a name matched by `exclude_regex`, each holding the subcollection
+**When** the database is validated, and `ingitdb.ScanParentDirs` is asked for the parent keys
+**Then** `$x` and the inside link are parent instances and their records are validated; the outside link is not read and is reported as one warning, with no finding and no change to the exit code; the other names are not parents
+
+### AC: driver-layout-records-reported
+
+**Requirements:** subcollection-record-validation#req:driver-layout-records-reported
+
+**Given** `spaces` with the default `records_dir` and records of its `notes` subcollection both at `spaces/$records/s1/notes/` and, as the storage drivers write them, at `spaces/family/notes/` and `spaces/work/notes/`
+**When** the database is validated
+**Then** the `$records` record is validated, and one warning says that instances in `spaces/<key>/notes/` (e.g. `spaces/family/notes`) are not validated, that validation reads `spaces/$records/<key>/notes/`, and that the layout under `records_dir "$records"` is an open decision; there is no finding
 
 ## Not Doing (and Why)
 
