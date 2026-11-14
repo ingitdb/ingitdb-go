@@ -69,10 +69,9 @@ type instanceWalk struct {
 // collection-group read; the parent's directory is read once per level.
 //
 // Directory discovery looks in <DirPath>/<records_dir>/<key>/<sub>/, the
-// layout validation reads. With records_dir "." that is also where the
-// storage drivers read and write; under the default records_dir ($records)
-// the drivers use <DirPath>/<key>/<sub>/ instead, which is an open layout
-// decision (see driverLayoutWarnings).
+// layout the definition defines and every reader uses; data at
+// <DirPath>/<key>/<sub>/ under a non-empty records directory is reported by
+// mislaidSubCollectionFindings.
 //
 // A read/parse failure at a level is not reported here (the schema pass reports
 // it for that collection); the level then yields only the directory-discovered
