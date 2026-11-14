@@ -99,6 +99,59 @@ func TestValidate_ParentDirsOneRule(t *testing.T) {
 	}
 }
 
+// A parent that has a record file but whose instance directory is a symbolic
+// link leading outside the database is not read either.
+func TestValidate_OutsideLinkWithParentRecord(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outside := t.TempDir()
+	dot := "."
+	writeTree(t, root, map[string]string{
+		"spaces/s1.yaml":         "title: S1\n",
+		"spaces/s2/notes/r.yaml": "title: 1\n", // wrong type: reported
+	})
+	writeTree(t, outside, map[string]string{"evil.yaml": "title: 5\n"})
+	if err := os.MkdirAll(filepath.Join(root, "spaces", "s1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "spaces", "s1", "notes")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewValidator().Validate(context.Background(), root, spacesWithNotes(root, &dot))
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := res.Errors()
+	if len(errs) != 1 || !strings.HasSuffix(filepath.ToSlash(errs[0].FilePath), "spaces/s2/notes/r.yaml") {
+		t.Fatalf("expected one finding for s2, got:\n%s", findingTexts(errs))
+	}
+	if w := res.Warnings(); len(w) != 1 || !strings.Contains(w[0].Message, "spaces/s1/notes resolves outside the database") {
+		t.Fatalf("expected the outside-link warning, got %+v", w)
+	}
+	if passed, total := res.GetRecordCounts("spaces/notes"); passed != 0 || total != 1 {
+		t.Errorf("spaces/notes counts = %d/%d, want 0/1", passed, total)
+	}
+}
+
+// With a nested records_dir such as data/items, the parent's own records are
+// not mistaken for mislaid subcollection data of a parent named "data".
+func TestValidate_NestedRecordsDirNotMislaid(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	nested := "data/items"
+	def := spacesWithNotes(root, &nested)
+	spaces := def.Collections["spaces"]
+	spaces.SubCollections["items"] = &ingitdb.CollectionDef{ID: "items", RecordFile: spaces.SubCollections["notes"].RecordFile,
+		Columns: spaces.SubCollections["notes"].Columns}
+	writeTree(t, root, map[string]string{
+		"spaces/data/items/s1.yaml": "title: S1\n",
+		"spaces/data/items/s2.yaml": "title: S2\n",
+	})
+	if got := mislaidSubCollectionFindings(root, def); got != nil {
+		t.Fatalf("false positive: %s", findingTexts(got))
+	}
+}
+
 // Verifies subcollection-record-validation#ac:mislaid-subcollection-records-rejected:
 // under the default records_dir the definition puts spaces' notes at
 // spaces/$records/<key>/notes/; notes found at spaces/<key>/notes/ are an
