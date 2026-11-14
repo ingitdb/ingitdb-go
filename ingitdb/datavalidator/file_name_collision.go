@@ -190,7 +190,7 @@ func collisionReason(names []string) ([]string, string) {
 	case letterCase && normalisation:
 		return shown, "differ only in letter case and Unicode normalisation"
 	case normalisation:
-		return shown, "differ only in Unicode normalisation (NFC/NFD)"
+		return shown, "differ only in Unicode normalisation"
 	default:
 		return shown, "differ only in letter case"
 	}
@@ -214,6 +214,7 @@ func definitionNameFindings(idx *nameIndex, def *ingitdb.Definition) []ingitdb.V
 		colDef := def.Collections[id]
 		if colDef != nil && colDef.DirPath != "" {
 			idx.walkPath(id, colDef.DirPath, true)
+			idx.own(id, recordsBaseDir(colDef))
 		}
 		findings = append(findings, subCollectionIDFindings(id, colDef)...)
 	}

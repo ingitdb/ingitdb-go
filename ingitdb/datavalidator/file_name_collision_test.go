@@ -197,7 +197,7 @@ func TestValidate_FileNameCollision_NFCAndNFD(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("want 1 finding, got %s", findingTexts(errs))
 	}
-	if msg := errs[0].Message; !strings.Contains(msg, `names "cafe\u0301.yaml", "caf\u00e9.yaml" in `) || !strings.Contains(msg, "differ only in Unicode normalisation (NFC/NFD), so they "+fsClause) {
+	if msg := errs[0].Message; !strings.Contains(msg, `names "cafe\u0301.yaml", "caf\u00e9.yaml" in `) || !strings.Contains(msg, "differ only in Unicode normalisation, so they "+fsClause) {
 		t.Errorf("got %s", msg)
 	}
 }
@@ -508,9 +508,12 @@ func TestCollisionReason(t *testing.T) {
 		shown  string
 	}{
 		{[]string{"Ab", "ab"}, "differ only in letter case", "Ab, ab"},
-		{[]string{"caf\u00e9", "cafe\u0301"}, "differ only in Unicode normalisation (NFC/NFD)", `"caf\u00e9", "cafe\u0301"`},
+		{[]string{"caf\u00e9", "cafe\u0301"}, "differ only in Unicode normalisation", `"caf\u00e9", "cafe\u0301"`},
 		{[]string{"Caf\u00e9", "caf\u00e9", "cafe\u0301"}, "differ only in letter case and Unicode normalisation", `"Caf\u00e9", "caf\u00e9", "cafe\u0301"`},
 		{[]string{"a\xff", "A\xff"}, "differ only in letter case", `"a\xff", "A\xff"`},
+		{[]string{"K.yaml", "\u212a.yaml"}, "differ only in Unicode normalisation", `"K.yaml", "\u212a.yaml"`},
+		{[]string{"\u03a9", "\u2126"}, "differ only in Unicode normalisation", `"\u03a9", "\u2126"`},
+		{[]string{"\u00c5", "\u212b"}, "differ only in Unicode normalisation", `"\u00c5", "\u212b"`},
 	} {
 		shown, reason := collisionReason(tc.names)
 		if reason != tc.reason || strings.Join(shown, ", ") != tc.shown {
@@ -539,5 +542,116 @@ func TestNameIndex_Edges(t *testing.T) {
 	idx.usePath("c", filepath.Join(root, "x", "a")) // below it: every segment
 	if f := idx.findings(); len(f) != 1 || f[0].CollectionID != "c" {
 		t.Errorf("got %s", findingTexts(f))
+	}
+}
+
+// Two collections keeping their shared files in one data directory are each
+// validated: a change to both validates both files.
+func TestIncrementalValidator_SharedFilesInOneDirectory(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{"data/a.yaml": "a1:\n  title: a\n", "data/b.yaml": "b1:\n  title: [\n"})
+	shared := func(id, name string) *ingitdb.CollectionDef {
+		return &ingitdb.CollectionDef{ID: id, DirPath: filepath.Join(root, "data"), Columns: titleColumns(),
+			RecordFile: &ingitdb.RecordFileDef{Name: name, Format: ingitdb.RecordFormatYAML, RecordType: ingitdb.MapOfRecords}}
+	}
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{"a": shared("a", "a.yaml"), "b": shared("b", "b.yaml")}}
+	inc := incrementalFindings(t, root, def, added("data/a.yaml"), added("data/b.yaml"))
+	full := fullFindings(t, root, def)
+	if len(inc) != 1 || len(full) != 1 || inc[0].CollectionID != "b" || findingTexts(inc) != findingTexts(full) {
+		t.Errorf("incremental %s\nfull %s", findingTexts(inc), findingTexts(full))
+	}
+}
+
+// Incremental validation reaches a subcollection instance only below a
+// parent full validation walks: a parent directory name the parent-directory
+// rule accepts, or the name of a parent record (a record may have any name,
+// "$records" and "$views" included).
+func TestIncrementalValidator_ParentsFullValidationWalks(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"c/$records/.hidden/notes/$records/n.yaml": "title: [\n", // hidden: not a parent
+		"c/$records/$views/notes/$records/n.yaml":  "title: [\n", // reserved, no record: not a parent
+		"d/$records.yaml":                          "title: d\n", // a record named $records ...
+		"d/$records/notes/$records/n.yaml":         "title: [\n", // ... is a parent
+		"m/all.yaml":                               "$views:\n  title: m\n",
+		"m/$views/notes/$records/n.yaml":           "title: [\n", // a shared-file record named $views
+		"m/$records/notes/$records/n.yaml":         "title: [\n", // no such record: not a parent
+	})
+	def := plainDB(root)
+	dot := "."
+	notes := func() map[string]*ingitdb.CollectionDef {
+		return map[string]*ingitdb.CollectionDef{"notes": {ID: "notes", RecordFile: plainRecordFile(), Columns: titleColumns()}}
+	}
+	def.Collections["d"] = &ingitdb.CollectionDef{ID: "d", DirPath: filepath.Join(root, "d"), Columns: titleColumns(), SubCollections: notes(),
+		RecordFile: &ingitdb.RecordFileDef{Name: "{key}.yaml", Format: ingitdb.RecordFormatYAML, RecordType: ingitdb.SingleRecord, RecordsDir: &dot}}
+	def.Collections["m"] = &ingitdb.CollectionDef{ID: "m", DirPath: filepath.Join(root, "m"), Columns: titleColumns(), SubCollections: notes(),
+		RecordFile: &ingitdb.RecordFileDef{Name: "all.yaml", Format: ingitdb.RecordFormatYAML, RecordType: ingitdb.MapOfRecords}}
+	var changed []ingitdb.ChangedFile
+	for _, p := range []string{"c/$records/.hidden/notes/$records/n.yaml", "c/$records/$views/notes/$records/n.yaml", "d/$records/notes/$records/n.yaml", "m/$views/notes/$records/n.yaml", "m/$records/notes/$records/n.yaml"} {
+		changed = append(changed, added(p))
+	}
+	inc := incrementalFindings(t, root, def, changed...)
+	full := fullFindings(t, root, def)
+	if findingTexts(inc) != findingTexts(full) || len(inc) != 2 || inc[0].CollectionID != "d/notes" || inc[1].CollectionID != "m/notes" {
+		t.Errorf("incremental %s\nfull %s", findingTexts(inc), findingTexts(full))
+	}
+}
+
+// A parent directory whose name holds glob characters is a literal name for
+// both passes: its records are validated and its collisions found.
+func TestIncrementalValidator_GlobCharactersInParentNames(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"c/$records/[p]/notes/$records/N.yaml":   "title: a\n",
+		"c/$records/[p]/notes/$records/n.yaml":   "title: b\n",
+		"c/$records/[p]/notes/$records/bad.yaml": "title: [\n",
+		"c/$records/p/notes/$records/ok.yaml":    "title: c\n",
+		"c/$records/a*?/notes/$records/bad.yaml": "title: [\n",
+	})
+	def := plainDB(root)
+	inc := incrementalFindings(t, root, def, added("c/$records/[p]/notes/$records/n.yaml"), added("c/$records/[p]/notes/$records/bad.yaml"),
+		added("c/$records/a*?/notes/$records/bad.yaml"))
+	full := fullFindings(t, root, def)
+	all := findingTexts(full)
+	if findingTexts(inc) != all || len(full) != 3 || strings.Count(all, "failed to parse record file") != 2 || !strings.Contains(all, "names N.yaml, n.yaml in ") {
+		t.Errorf("incremental %s\nfull %s", findingTexts(inc), all)
+	}
+	if passed, total := fullCounts(t, root, def, "c/notes"); passed != 3 || total != 5 {
+		t.Errorf("c/notes = %d/%d", passed, total)
+	}
+}
+
+func fullCounts(t *testing.T, root string, def *ingitdb.Definition, id string) (int, int) {
+	t.Helper()
+	res, err := NewValidator().Validate(context.Background(), root, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.GetRecordCounts(id)
+}
+
+// A changed entry of a records directory that is not a record file still
+// counts for collisions, as every entry does in the full pass; changes
+// outside any records directory do not.
+func TestIncrementalValidator_NonRecordEntries(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"c/$records/Bob.yaml":                    "title: a\n",
+		"c/$records/bob.YAML":                    "x\n",
+		"c/$records/p1/notes/$records/README.md": "x\n",
+		"c/$records/p1/notes/$records/Readme.md": "x\n",
+		"c/$records/p1/notes/$records/n.yaml":    "title: n\n",
+		"c/README.md":                            "x\n",
+		"c/readme.md":                            "x\n",
+	})
+	def := plainDB(root)
+	inc := incrementalFindings(t, root, def, added("c/$records/bob.YAML"), added("c/$records/p1/notes/$records/Readme.md"), added("c/readme.md"))
+	sameFindings(t, fullFindings(t, root, def), inc)
+	if len(inc) != 2 {
+		t.Errorf("got %s", findingTexts(inc))
 	}
 }

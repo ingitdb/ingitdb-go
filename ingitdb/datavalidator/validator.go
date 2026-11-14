@@ -182,14 +182,28 @@ func validateSingleRecordFile(collectionKey string, colDef *ingitdb.CollectionDe
 	return 1, 1, nil
 }
 
+// singleRecordGlobPattern is the glob of a single-record collection's record
+// files: record_file.name with {key} as *, below the records directory. The
+// directory is literal: its names come from data (a parent directory named
+// "[p]" is a parent key), so their glob characters are escaped.
 func singleRecordGlobPattern(colDef *ingitdb.CollectionDef) string {
-	baseDir := filepath.Join(colDef.DirPath, colDef.RecordFile.RecordsBasePath())
-	fileName := colDef.RecordFile.Name
-	if strings.Contains(fileName, "{key}") {
-		globName := strings.ReplaceAll(fileName, "{key}", "*")
-		return filepath.Join(baseDir, globName)
+	baseDir := escapeGlob(filepath.Join(colDef.DirPath, colDef.RecordFile.RecordsBasePath()))
+	return filepath.Join(baseDir, strings.ReplaceAll(colDef.RecordFile.Name, "{key}", "*"))
+}
+
+// escapeGlob makes the glob characters *, ? and [ of s literal, each as a
+// one-character class, which filepath.Match reads the same way on every
+// platform (a backslash is a separator on Windows, so it is left as it is).
+func escapeGlob(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '*' || r == '?' || r == '[' {
+			b.WriteString("[" + string(r) + "]")
+			continue
+		}
+		b.WriteRune(r)
 	}
-	return filepath.Join(baseDir, fileName)
+	return b.String()
 }
 
 func skipRecordPath(filePath string, rfd *ingitdb.RecordFileDef) bool {

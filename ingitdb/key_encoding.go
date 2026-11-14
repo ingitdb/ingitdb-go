@@ -251,21 +251,24 @@ func sameFileKey(name string) string {
 }
 
 // NameCollisionKind reports how the names of one CaseOnlyDifferences group
-// differ: in letter case (their decompositions differ), in Unicode
-// normalisation (their case folds differ), or both.
+// differ: in letter case (their canonical decompositions differ), in Unicode
+// normalisation (they are not all in one normalisation form, NFC or NFD: an
+// NFC and an NFD name, or a character such as the Kelvin sign whose
+// decomposition is another character), or both.
 func NameCollisionKind(names []string) (letterCase, normalisation bool) {
 	decomposed := map[string]bool{}
-	folded := map[string]bool{}
+	allNFC, allNFD := true, true
 	for _, name := range names {
 		if plainBytes(name) {
 			decomposed[name] = true
-			folded[asciiLower(name)] = true
 			continue
 		}
-		decomposed[canonicalDecomposition(name)] = true
-		folded[foldName(name)] = true
+		nfd := canonicalDecomposition(name)
+		decomposed[nfd] = true
+		allNFD = allNFD && nfd == name
+		allNFC = allNFC && norm.NFC.String(name) == name
 	}
-	return len(decomposed) > 1, len(folded) > 1
+	return len(decomposed) > 1, !allNFC && !allNFD
 }
 
 // plainBytes reports a name that is ASCII or not valid UTF-8: one whose
@@ -323,10 +326,11 @@ func combiningClass(r rune) uint8 {
 	return norm.NFD.PropertiesString(string(r)).CCC()
 }
 
-// CaseOnlyDifferences returns the groups of names that are one entry on a
-// case-insensitive or normalisation-insensitive file system (Windows, macOS
-// by default) and differ otherwise: names that differ only in letter case,
-// in Unicode normalisation (NFC against NFD), or both. Each group holds
+// CaseOnlyDifferences returns the groups of names that may be one entry on a
+// case-insensitive or normalisation-insensitive file system (for example
+// macOS; Windows for letter case) and differ otherwise: names that differ
+// only in letter case, in Unicode normalisation, or both, compared with
+// sameFileKey, which is deliberately stricter than any single file system. Each group holds
 // every such name, however many. Groups and names are in the order of names.
 func CaseOnlyDifferences(names []string) [][]string {
 	index := map[string]int{}
@@ -355,9 +359,9 @@ func CaseOnlyDifferences(names []string) [][]string {
 	return out
 }
 
-// NameDifferingInCase returns the entry of dir whose name is one entry with
-// name on a case-insensitive or normalisation-insensitive file system (see
-// CaseOnlyDifferences) but differs from it, if there is one. A writer of a
+// NameDifferingInCase returns the entry of dir whose name may be one entry
+// with name on a case-insensitive or normalisation-insensitive file system
+// (see CaseOnlyDifferences) but differs from it, if there is one. A writer of a
 // collection that declares a key encoding calls it before creating a record
 // file or directory, and refuses to write when it finds one
 // (record-key-encoding#req:letter-case-kept-collisions-reported). A missing

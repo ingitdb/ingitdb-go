@@ -56,7 +56,7 @@ func (iv *incrementalValidator) ValidateChanges(
 	names := newNameIndex(dbPath, iv.readDir)
 	type counts struct{ passed, total int }
 	perCollection := map[string]*counts{}
-	wholeFileDone := map[string]bool{}  // instance data directory → its shared file already validated
+	wholeFileDone := map[string]bool{}  // collection id + shared file path → already validated
 	parentNameDone := map[string]bool{} // instance data directory → its parent name already checked
 
 	for _, ar := range affected {
@@ -82,29 +82,30 @@ func (iv *incrementalValidator) ValidateChanges(
 			c.total += total
 			appendErrors(result, errs)
 		case ingitdb.MapOfRecords, ingitdb.ListOfRecords:
-			if wholeFileDone[colDef.DirPath] {
+			sharedFile := ar.CollectionID + "\x00" + collectionRecordFilePath(colDef)
+			if wholeFileDone[sharedFile] {
 				continue
 			}
-			wholeFileDone[colDef.DirPath] = true
+			wholeFileDone[sharedFile] = true
 			passed, total, errs := validateWholeRecordFile(ar.CollectionID, colDef)
 			c.passed += passed
 			c.total += total
 			appendErrors(result, errs)
 		}
 	}
-	// A deleted record file (or a rename's old name) can leave two names of
-	// one file behind: its group is checked as well.
+	// Every changed path in a records directory counts for collisions, as
+	// every entry there does in the full pass: a file that is no record (a
+	// bob.YAML next to Bob.yaml), a deleted file, or a rename's old name that
+	// leaves two names of one file behind.
 	for _, cf := range changed {
-		gone := cf.OldPath
-		if cf.Kind == ingitdb.ChangeKindDeleted {
-			gone = cf.Path
-		}
-		if gone == "" {
-			continue
-		}
-		absPath := filepath.Clean(filepath.Join(dbPath, gone))
-		if levels := resolveRecordFile(def, absPath); levels != nil {
-			names.useRecord(levels, absPath)
+		for _, p := range []string{cf.Path, cf.OldPath} {
+			if p == "" {
+				continue
+			}
+			absPath := filepath.Clean(filepath.Join(dbPath, p))
+			if levels, _ := resolvePath(def, absPath); levels != nil {
+				names.useRecord(levels, absPath)
+			}
 		}
 	}
 	appendErrors(result, definitionNameFindings(names, def))

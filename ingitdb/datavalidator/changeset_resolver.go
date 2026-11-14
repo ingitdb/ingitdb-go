@@ -61,42 +61,92 @@ type instanceLevel struct {
 }
 
 // resolveRecordFile returns the collection instances from a root collection
-// down to the one that owns absPath as a record file, or nil. Below a
-// collection's records directory, <parent>/<subcollection id>/... leads into
-// that subcollection's instance for the parent, as the full pass walks it.
-// Root collections are tried in id order.
+// down to the one that owns absPath as a record file, or nil.
 func resolveRecordFile(def *ingitdb.Definition, absPath string) []instanceLevel {
-	for _, id := range slices.Sorted(maps.Keys(def.Collections)) {
-		if levels := resolveBelow([]instanceLevel{{id: id, colDef: def.Collections[id]}}, absPath); levels != nil {
-			return levels
-		}
-	}
-	return nil
-}
-
-func resolveBelow(levels []instanceLevel, absPath string) []instanceLevel {
-	current := levels[len(levels)-1]
-	if current.colDef == nil {
+	levels, isRecord := resolvePath(def, absPath)
+	if !isRecord {
 		return nil
 	}
+	return levels
+}
+
+// resolvePath returns the collection instances from a root collection down
+// to the deepest one whose records directory holds absPath, and whether
+// absPath is a record file of that instance; nil when no records directory
+// holds it. Below a collection's records directory,
+// <parent>/<subcollection id>/... leads into that subcollection's instance
+// for the parent only where the full pass walks one (parentWalked). Root
+// collections are tried in id order; the owner of a record file wins over a
+// collection whose records directory merely holds it.
+func resolvePath(def *ingitdb.Definition, absPath string) ([]instanceLevel, bool) {
+	var holder []instanceLevel
+	for _, id := range slices.Sorted(maps.Keys(def.Collections)) {
+		levels, isRecord := resolveBelow([]instanceLevel{{id: id, colDef: def.Collections[id]}}, absPath)
+		if isRecord {
+			return levels, true
+		}
+		if holder == nil {
+			holder = levels
+		}
+	}
+	return holder, false
+}
+
+func resolveBelow(levels []instanceLevel, absPath string) ([]instanceLevel, bool) {
+	current := levels[len(levels)-1]
+	if current.colDef == nil {
+		return nil, false
+	}
 	if ownsRecordFile(current.colDef, absPath) {
-		return levels
+		return levels, true
 	}
 	rel, err := filepath.Rel(recordsBaseDir(current.colDef), absPath)
 	segments := strings.Split(rel, string(filepath.Separator))
-	if err != nil || len(segments) < 3 || segments[0] == ".." {
-		return nil
+	if err != nil || rel == "." || segments[0] == ".." {
+		return nil, false
 	}
-	sub := current.colDef.SubCollections[segments[1]]
-	if sub == nil {
-		return nil
+	if sub := current.colDef.SubCollections[segmentAt(segments, 1)]; sub != nil && len(segments) >= 3 && parentWalked(current.colDef, segments[0]) {
+		inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
+		inst.DirPath = subCollectionDataDir(current.colDef, segments[0], segments[1])
+		parentKey, nameErr := decodeParentName(current.colDef, segments[0])
+		deeper, isRecord := resolveBelow(append(slices.Clone(levels), instanceLevel{
+			id: current.id + "/" + segments[1], colDef: &inst, parentKey: parentKey, nameErr: nameErr,
+		}), absPath)
+		if deeper != nil {
+			return deeper, isRecord
+		}
 	}
-	inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
-	inst.DirPath = subCollectionDataDir(current.colDef, segments[0], segments[1])
-	parentKey, nameErr := decodeParentName(current.colDef, segments[0])
-	return resolveBelow(append(slices.Clone(levels), instanceLevel{
-		id: current.id + "/" + segments[1], colDef: &inst, parentKey: parentKey, nameErr: nameErr,
-	}), absPath)
+	return levels, false
+}
+
+func segmentAt(segments []string, i int) string {
+	if i < len(segments) {
+		return segments[i]
+	}
+	return ""
+}
+
+// parentWalked reports whether the full pass walks the subcollection
+// instances below the directory name in a collection's records directory:
+// a name the parent-directory rule accepts (ingitdb.IsParentDirName), or the
+// directory name of a parent record, whatever it is (walkBelow).
+func parentWalked(colDef *ingitdb.CollectionDef, name string) bool {
+	if ingitdb.IsParentDirName(name, colDef.RecordFile) {
+		return true
+	}
+	rf := colDef.RecordFile
+	if rf != nil && rf.RecordType == ingitdb.SingleRecord && strings.Contains(rf.Name, "{key}") {
+		filePath := filepath.Join(recordsBaseDir(colDef), strings.ReplaceAll(rf.Name, "{key}", name))
+		_, ok := loadSingleRecordFile(colDef, filePath)
+		return ok
+	}
+	records, _ := loadCollectionRecords(colDef)
+	for _, pr := range records {
+		if dirName, ok := parentDirName(colDef, pr); ok && dirName == name {
+			return true
+		}
+	}
+	return false
 }
 
 // CollectionForRecordFile returns the root collection (and its ID) that owns

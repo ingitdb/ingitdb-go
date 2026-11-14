@@ -413,6 +413,14 @@ func TestNameCollisionKind(t *testing.T) {
 		{[]string{"café", "café"}, false, true},
 		{[]string{"Café", "café"}, true, true},
 		{[]string{"a\xff", "A\xff"}, true, false},
+		// Singleton decompositions: the Kelvin, Ohm and Angstrom signs are
+		// canonically equivalent to letters (case folding merges them too).
+		{[]string{"K.yaml", "\u212a.yaml"}, false, true},
+		{[]string{"\u03a9", "\u2126"}, false, true},
+		{[]string{"\u00c5", "\u212b"}, false, true},
+		{[]string{"k", "\u212a"}, true, true},
+		{[]string{"\u00c9", "\u00e9"}, true, false},
+		{[]string{"E\u0301", "e\u0301"}, true, false},
 	} {
 		if lc, nf := NameCollisionKind(tc.names); lc != tc.lc || nf != tc.nf {
 			t.Errorf("%q: %v %v", tc.names, lc, nf)
