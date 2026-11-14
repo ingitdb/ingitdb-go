@@ -99,54 +99,75 @@ func TestValidate_ParentDirsOneRule(t *testing.T) {
 	}
 }
 
-// Verifies subcollection-record-validation#ac:driver-layout-records-reported:
-// under the default records_dir, records the storage drivers wrote at
-// spaces/<key>/notes/ are not validated and are reported as a warning naming
-// both locations; findings and exit code are unchanged.
-func TestValidate_DriverLayoutRecordsReported(t *testing.T) {
+// Verifies subcollection-record-validation#ac:mislaid-subcollection-records-rejected:
+// under the default records_dir the definition puts spaces' notes at
+// spaces/$records/<key>/notes/; notes found at spaces/<key>/notes/ are an
+// error per directory, naming the found path, the expected path, the file
+// count and the fix.
+func TestValidate_MislaidSubCollectionRecordsRejected(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	writeTree(t, root, map[string]string{
-		"spaces/$records/s1.yaml":         "title: S1\n",
-		"spaces/$records/s1/notes/a.yaml": "title: validated\n",
-		"spaces/family/notes/c1.yaml":     "title: 1\n", // driver layout: not validated
-		"spaces/work/notes/c2.yaml":       "title: 2\n",
-		"spaces/empty/notes/.keep":        "", // hidden-only directory is still non-empty: counted
-		"spaces/README.md":                "",
-		"spaces/$records/s2/other/x.yaml": "",
-		"spaces/$views/notes/v.yaml":      "",
-		"spaces/nothing/notes-but-no-dir": "",
+		"spaces/$records/s1.yaml":          "title: S1\n",
+		"spaces/$records/s1/notes/a.yaml":  "title: validated\n",
+		"spaces/family/notes/c1.yaml":      "title: 1\n", // mislaid
+		"spaces/family/notes/deep/c2.yaml": "title: 2\n", // counted at any depth
+		"spaces/family/notes/.keep":        "",           // hidden: not counted
+		"spaces/hidden/notes/.keep":        "",           // only hidden files: not mislaid
+		"spaces/README.md":                 "",
+		"spaces/$views/notes/v.yaml":       "",
+		"spaces/nothing/notes":             "", // a file, not a directory
 	})
-	if err := os.MkdirAll(filepath.Join(root, "spaces", "bare", "notes"), 0o755); err != nil { // empty: not counted
+	if err := os.MkdirAll(filepath.Join(root, "spaces", "bare", "notes"), 0o755); err != nil { // empty: not mislaid
 		t.Fatal(err)
 	}
 	res, err := NewValidator().Validate(context.Background(), root, spacesWithNotes(root, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.HasErrors() {
-		t.Fatalf("driver-layout records must not become errors, got:\n%s", findingTexts(res.Errors()))
+	errs := res.Errors()
+	if len(errs) != 1 {
+		t.Fatalf("expected one finding, got:\n%s", findingTexts(errs))
 	}
-	w := res.Warnings()
-	if len(w) != 1 {
-		t.Fatalf("expected one warning, got %+v", w)
-	}
-	want := `spaces/notes: 3 instance(s) found in spaces/<key>/notes/ (e.g. spaces/empty/notes), the layout the storage drivers and ` +
-		"`ingitdb select`" + ` use, are not validated; validation reads spaces/$records/<key>/notes/. Which layout applies under records_dir "$records" is an open decision`
-	if w[0].Message != want || w[0].CollectionID != "spaces/notes" {
-		t.Fatalf("warning:\n got %s\nwant %s", w[0].Message, want)
+	want := `spaces/notes: 2 file(s) at spaces/family/notes/ are where the definition does not put them, and are not validated: spaces keeps its records in record_file.records_dir "$records", so the notes of parent record "family" belong at spaces/$records/family/notes/. Move them there, or, if spaces should use the Firestore-mirror layout, set record_file.records_dir: "." on spaces and move its own records out of spaces/$records/`
+	e := errs[0]
+	if e.Message != want || e.CollectionID != "spaces/notes" || e.RecordKey != "family" || e.Severity != ingitdb.SeverityError ||
+		e.FilePath != filepath.Join(root, "spaces", "family", "notes") {
+		t.Fatalf("finding:\n got %+v\nwant %s", e, want)
 	}
 	if passed, total := res.GetRecordCounts("spaces/notes"); passed != 1 || total != 1 {
 		t.Errorf("validated counts = %d/%d, want 1/1", passed, total)
 	}
 
-	// records_dir "." is one layout: no warning. Nil definitions give none.
+	// records_dir "." is the only layout there is: nothing is mislaid. Nil
+	// definitions give nothing.
 	dot := "."
-	if got := driverLayoutWarnings(root, spacesWithNotes(root, &dot)); got != nil {
-		t.Errorf("records_dir . must not warn, got %+v", got)
+	if got := mislaidSubCollectionFindings(root, spacesWithNotes(root, &dot)); got != nil {
+		t.Errorf("records_dir . must not report, got %+v", got)
 	}
-	if driverLayoutWarnings(root, nil) != nil {
+	if mislaidSubCollectionFindings(root, nil) != nil {
 		t.Error("nil definition")
+	}
+}
+
+// A mislaid instance below a defined one (nested parents) is found too.
+func TestValidate_MislaidNestedInstance(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	dot := "."
+	def := spacesWithNotes(root, &dot)
+	notes := def.Collections["spaces"].SubCollections["notes"]
+	notes.RecordFile = &ingitdb.RecordFileDef{Name: "{key}.yaml", Format: ingitdb.RecordFormatYAML, RecordType: ingitdb.SingleRecord}
+	notes.SubCollections = map[string]*ingitdb.CollectionDef{"tags": {ID: "tags", RecordFile: notes.RecordFile}}
+	writeTree(t, root, map[string]string{
+		"spaces/s1/notes/$records/n1.yaml": "title: N\n",
+		"spaces/s1/notes/n1/tags/t.yaml":   "x: 1\n", // mislaid: belongs at spaces/s1/notes/$records/n1/tags/
+	})
+	got := mislaidSubCollectionFindings(root, def)
+	if len(got) != 1 || got[0].CollectionID != "spaces/notes/tags" ||
+		!strings.Contains(got[0].Message, "1 file(s) at spaces/s1/notes/n1/tags/") ||
+		!strings.Contains(got[0].Message, "belong at spaces/s1/notes/$records/n1/tags/") {
+		t.Fatalf("got %+v", got)
 	}
 }
 
@@ -168,8 +189,8 @@ func TestRelToRootAndLastSegment(t *testing.T) {
 		t.Error("recordsBaseDir without a record file is the data directory")
 	}
 	empty := t.TempDir()
-	if got := driverLayoutWarnings(empty, spacesWithNotes(empty, nil)); got != nil {
-		t.Errorf("no driver-layout data must not warn, got %+v", got)
+	if got := mislaidSubCollectionFindings(empty, spacesWithNotes(empty, nil)); got != nil {
+		t.Errorf("no mislaid data must not report, got %+v", got)
 	}
 }
 

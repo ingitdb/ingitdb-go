@@ -4,8 +4,8 @@ package datavalidator
 
 import (
 	"fmt"
+	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -192,46 +192,47 @@ func lastSegment(fullID string) string {
 	return fullID[strings.LastIndex(fullID, "/")+1:]
 }
 
-// driverLayoutWarnings reports subcollection data that validation does not
-// read because it sits in the layout the storage drivers (dalgo2ingitdb,
-// dalgo2ingitdb4local, `ingitdb select`) use. Validation reads a parent's
-// instances at <DirPath>/<records_dir>/<key>/<sub>/; the drivers read and
-// write <DirPath>/<key>/<sub>/. The two are the same with records_dir "."
-// (the Firestore-mirror layout); under any other records_dir (the default
-// is $records) which one applies is an open decision. Until it is made,
-// every subcollection with non-empty instance directories in the driver
-// layout gets one warning naming both locations, so a count line never
-// silently reads "All 0 records are valid" for records that exist. It reads
-// directories only and never changes the outcome.
-func driverLayoutWarnings(root string, def *ingitdb.Definition) []ingitdb.ValidationError {
+// mislaidSubCollectionFindings reports subcollection data stored where the
+// definition does not put it. The definition puts one parent record's
+// instance of subcollection <sub> at <DirPath>/<records_dir>/<key>/<sub>/,
+// next to the parent's record files (records_dir is the parent's
+// record_file.records_dir; the default is $records when the record file
+// name contains {key}; "." is the data directory itself). When the parent's
+// records_dir is not ".", an instance found at <DirPath>/<key>/<sub>/ (the
+// layout earlier storage-driver versions wrote) is mislaid: its records are
+// not validated, and each such directory is one finding naming the
+// collection, the found path, the expected path, the file count and the fix.
+func mislaidSubCollectionFindings(root string, def *ingitdb.Definition) []ingitdb.ValidationError {
 	if def == nil {
 		return nil
 	}
-	var warnings []ingitdb.ValidationError
+	var findings []ingitdb.ValidationError
 	check := func(fullID string, colDef *ingitdb.CollectionDef) {
 		if colDef.RecordFile == nil || colDef.RecordFile.RecordsBasePath() == "" || len(colDef.SubCollections) == 0 {
 			return
 		}
+		base := colDef.RecordFile.RecordsBasePath()
 		scan := ingitdb.ScanParentDirs(root, colDef.DirPath, colDef.RecordFile)
 		for _, subID := range slices.Sorted(maps.Keys(colDef.SubCollections)) {
 			keys, _ := scan.KeysWith(subID)
-			var found []string
 			for _, key := range keys {
-				if entries, err := os.ReadDir(filepath.Join(colDef.DirPath, key, subID)); err == nil && len(entries) > 0 {
-					found = append(found, key)
+				found := filepath.Join(colDef.DirPath, key, subID)
+				files := countFiles(found)
+				if files == 0 {
+					continue
 				}
+				subFullID := fullID + "/" + subID
+				message := fmt.Sprintf("%s: %d file(s) at %s/ are where the definition does not put them, and are not validated: %s keeps its records in record_file.records_dir %q, so the %s of parent record %q belong at %s/. Move them there, or, if %s should use the Firestore-mirror layout, set record_file.records_dir: \".\" on %s and move its own records out of %s/",
+					subFullID, files, relToRoot(root, found), fullID, base, subID, key, relToRoot(root, filepath.Join(colDef.DirPath, base, key, subID)),
+					fullID, fullID, relToRoot(root, filepath.Join(colDef.DirPath, base)))
+				findings = append(findings, ingitdb.ValidationError{
+					Severity:     ingitdb.SeverityError,
+					CollectionID: subFullID,
+					FilePath:     found,
+					RecordKey:    key,
+					Message:      message,
+				})
 			}
-			if len(found) == 0 {
-				continue
-			}
-			subFullID := fullID + "/" + subID
-			dir := relToRoot(root, colDef.DirPath)
-			warnings = append(warnings, ingitdb.ValidationError{
-				CollectionID: subFullID,
-				FilePath:     filepath.Join(colDef.DirPath, found[0], subID),
-				Message: fmt.Sprintf("%s: %d instance(s) found in %s/<key>/%s/ (e.g. %s/%s/%s), the layout the storage drivers and `ingitdb select` use, are not validated; validation reads %s/%s/<key>/%s/. Which layout applies under records_dir %q is an open decision",
-					subFullID, len(found), dir, subID, dir, found[0], subID, dir, colDef.RecordFile.RecordsBasePath(), subID, colDef.RecordFile.RecordsBasePath()),
-			})
 		}
 	}
 	for _, rootID := range slices.Sorted(maps.Keys(def.Collections)) {
@@ -241,5 +242,17 @@ func driverLayoutWarnings(root string, def *ingitdb.Definition) []ingitdb.Valida
 			check(inst.fullID, inst.colDef)
 		})
 	}
-	return warnings
+	return findings
+}
+
+// countFiles counts the non-hidden files below dir, at any depth.
+func countFiles(dir string) int {
+	n := 0
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && !strings.HasPrefix(d.Name(), ".") {
+			n++
+		}
+		return nil
+	})
+	return n
 }

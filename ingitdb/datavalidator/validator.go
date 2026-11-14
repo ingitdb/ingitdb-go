@@ -61,8 +61,8 @@ func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingit
 	// checks and record-count enforcement. See
 	// spec/features/subcollection-record-validation.
 	validateSubCollections(dbPath, def, result)
-	for _, warning := range driverLayoutWarnings(dbPath, def) {
-		result.AddWarning(warning)
+	for _, finding := range mislaidSubCollectionFindings(dbPath, def) {
+		result.Append(finding)
 	}
 
 	// Referential integrity is a whole-definition concern — a value must exist
