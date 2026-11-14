@@ -131,6 +131,30 @@ A record key is always text: a file name, a key of a map-of-records file, or a `
 
 This applies to `$ID` only. Ordinary `date`, `time` and `datetime` columns keep accepting any string (their format is not checked); checking them is a separate, possibly breaking change. A `$ID` value that is not a string (a list-of-records row storing `"$ID": 5`) keeps the plain value type check. Before this rule, a `date` key accepted any text, and an `int`, `float` or `bool` key always failed for per-file records (the key text is a string), so the only records whose outcome changes are those whose key is not a valid value of the declared key type.
 
+#### REQ: subcollection-foreign-key
+
+A `foreign_key` MAY name a subcollection. It is then written as a path like a Firestore document path without the final id, alternating collection ids and parent keys and ending with a collection id: `ext/commitius/cmSessions`. The first segment resolves module-relative, exactly as a root `foreign_key`; each further collection segment MUST be a declared subcollection of the one before. A parent-key segment is one of:
+
+- a literal key (`commitius`): that parent record;
+- `$same`: the key the referring record itself has at that level. It is allowed only while the path follows the referring collection's own schema path (the referring collection included), so `spaces/$same/ext/$same/financialAgreements` from `spaces/ext/financialAgreementGrants` means "an agreement of the same space and extension";
+- `{field}`: the referring record's value of `field`, which MUST be a declared, stored (not `formula`) column of the referring collection (`spaces/{spaceID}/ext/calendarius/happenings`). `{$ID}` MUST be rejected at load in favour of `$same`.
+
+A literal parent key, and the value a `{field}` gives, MUST be a plain record key: non-empty, not `.` or `..`, without `/` or `\`, so a path can never reach outside its parent's directory. A `{field}` value that is a number is used as written (`1000000`, not `1e+06`); a list or map value, or a value that is not a plain key, MUST produce a finding naming the field.
+
+A malformed path (an even number of segments, an empty segment, a literal key that is not a plain record key), an unknown root or subcollection, a `$same` off the referring path, or an undeclared, computed or `$ID` `{field}` MUST be a definition-load error. Record validation MUST check each value (list values element by element, as for a root `foreign_key`) against the record keys of the one target instance the path gives for that record; a missing key MUST produce a finding naming the field, the value and the concrete instance path (`ext/commitius/cmSessions`). When a `{field}` parent key is empty, a value present in the column MUST produce a finding naming that field. The target instance's parent records need not exist (subcollection-record-validation#req:parent-record-optional).
+
+This is additive: a `foreign_key` value that resolves as a root collection keeps its meaning, and a path is tried only for a value containing `/`, which no root collection id resolved before (such a value was a load error). Readers that only know root targets MUST skip a path instead of failing: the `$fk` view builder builds no view for it (`ingitdb.IsForeignKeyPath`), and dalgo2ingitdb's write-time foreign-key check leaves it to validation.
+
+#### REQ: nested-column-shape
+
+A column MAY declare the shape of a structured value with the same column definition, recursively: `columns` (the fields of a nested object; on `any` or a map type other than `map[locale]string`), `values` (every value of a map type), and `items` (every element of a list type). Declaring one on any other type MUST be a definition-load error, and so MUST a `values` or `items` type that contradicts the declared value or element type (`map[string]int` with `values: {type: string}`). The two types are compared as written, so they must be the same type name: `map[string]float` with `values: {type: int}` is rejected although every int is a valid float. A nested definition supports `type`, `required`, `enum`, `length`/`min_length`/`max_length`, `min_value`/`max_value` and its own `columns`/`values`/`items`; `formula`, `required_when`, `foreign_key` and `locale` MUST be rejected at load when nested.
+
+Record validation MUST check each nested value with the same type, enum, length and range checks and messages as a top-level column, and report it under its path: `slots.sl1.durationInMinutes`, `members[2].role`. Inside an object with `columns`, a missing `required` field MUST be reported, and a key the object holds but `columns` does not declare MUST be an undeclared-field finding, `undeclared field "<path>": no nested column of that name in the definition of "<parent path>"` (keys starting with `$` excepted, as at the top level). On a `type: any` column, `columns` applies only when the value is an object: a list or a scalar in that column gets no shape finding (declare `items` on a list type instead). A `null` nested value is treated as absent. A value whose own type check fails is not descended into.
+
+This is additive: a column that declares none of `columns`, `values`, `items` is checked exactly as before (the content of its maps and lists is not checked, and the value type in `map[K]V` stays unchecked).
+
+**Rollout order.** Definitions are decoded strictly, so a reader built before this feature fails to open the whole database when any definition uses `columns`, `values` or `items` (`field values not found in type ingitdb.ColumnDef`), and an older `validate` or dalgo2ingitdb write rejects a path `foreign_key` ([REQ: subcollection-foreign-key](#req-subcollection-foreign-key)). This cannot be detected or hinted at retroactively: a `min_ingitdb_version` setting would itself be an unknown field to those readers. So every consumer of a database (the CLI, dalgo2ingitdb, dalgo2ingitdb4local, dalgo2ingitdb4github, DataTug, and backends that embed ingitdb-go) MUST be on an ingitdb-go release that has these features before any of its definitions uses them. The release note says the same.
+
 ### Failing loudly instead of silently
 
 #### REQ: reject-unknown-column-keys
@@ -489,6 +513,70 @@ Verification of record: 337 definition files audited across every layout (`.coll
 **Given** a collection whose `$ID` column is `type: date`, holding per-file records `2026-11-24.json` and `notadate.json`
 **When** the database is validated
 **Then** `2026-11-24` passes and `notadate` fails with a wrong-type finding on `$ID` naming the key and `YYYY-MM-DD`; with `$ID` typed `int` and `max_value: 10`, key `3` passes and key `11` fails the range check
+
+### AC: subcollection-foreign-key-literal-parent
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** `spaces/ext/checkIns` declaring `sessionID` with `foreign_key: ext/commitius/sessions`, and records holding `sess1` (exists), `ghost`, and `[sess1, ghost2, [nested]]`
+**When** the database is validated
+**Then** `ghost` and `ghost2` are reported as missing in `ext/commitius/sessions`, the nested element as not a scalar, and `sess1`, `null` and `""` produce nothing
+
+### AC: subcollection-foreign-key-same-parent
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** grants in spaces `s1` and `s2` declaring `foreign_key: spaces/$same/ext/$same/agreements`, and agreement `a1` only in `s1`
+**When** both grants reference `a1`
+**Then** only the grant in `s2` is reported, naming `spaces/s2/ext/calendarius/agreements`
+
+### AC: subcollection-foreign-key-parent-from-field
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** root `bookings` declaring `agreementID` with `foreign_key: spaces/{spaceID}/ext/calendarius/agreements`
+**When** bookings reference `a1` with `spaceID` `s1`, with `spaceID` `s2`, and with no `spaceID`
+**Then** the second is reported as missing in `spaces/s2/ext/calendarius/agreements` and the third as having an empty `spaceID`
+
+### AC: subcollection-foreign-key-checked-at-load
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** a path `foreign_key` with an even number of segments, an empty segment, an unknown root, an unknown subcollection, a `$same` off the referring path, or an undeclared `{field}`
+**When** the definition is loaded with validation
+**Then** loading fails naming the problem; so do a literal parent key `..`, `{$ID}`, and a `{field}` naming a computed column, and a `{field}` value `../../evil` (or a list) is a finding instead of a lookup outside the database
+
+### AC: nested-shape-declared
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** `slots: {type: map[string]any, values: {type: map[string]any, columns: {durationInMinutes: {type: int, required: true}, weekdays: {type: "[]string", items: {type: string, enum: [mo, ...]}}}}}` in a `definition.yaml`
+**When** a record holds `slots: {sl1: {durationInMinutes: "x", weekdays: [mo, xx]}}`
+**Then** findings are reported on `slots.sl1.durationInMinutes` and `slots.sl1.weekdays[1]`
+
+### AC: nested-values-validated
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** nested definitions with `required`, `enum`, `min_value`, `max_length`, `min_length` and `columns`
+**When** values break each of them, or hold an undeclared nested key
+**Then** each is reported under its path with the message a top-level column would give
+
+### AC: nested-shape-rejected-where-meaningless
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** `columns` on a `string` or `map[locale]string`, `values` on a list, `items` on a map, or a nested `formula`, `required_when`, `foreign_key` or `locale`
+**When** the definition is loaded
+**Then** loading fails naming the problem
+
+### AC: undeclared-shape-unchanged
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** map and list columns without `columns`, `values` or `items`
+**When** a record holds structured content that does not match anything
+**Then** no finding is reported, as before
 
 ### AC: strict-temporal-opt-in
 

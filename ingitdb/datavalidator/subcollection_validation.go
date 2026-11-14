@@ -28,6 +28,10 @@ type subCollectionInstance struct {
 	// nameErr is set when the instance's parent directory name is not one
 	// the parent's key_encoding writes (parentKey is then the name as it is).
 	nameErr error
+	// ancestorKeys are the keys from the root record down to and including
+	// parentKey: the instance at spaces/k3v9q/ext/calendarius/days has
+	// ["k3v9q", "calendarius"]. A path foreign_key's $same segments read them.
+	ancestorKeys []string
 }
 
 // parentDirName returns the name of the directory that holds a parent
@@ -119,6 +123,12 @@ func walkSubCollectionInstances(fullID string, colDef *ingitdb.CollectionDef, fn
 }
 
 func (w instanceWalk) walk(fullID string, colDef *ingitdb.CollectionDef, fn func(subCollectionInstance)) {
+	w.walkBelow(fullID, colDef, nil, fn)
+}
+
+// walkBelow is walk for a colDef whose own records sit below the given
+// ancestor keys.
+func (w instanceWalk) walkBelow(fullID string, colDef *ingitdb.CollectionDef, ancestorKeys []string, fn func(subCollectionInstance)) {
 	if colDef == nil || len(colDef.SubCollections) == 0 {
 		return
 	}
@@ -156,8 +166,9 @@ func (w instanceWalk) walk(fullID string, colDef *ingitdb.CollectionDef, fn func
 			inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
 			inst.DirPath = subCollectionDataDir(colDef, parentName, subID)
 			parentKey, nameErr := decodeParentName(colDef, parentName)
-			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey, nameErr: nameErr})
-			w.walk(subFullID, &inst, fn)
+			keys := append(slices.Clone(ancestorKeys), parentKey)
+			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey, nameErr: nameErr, ancestorKeys: keys})
+			w.walkBelow(subFullID, &inst, keys, fn)
 		}
 	}
 }

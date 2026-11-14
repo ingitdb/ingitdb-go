@@ -56,7 +56,7 @@ func TestForeignKeyCheck_RemainingCoverage(t *testing.T) {
 			"bad_fk": {ForeignKey: "missing_target"},
 		},
 	}
-	errs := checkCollectionForeignKeys("unresolved", unresolvedCol, &ingitdb.Definition{}, nil)
+	errs := checkCollectionForeignKeys("unresolved", unresolvedCol, nil, &ingitdb.Definition{}, nil, nil)
 	if len(errs) != 0 {
 		t.Errorf("expected 0 errors for unresolved target, got %v", errs)
 	}
