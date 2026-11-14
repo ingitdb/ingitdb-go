@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -24,6 +25,39 @@ type subCollectionInstance struct {
 	fullID    string                 // schema full path, e.g. "orders/order_details"
 	colDef    *ingitdb.CollectionDef // a shallow copy of the sub def, DirPath repointed at the instance data dir
 	parentKey string                 // key of the parent record that owns this instance
+	// nameErr is set when the instance's parent directory name is not one
+	// the parent's key_encoding writes (parentKey is then the name as it is).
+	nameErr error
+}
+
+// parentDirName returns the name of the directory that holds a parent
+// record's subcollection instances: the key name of its record file, or for
+// a record kept in a shared file its encoded key; ok is false when the key
+// cannot be a directory name.
+func parentDirName(colDef *ingitdb.CollectionDef, pr loadedRecord) (string, bool) {
+	rf := colDef.RecordFile
+	if rf.RecordType == ingitdb.SingleRecord && strings.Contains(rf.Name, "{key}") {
+		return recordNameFromCollectionFilePath(colDef, pr.FilePath), true
+	}
+	name, err := rf.KeyDirName(pr.Key)
+	return name, err == nil
+}
+
+func isDir(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
+}
+
+// decodeParentName returns the parent key of an instance directory name.
+func decodeParentName(colDef *ingitdb.CollectionDef, name string) (string, error) {
+	if colDef.RecordFile == nil {
+		return name, nil
+	}
+	key, err := colDef.RecordFile.DecodeKey(name)
+	if err != nil {
+		return name, err
+	}
+	return key, nil
 }
 
 // subCollectionDataDir returns the effective data directory for one parent
@@ -85,9 +119,11 @@ func (w instanceWalk) walk(fullID string, colDef *ingitdb.CollectionDef, fn func
 		return
 	}
 	parents, _ := loadCollectionRecords(colDef)
-	recordKeys := make([]string, 0, len(parents))
+	recordNames := make([]string, 0, len(parents))
 	for _, pr := range parents {
-		recordKeys = append(recordKeys, pr.Key)
+		if name, ok := parentDirName(colDef, pr); ok {
+			recordNames = append(recordNames, name)
+		}
 	}
 	base := recordsBaseDir(colDef)
 	scan := ingitdb.ScanParentDirs(w.root, base, colDef.RecordFile)
@@ -101,16 +137,17 @@ func (w instanceWalk) walk(fullID string, colDef *ingitdb.CollectionDef, fn func
 				w.onOutside(subFullID, base, key)
 			}
 		}
-		parentKeys := append(slices.Clone(recordKeys), dirKeys...)
-		slices.Sort(parentKeys)
-		parentKeys = slices.Compact(parentKeys)
+		parentNames := append(slices.Clone(recordNames), dirKeys...)
+		slices.Sort(parentNames)
+		parentNames = slices.Compact(parentNames)
 		// A parent whose instance directory leads outside the database is not
 		// read, whether or not the parent has a record file.
-		parentKeys = slices.DeleteFunc(parentKeys, func(key string) bool { return slices.Contains(outside, key) })
-		for _, parentKey := range parentKeys {
+		parentNames = slices.DeleteFunc(parentNames, func(name string) bool { return slices.Contains(outside, name) })
+		for _, parentName := range parentNames {
 			inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
-			inst.DirPath = subCollectionDataDir(colDef, parentKey, subID)
-			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey})
+			inst.DirPath = subCollectionDataDir(colDef, parentName, subID)
+			parentKey, nameErr := decodeParentName(colDef, parentName)
+			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey, nameErr: nameErr})
 			w.walk(subFullID, &inst, fn)
 		}
 	}
@@ -153,6 +190,12 @@ func validateSubCollections(root string, def *ingitdb.Definition, result *ingitd
 
 	for _, rootID := range slices.Sorted(maps.Keys(def.Collections)) {
 		w.walk(rootID, def.Collections[rootID], func(inst subCollectionInstance) {
+			if inst.nameErr != nil && isDir(inst.colDef.DirPath) {
+				// A parent record file with such a name is reported by the
+				// parent's own pass; this is the directory.
+				result.Append(newValidationError(inst.fullID, inst.colDef.DirPath, inst.parentKey, "",
+					"the parent directory name is not one the parent collection's key_encoding writes, so it names no parent record: rename the directory ("+inst.nameErr.Error()+")", inst.nameErr))
+			}
 			passed, total, errs := validateCollectionRecords(inst.fullID, inst.colDef)
 			for _, validationErr := range errs {
 				result.Append(validationErr)

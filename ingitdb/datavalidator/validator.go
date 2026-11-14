@@ -126,7 +126,38 @@ func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionD
 		total += fileTotal
 		errors = append(errors, fileErrors...)
 	}
-	return passed, total, errors
+	return passed, total, append(errors, caseCollisionFindings(collectionKey, colDef, matches)...)
+}
+
+// caseCollisionFindings reports, for a collection that declares a key
+// encoding, record files of one directory whose names differ only in letter
+// case: on a case-insensitive file system (Windows, macOS by default) they
+// are one file, so a checkout there loses all but one record.
+func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, matches []string) []ingitdb.ValidationError {
+	if !colDef.RecordFile.EncodesKeys() {
+		return nil
+	}
+	byDir := map[string][]string{}
+	var dirs []string
+	for _, filePath := range matches {
+		if skipRecordPath(filePath, colDef.RecordFile) {
+			continue
+		}
+		dir := filepath.Dir(filePath)
+		if _, seen := byDir[dir]; !seen {
+			dirs = append(dirs, dir)
+		}
+		byDir[dir] = append(byDir[dir], filepath.Base(filePath))
+	}
+	var findings []ingitdb.ValidationError
+	for _, dir := range dirs {
+		for _, group := range ingitdb.CaseOnlyDifferences(byDir[dir]) {
+			message := fmt.Sprintf("record files %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one file and all but one record is lost; give the records keys that differ in more than case",
+				strings.Join(group, ", "), dir)
+			findings = append(findings, newValidationError(collectionKey, filepath.Join(dir, group[0]), "", "", message, nil))
+		}
+	}
+	return findings
 }
 
 // validateSingleRecordFile validates one single-record file: it stats, reads,
@@ -154,7 +185,11 @@ func validateSingleRecordFile(collectionKey string, colDef *ingitdb.CollectionDe
 		validationErr := newValidationError(collectionKey, filePath, "", "", "failed to parse record file", parseErr)
 		return 0, 1, []ingitdb.ValidationError{validationErr}
 	}
-	recordKey := recordKeyFromCollectionFilePath(colDef, filePath)
+	recordKey, nameErr := decodedRecordKey(colDef, filePath)
+	if nameErr != nil {
+		return 0, 1, []ingitdb.ValidationError{newValidationError(collectionKey, filePath, recordKey, "",
+			"the file name is not one the collection's key_encoding writes, so it names no record: rename the file ("+nameErr.Error()+")", nameErr)}
+	}
 	recordErrors := validateRecordData(collectionKey, filePath, recordKey, colDef, data)
 	if len(recordErrors) > 0 {
 		return 0, 1, recordErrors
@@ -186,7 +221,34 @@ func recordKeyFromFilePath(filePath string) string {
 	return strings.TrimSuffix(name, ext)
 }
 
+// decodedRecordKey returns the record key of a record file path: its key
+// name decoded with the collection's key_encoding. When the name is not one
+// the encoding writes, or (with a declared encoding) is longer than a file
+// name may be, it returns the name as it is with the error.
+func decodedRecordKey(colDef *ingitdb.CollectionDef, filePath string) (string, error) {
+	name := recordNameFromCollectionFilePath(colDef, filePath)
+	if colDef == nil || colDef.RecordFile == nil {
+		return name, nil
+	}
+	key, err := colDef.RecordFile.DecodeKey(name)
+	if err != nil {
+		return name, err
+	}
+	if err := colDef.RecordFile.CheckKeyFits(key); err != nil {
+		return key, err
+	}
+	return key, nil
+}
+
+// recordKeyFromCollectionFilePath is decodedRecordKey without the error.
 func recordKeyFromCollectionFilePath(colDef *ingitdb.CollectionDef, filePath string) string {
+	key, _ := decodedRecordKey(colDef, filePath)
+	return key
+}
+
+// recordNameFromCollectionFilePath returns the key name part of a record
+// file path, as it is on disk.
+func recordNameFromCollectionFilePath(colDef *ingitdb.CollectionDef, filePath string) string {
 	if colDef == nil || colDef.RecordFile == nil || !strings.Contains(colDef.RecordFile.Name, "{key}") {
 		return recordKeyFromFilePath(filePath)
 	}

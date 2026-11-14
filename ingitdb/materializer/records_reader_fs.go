@@ -94,6 +94,10 @@ func (r FileRecordsReader) ReadRecords(
 			if strings.HasPrefix(key, ".") {
 				continue // skip hidden directories like .collection
 			}
+			key, err = col.RecordFile.DecodeKey(key)
+			if err != nil {
+				return fmt.Errorf("record %s: %w", filePath, err)
+			}
 			d := ingitdb.ApplyLocaleToRead(data, col.Columns)
 			d["$ID"] = key
 			entry := ingitdb.NewMapRecordEntry(key, d)
