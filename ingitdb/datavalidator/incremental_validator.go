@@ -97,13 +97,14 @@ func (iv *incrementalValidator) ValidateChanges(
 	// every entry there does in the full pass: a file that is no record (a
 	// bob.YAML next to Bob.yaml), a deleted file, or a rename's old name that
 	// leaves two names of one file behind.
+	paths := newPathResolver(def)
 	for _, cf := range changed {
 		for _, p := range []string{cf.Path, cf.OldPath} {
 			if p == "" {
 				continue
 			}
 			absPath := filepath.Clean(filepath.Join(dbPath, p))
-			if levels, _ := resolvePath(def, absPath); levels != nil {
+			if levels, _ := paths.resolve(absPath); levels != nil {
 				names.useRecord(levels, absPath)
 			}
 		}

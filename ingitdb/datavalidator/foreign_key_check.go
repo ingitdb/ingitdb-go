@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -280,8 +279,7 @@ func loadCollectionRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error
 }
 
 func loadSingleRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
-	pattern := singleRecordGlobPattern(colDef)
-	matches, err := filepath.Glob(pattern)
+	matches, err := recordFiles(colDef)
 	if err != nil {
 		return nil, err
 	}

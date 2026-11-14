@@ -43,7 +43,7 @@ func TestResolveRecordFile_Edges(t *testing.T) {
 		"/db/odd/$records/a.yaml":                     "",
 		"/elsewhere/a.yaml":                           "",
 	} {
-		levels := resolveRecordFile(def, path)
+		levels := newPathResolver(def).recordFile(path)
 		got := ""
 		if levels != nil {
 			got = levels[len(levels)-1].id

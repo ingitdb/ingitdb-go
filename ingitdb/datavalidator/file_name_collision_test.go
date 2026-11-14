@@ -655,3 +655,82 @@ func TestIncrementalValidator_NonRecordEntries(t *testing.T) {
 		t.Errorf("got %s", findingTexts(inc))
 	}
 }
+
+// Directory names are literal in every pass, whatever bytes they hold: glob
+// characters, a backslash (an escape character in a glob on Linux and
+// macOS), invalid UTF-8, and a checkout path holding glob characters. Full
+// and incremental validation find the same records and the same errors.
+func TestRecordFiles_DirectoryNamesAreLiteral(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), "proj[1]*?")
+	parents := []string{"[p]", "a*?", "c\xff"}
+	if filepath.Separator == '/' {
+		parents = append(parents, `p\q`)
+	}
+	files := map[string]string{"c/$records/ok.yaml": "title: a\n", "c/$records/bad.yaml": "title: [\n"}
+	var changed []ingitdb.ChangedFile
+	for _, p := range parents {
+		files["c/$records/"+p+"/notes/$records/n.yaml"] = "title: n\n"
+		files["c/$records/"+p+"/notes/$records/bad.yaml"] = "title: [\n"
+		changed = append(changed, added("c/$records/"+p+"/notes/$records/n.yaml"), added("c/$records/"+p+"/notes/$records/bad.yaml"))
+	}
+	changed = append(changed, added("c/$records/ok.yaml"), added("c/$records/bad.yaml"))
+	writeTree(t, root, files)
+	def := plainDB(root)
+	full := fullFindings(t, root, def)
+	inc := incrementalFindings(t, root, def, changed...)
+	if len(full) != len(parents)+1 || len(inc) != len(full) {
+		t.Errorf("want %d errors each:\nfull %s\nincremental %s", len(parents)+1, findingTexts(full), findingTexts(inc))
+	}
+	if passed, total := fullCounts(t, root, def, "c/notes"); passed != len(parents) || total != 2*len(parents) {
+		t.Errorf("c/notes = %d/%d", passed, total)
+	}
+}
+
+// record_file.name keeps its glob semantics below the literal records
+// directory, for record files and for the parent records that own
+// subcollection instances: a record .hidden/index.yaml under
+// "{key}/[i]ndex.yaml" owns the instance below .hidden in both passes.
+func TestRecordFiles_NamePatternKeepsGlobSemantics(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTree(t, root, map[string]string{
+		"c/$records/.hidden/index.yaml":               "title: h\n",
+		"c/$records/.hidden/notes/$records/bad.yaml":  "title: [\n",
+		"c/$records/.missing/notes/$records/bad.yaml": "title: [\n", // no record: no instance
+		"c/$records/plain/index.yaml":                 "title: [\n",
+	})
+	def := plainDB(root)
+	def.Collections["c"].RecordFile.Name = "{key}/[i]ndex.yaml"
+	full := fullFindings(t, root, def)
+	inc := incrementalFindings(t, root, def, added("c/$records/.hidden/notes/$records/bad.yaml"), added("c/$records/.missing/notes/$records/bad.yaml"),
+		added("c/$records/plain/index.yaml"))
+	if len(full) != 2 || findingTexts(full) != findingTexts(inc) {
+		t.Errorf("full %s\nincremental %s", findingTexts(full), findingTexts(inc))
+	}
+}
+
+// The matcher compares path segments below the records directory only, so
+// no part of the directory (a Windows volume such as \\server\share[x] or
+// \\?\C:\, glob characters, any bytes) is ever read as a pattern; it splits
+// on the separator it is given, so Windows paths are checked here on Linux.
+func TestMatchRecordPath(t *testing.T) {
+	t.Parallel()
+	segments := recordNameSegments(&ingitdb.RecordFileDef{Name: "{key}/[i]ndex.yaml"})
+	for rel, want := range map[string]bool{
+		`a\index.yaml`:        true,
+		`[x]\index.yaml`:      true,
+		`a\b\index.yaml`:      false,
+		`a\other.yaml`:        false,
+		`..\index.yaml`:       false,
+		`index.yaml`:          false,
+		`\\?\C:\a\index.yaml`: false, // a volume is never below the records directory
+	} {
+		if got := matchRecordPath(segments, rel, `\`); got != want {
+			t.Errorf("%q: %v, want %v", rel, got, want)
+		}
+	}
+	if matchRecordPath([]string{"[a-"}, "x", "/") {
+		t.Error("a malformed pattern matches nothing")
+	}
+}
