@@ -478,3 +478,21 @@ func TestValidationResult_SetRecordCounts_Concurrent(t *testing.T) {
 		}
 	}
 }
+
+// Warnings never count as errors, so adding one cannot change an exit code.
+func TestValidationResult_WarningsKeptApart(t *testing.T) {
+	t.Parallel()
+	r := &ValidationResult{}
+	r.AddWarning(ValidationError{Severity: SeverityError, Message: "w1"})
+	if r.HasErrors() || r.ErrorCount() != 0 || len(r.Errors()) != 0 {
+		t.Fatal("a warning must not count as an error")
+	}
+	w := r.Warnings()
+	if len(w) != 1 || w[0].Message != "w1" || w[0].Severity != SeverityWarning {
+		t.Fatalf("warnings = %+v", w)
+	}
+	w[0].Message = "changed"
+	if r.Warnings()[0].Message != "w1" {
+		t.Fatal("Warnings must return a copy")
+	}
+}

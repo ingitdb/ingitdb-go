@@ -3,8 +3,9 @@ package datavalidator
 // specscore: feature/subcollection-record-validation
 
 import (
+	"fmt"
+	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -40,11 +41,17 @@ type subCollectionInstance struct {
 // place a per-key subdirectory naturally lives (e.g.
 // orders/$records/ord001/order_details next to orders/$records/ord001.yaml).
 func subCollectionDataDir(parentColDef *ingitdb.CollectionDef, parentKey, subID string) string {
-	base := parentColDef.DirPath
-	if parentColDef.RecordFile != nil {
-		base = filepath.Join(base, parentColDef.RecordFile.RecordsBasePath())
-	}
-	return filepath.Join(base, parentKey, subID)
+	return filepath.Join(recordsBaseDir(parentColDef), parentKey, subID)
+}
+
+// instanceWalk carries what a walk over subcollection instances needs beyond
+// the definition: the database root (for the inside-root rule of
+// ingitdb.ScanParentDirs; "" disables it) and an optional callback for a
+// parent directory that resolves outside the database root, which is not
+// read.
+type instanceWalk struct {
+	root      string
+	onOutside func(subFullID, parentDir, key string)
 }
 
 // walkSubCollectionInstances invokes fn for every subcollection instance
@@ -58,21 +65,33 @@ func subCollectionDataDir(parentColDef *ingitdb.CollectionDef, parentKey, subID 
 //
 // A parent key is either the key of a parent record, or the name of a
 // directory that holds data for the subcollection although no parent record
-// file exists (parentKeysWithSubCollectionDir). The second case mirrors
-// Firestore, where a document may own subcollections without existing itself
-// (`ext/commitius/cmSessions/{id}` with no `ext/commitius` document); without it
-// such records were silently never validated.
+// file exists. The second case mirrors Firestore, where a document may own
+// subcollections without existing itself (`ext/commitius/cmSessions/{id}`
+// with no `ext/commitius` document); without it such records were silently
+// never validated. Which directories count is decided by
+// ingitdb.ScanParentDirs, the one rule shared with the local storage driver's
+// collection-group read; the parent's directory is read once per level.
+//
+// Directory discovery looks in <DirPath>/<records_dir>/<key>/<sub>/, the
+// layout validation reads. With records_dir "." that is also where the
+// storage drivers read and write; under the default records_dir ($records)
+// the drivers use <DirPath>/<key>/<sub>/ instead, which is an open layout
+// decision (see driverLayoutWarnings).
 //
 // A read/parse failure at a level is not reported here (the schema pass reports
 // it for that collection); the level then yields only the directory-discovered
 // instances.
 func walkSubCollectionInstances(fullID string, colDef *ingitdb.CollectionDef, fn func(subCollectionInstance)) {
-	walkSubCollectionInstancesBelow(fullID, colDef, nil, fn)
+	instanceWalk{}.walk(fullID, colDef, fn)
 }
 
-// walkSubCollectionInstancesBelow is walkSubCollectionInstances for a colDef
-// whose own records sit below the given ancestor keys.
-func walkSubCollectionInstancesBelow(fullID string, colDef *ingitdb.CollectionDef, ancestorKeys []string, fn func(subCollectionInstance)) {
+func (w instanceWalk) walk(fullID string, colDef *ingitdb.CollectionDef, fn func(subCollectionInstance)) {
+	w.walkBelow(fullID, colDef, nil, fn)
+}
+
+// walkBelow is walk for a colDef whose own records sit below the given
+// ancestor keys.
+func (w instanceWalk) walkBelow(fullID string, colDef *ingitdb.CollectionDef, ancestorKeys []string, fn func(subCollectionInstance)) {
 	if colDef == nil || len(colDef.SubCollections) == 0 {
 		return
 	}
@@ -81,11 +100,19 @@ func walkSubCollectionInstancesBelow(fullID string, colDef *ingitdb.CollectionDe
 	for _, pr := range parents {
 		recordKeys = append(recordKeys, pr.Key)
 	}
+	base := recordsBaseDir(colDef)
+	scan := ingitdb.ScanParentDirs(w.root, base, colDef.RecordFile)
 
 	for _, subID := range slices.Sorted(maps.Keys(colDef.SubCollections)) {
 		sub := colDef.SubCollections[subID]
 		subFullID := fullID + "/" + subID
-		parentKeys := append(slices.Clone(recordKeys), parentKeysWithSubCollectionDir(colDef, subID)...)
+		dirKeys, outside := scan.KeysWith(subID)
+		if w.onOutside != nil {
+			for _, key := range outside {
+				w.onOutside(subFullID, base, key)
+			}
+		}
+		parentKeys := append(slices.Clone(recordKeys), dirKeys...)
 		slices.Sort(parentKeys)
 		parentKeys = slices.Compact(parentKeys)
 		for _, parentKey := range parentKeys {
@@ -93,43 +120,18 @@ func walkSubCollectionInstancesBelow(fullID string, colDef *ingitdb.CollectionDe
 			inst.DirPath = subCollectionDataDir(colDef, parentKey, subID)
 			keys := append(slices.Clone(ancestorKeys), parentKey)
 			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey, ancestorKeys: keys})
-			walkSubCollectionInstancesBelow(subFullID, &inst, keys, fn)
+			w.walkBelow(subFullID, &inst, keys, fn)
 		}
 	}
 }
 
-// parentKeysWithSubCollectionDir returns the names of the per-record
-// directories under parentColDef's records base path that contain a directory
-// named subID — the keys of parents that hold data for that subcollection,
-// whether or not a parent record file exists. Hidden entries, `$`-prefixed
-// entries (inGitDB's own `$records`, `$views`, ...; no record key starts with
-// `$`), and names matched by the parent's exclude_regex are skipped. An
-// unreadable or missing base directory yields none.
-func parentKeysWithSubCollectionDir(parentColDef *ingitdb.CollectionDef, subID string) []string {
-	base := parentColDef.DirPath
-	if parentColDef.RecordFile != nil {
-		base = filepath.Join(base, parentColDef.RecordFile.RecordsBasePath())
+// recordsBaseDir is <DirPath>/<records_dir>, where a collection's per-record
+// directories live in the layout validation reads.
+func recordsBaseDir(colDef *ingitdb.CollectionDef) string {
+	if colDef.RecordFile == nil {
+		return colDef.DirPath
 	}
-	entries, err := os.ReadDir(base)
-	if err != nil {
-		return nil
-	}
-	var keys []string
-	for _, entry := range entries {
-		name := entry.Name()
-		if !entry.IsDir() || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") {
-			continue
-		}
-		if parentColDef.RecordFile != nil && parentColDef.RecordFile.IsExcluded(name) {
-			continue
-		}
-		info, statErr := os.Stat(filepath.Join(base, name, subID))
-		if statErr != nil || !info.IsDir() {
-			continue
-		}
-		keys = append(keys, name)
-	}
-	return keys
+	return filepath.Join(colDef.DirPath, colDef.RecordFile.RecordsBasePath())
 }
 
 // validateSubCollections runs the per-record schema pass and per-parent-instance
@@ -142,16 +144,24 @@ func parentKeysWithSubCollectionDir(parentColDef *ingitdb.CollectionDef, subID s
 // instances under its full path, so SetRecordCounts is called once per
 // subcollection id after the walk rather than per instance (which would let a
 // later instance overwrite an earlier one).
-func validateSubCollections(def *ingitdb.Definition, result *ingitdb.ValidationResult) {
+func validateSubCollections(root string, def *ingitdb.Definition, result *ingitdb.ValidationResult) {
 	if def == nil {
 		return
 	}
+	w := instanceWalk{root: root, onOutside: func(subFullID, parentDir, key string) {
+		result.AddWarning(ingitdb.ValidationError{
+			CollectionID: subFullID,
+			FilePath:     filepath.Join(parentDir, key),
+			Message: fmt.Sprintf("%s: %s/%s resolves outside the database through a symbolic link; its records are not read or validated",
+				subFullID, relToRoot(root, filepath.Join(parentDir, key)), lastSegment(subFullID)),
+		})
+	}}
 	passedByID := make(map[string]int)
 	totalByID := make(map[string]int)
 	seen := make(map[string]struct{})
 
 	for _, rootID := range slices.Sorted(maps.Keys(def.Collections)) {
-		walkSubCollectionInstances(rootID, def.Collections[rootID], func(inst subCollectionInstance) {
+		w.walk(rootID, def.Collections[rootID], func(inst subCollectionInstance) {
 			passed, total, errs := validateCollectionRecords(inst.fullID, inst.colDef)
 			for _, validationErr := range errs {
 				result.Append(validationErr)
@@ -174,4 +184,86 @@ func validateSubCollections(def *ingitdb.Definition, result *ingitdb.ValidationR
 		result.SetRecordCounts(id, passedByID[id], totalByID[id])
 		result.SetRecordCount(id, totalByID[id])
 	}
+}
+
+// relToRoot renders p relative to the database root for messages; p itself
+// when root is "" or p is not below it.
+func relToRoot(root, p string) string {
+	if root == "" {
+		return p
+	}
+	if rel, err := filepath.Rel(root, p); err == nil && !strings.HasPrefix(rel, "..") {
+		return filepath.ToSlash(rel)
+	}
+	return p
+}
+
+// lastSegment is the last "/"-separated segment of a schema path.
+func lastSegment(fullID string) string {
+	return fullID[strings.LastIndex(fullID, "/")+1:]
+}
+
+// mislaidSubCollectionFindings reports subcollection data stored where the
+// definition does not put it. The definition puts one parent record's
+// instance of subcollection <sub> at <DirPath>/<records_dir>/<key>/<sub>/,
+// next to the parent's record files (records_dir is the parent's
+// record_file.records_dir; the default is $records when the record file
+// name contains {key}; "." is the data directory itself). When the parent's
+// records_dir is not ".", an instance found at <DirPath>/<key>/<sub>/ (the
+// layout earlier storage-driver versions wrote) is mislaid: its records are
+// not validated, and each such directory is one finding naming the
+// collection, the found path, the expected path, the file count and the fix.
+func mislaidSubCollectionFindings(root string, def *ingitdb.Definition) []ingitdb.ValidationError {
+	if def == nil {
+		return nil
+	}
+	var findings []ingitdb.ValidationError
+	check := func(fullID string, colDef *ingitdb.CollectionDef) {
+		if colDef.RecordFile == nil || colDef.RecordFile.RecordsBasePath() == "" || len(colDef.SubCollections) == 0 {
+			return
+		}
+		base := colDef.RecordFile.RecordsBasePath()
+		scan := ingitdb.ScanParentDirs(root, colDef.DirPath, colDef.RecordFile)
+		for _, subID := range slices.Sorted(maps.Keys(colDef.SubCollections)) {
+			keys, _ := scan.KeysWith(subID)
+			for _, key := range keys {
+				found := filepath.Join(colDef.DirPath, key, subID)
+				files := countFiles(found)
+				if files == 0 {
+					continue
+				}
+				subFullID := fullID + "/" + subID
+				message := fmt.Sprintf("%s: %d file(s) at %s/ are where the definition does not put them, and are not validated: %s keeps its records in record_file.records_dir %q, so the %s of parent record %q belong at %s/. Move them there, or, if %s should use the Firestore-mirror layout, set record_file.records_dir: \".\" on %s and move its own records out of %s/",
+					subFullID, files, relToRoot(root, found), fullID, base, subID, key, relToRoot(root, filepath.Join(colDef.DirPath, base, key, subID)),
+					fullID, fullID, relToRoot(root, filepath.Join(colDef.DirPath, base)))
+				findings = append(findings, ingitdb.ValidationError{
+					Severity:     ingitdb.SeverityError,
+					CollectionID: subFullID,
+					FilePath:     found,
+					RecordKey:    key,
+					Message:      message,
+				})
+			}
+		}
+	}
+	for _, rootID := range slices.Sorted(maps.Keys(def.Collections)) {
+		col := def.Collections[rootID]
+		check(rootID, col)
+		instanceWalk{root: root}.walk(rootID, col, func(inst subCollectionInstance) {
+			check(inst.fullID, inst.colDef)
+		})
+	}
+	return findings
+}
+
+// countFiles counts the non-hidden files below dir, at any depth.
+func countFiles(dir string) int {
+	n := 0
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && !strings.HasPrefix(d.Name(), ".") {
+			n++
+		}
+		return nil
+	})
+	return n
 }

@@ -32,7 +32,7 @@ type simpleValidator struct{}
 
 // Validate performs basic validation of records against their collection schemas.
 // Returns a ValidationResult with any errors found.
-func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.Definition) (*ingitdb.ValidationResult, error) {
+func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingitdb.Definition) (*ingitdb.ValidationResult, error) {
 	result := &ingitdb.ValidationResult{}
 
 	for collectionKey, colDef := range def.Collections {
@@ -61,13 +61,16 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 	// per parent record, and validates their records with the same per-record
 	// checks and record-count enforcement. See
 	// spec/features/subcollection-record-validation.
-	validateSubCollections(def, result)
+	validateSubCollections(dbPath, def, result)
+	for _, finding := range mislaidSubCollectionFindings(dbPath, def) {
+		result.Append(finding)
+	}
 
 	// Referential integrity is a whole-definition concern — a value must exist
 	// as a key in the resolved target collection — so it runs after the
 	// per-collection schema pass, once every collection's keys are known. It
 	// covers both root and subcollection records (shared walk).
-	for _, validationErr := range validateForeignKeyReferences(def) {
+	for _, validationErr := range validateForeignKeyReferences(dbPath, def) {
 		result.Append(validationErr)
 	}
 	for _, validationErr := range validateSourceForeignKeys(def) {
@@ -565,10 +568,10 @@ func nestedValueFindings(path string, value any, def *ingitdb.ColumnDef) []shape
 // any, maps, lists) keep the plain value type check.
 var keyTypeFormats = map[ingitdb.ColumnType]string{
 	ingitdb.ColumnTypeInt:      "a base-10 integer without a plus sign or leading zeros",
-	ingitdb.ColumnTypeFloat:    "a finite decimal number",
+	ingitdb.ColumnTypeFloat:    "a finite decimal number in shortest form, e.g. 1.5 (not 1.50, 1e+06, +1, .5 or -0)",
 	ingitdb.ColumnTypeBool:     "true or false",
 	ingitdb.ColumnTypeDate:     "YYYY-MM-DD",
-	ingitdb.ColumnTypeTime:     "H:MM or HH:MM:SS, optional fractional seconds",
+	ingitdb.ColumnTypeTime:     "H:MM or H:MM:SS (hour of one or two digits), optional fractional seconds",
 	ingitdb.ColumnTypeDateTime: "YYYY-MM-DDTHH:MM:SS, optional fractional seconds and zone, e.g. 2006-01-02T15:04:05Z",
 }
 
@@ -583,9 +586,12 @@ func parseRecordKey(key string, columnType ingitdb.ColumnType) (any, bool) {
 		n, err := strconv.ParseInt(key, 10, 64)
 		return n, err == nil && strconv.FormatInt(n, 10) == key
 	case ingitdb.ColumnTypeFloat:
+		// Canonical (shortest decimal) form only, as for int keys, so "1.5"
+		// and "1.50" cannot be two records with one value. This also rules
+		// out NaN, Inf, hex, exponents, "+", "_" and "-0".
 		f, err := strconv.ParseFloat(key, 64)
 		finite := err == nil && !math.IsNaN(f) && !math.IsInf(f, 0)
-		return f, finite && !strings.ContainsAny(key, "xX")
+		return f, finite && key != "-0" && strconv.FormatFloat(f, 'f', -1, 64) == key
 	case ingitdb.ColumnTypeBool:
 		return key == "true", key == "true" || key == "false"
 	case ingitdb.ColumnTypeDate:

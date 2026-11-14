@@ -41,6 +41,29 @@ type ValidationResult struct {
 	recordCounts       map[string]int // collection -> record count (deprecated, use recordPassedCounts)
 	recordPassedCounts map[string]int // collection -> records passed count
 	recordTotalCounts  map[string]int // collection -> total records count
+	// warnings are kept apart from errors so HasErrors, ErrorCount and Errors
+	// (and so every exit code built on them) do not change when a warning is
+	// added.
+	warnings []ValidationError
+}
+
+// AddWarning records a warning: something a reader should know that is not a
+// validation failure (for example records that validation could not reach).
+// Warnings never count as errors.
+func (r *ValidationResult) AddWarning(w ValidationError) {
+	w.Severity = SeverityWarning
+	r.mu.Lock()
+	r.warnings = append(r.warnings, w)
+	r.mu.Unlock()
+}
+
+// Warnings returns a snapshot copy of all warnings, in the order added.
+func (r *ValidationResult) Warnings() []ValidationError {
+	r.mu.Lock()
+	out := make([]ValidationError, len(r.warnings))
+	copy(out, r.warnings)
+	r.mu.Unlock()
+	return out
 }
 
 // Append adds a finding to the result.
