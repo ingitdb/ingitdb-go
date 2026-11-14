@@ -70,6 +70,21 @@ func TestScanParentDirs_OneRule(t *testing.T) {
 	}
 }
 
+// The first segment of a nested records directory is not a parent, and
+// "$records" never is.
+func TestScanParentDirs_RecordsDirHead(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	mkdirs(t, root, "data/items/x", "$records/items", "p/items")
+	nested := "data/items"
+	if keys, _ := ScanParentDirs(root, root, &RecordFileDef{Name: "{key}.json", RecordsDir: &nested}).KeysWith("items"); strings.Join(keys, " ") != "p" {
+		t.Errorf("records_dir data/items: keys = %v", keys)
+	}
+	if keys, _ := ScanParentDirs(root, root, &RecordFileDef{Name: "{key}.json"}).KeysWith("items"); strings.Join(keys, " ") != "data p" {
+		t.Errorf("default records_dir: keys = %v", keys)
+	}
+}
+
 func TestIsWithin(t *testing.T) {
 	t.Parallel()
 	sep := string(filepath.Separator)

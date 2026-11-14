@@ -18,9 +18,11 @@ import (
 // The rule:
 //   - hidden entries (".") are not parents;
 //   - the names inGitDB itself writes in a collection directory ($records,
-//     $views, $ingitdb, and the parent's own records_dir) are not parents;
-//     every other name is a parent key, including other "$"-prefixed names,
-//     since Firestore allows document ids such as "$x";
+//     $views, $ingitdb, and the first segment of the parent's records
+//     directory, "data" for records_dir data/items) are not parents, even
+//     under records_dir "." where a Firestore document could carry such an
+//     id; every other name is a parent key, including other "$"-prefixed
+//     names, since Firestore allows document ids such as "$x";
 //   - names matched by the parent's exclude_regex are not parents;
 //   - an instance directory reached through a symbolic link is used only when
 //     it resolves inside the database root; otherwise it is not read and is
@@ -58,7 +60,7 @@ func ScanParentDirs(root, base string, recordFile *RecordFileDef) ParentDirs {
 		if strings.HasPrefix(name, ".") || reservedDirNames[name] {
 			continue
 		}
-		if recordFile != nil && (recordFile.IsExcluded(name) || (recordFile.RecordsDir != nil && *recordFile.RecordsDir == name)) {
+		if recordFile != nil && (recordFile.IsExcluded(name) || name == recordsDirHead(recordFile)) {
 			continue
 		}
 		scan.candidates = append(scan.candidates, name)
@@ -86,6 +88,14 @@ func (s ParentDirs) KeysWith(subID string) (keys, outside []string) {
 		keys = append(keys, name)
 	}
 	return keys, outside
+}
+
+// recordsDirHead is the first path segment of the records directory, the
+// entry of the collection directory inGitDB keeps record files under; ""
+// when records sit in the collection directory itself.
+func recordsDirHead(recordFile *RecordFileDef) string {
+	head, _, _ := strings.Cut(recordFile.RecordsBasePath(), "/")
+	return head
 }
 
 // isWithin reports whether path p is root or below it.

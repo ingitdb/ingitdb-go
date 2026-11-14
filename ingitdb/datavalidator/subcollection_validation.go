@@ -115,6 +115,9 @@ func (w instanceWalk) walkBelow(fullID string, colDef *ingitdb.CollectionDef, an
 		parentKeys := append(slices.Clone(recordKeys), dirKeys...)
 		slices.Sort(parentKeys)
 		parentKeys = slices.Compact(parentKeys)
+		// A parent whose instance directory leads outside the database is not
+		// read, whether or not the parent has a record file.
+		parentKeys = slices.DeleteFunc(parentKeys, func(key string) bool { return slices.Contains(outside, key) })
 		for _, parentKey := range parentKeys {
 			inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
 			inst.DirPath = subCollectionDataDir(colDef, parentKey, subID)
