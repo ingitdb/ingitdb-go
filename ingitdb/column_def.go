@@ -2,7 +2,13 @@ package ingitdb
 
 // specscore: feature/column-validation
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+)
 
 type ColumnDef struct {
 	Type       ColumnType        `yaml:"type"`
@@ -83,6 +89,26 @@ type ColumnDef struct {
 	// use integer division `//` (e.g. `total // count`) — `a / b` yields a
 	// float and fails coercion into an int column unless the result is whole.
 	Formula string `yaml:"formula,omitempty"`
+
+	// Columns, Values and Items declare the shape of a structured value with
+	// the same column definition, recursively. All three are optional; a
+	// column without them is validated exactly as before (its map or list
+	// content unchecked).
+	//
+	//   - Columns: the fields of a nested object. Allowed on `any` and map
+	//     types other than map[locale]string. Every declared field is checked,
+	//     and a field the object holds but Columns does not declare is an
+	//     undeclared-field finding, as at the top level.
+	//   - Values: every value of a map (`map[K]V`), e.g. a map keyed by id
+	//     whose values are objects.
+	//   - Items: every element of a list (`[]T`).
+	//
+	// A nested definition supports type, required, enum, length, value-range
+	// and its own Columns/Values/Items. formula, required_when, foreign_key and
+	// locale are top-level only and are a definition-load error when nested.
+	Columns map[string]*ColumnDef `yaml:"columns,omitempty"`
+	Values  *ColumnDef            `yaml:"values,omitempty"`
+	Items   *ColumnDef            `yaml:"items,omitempty"`
 }
 
 func (v *ColumnDef) Validate() error {
@@ -92,7 +118,57 @@ func (v *ColumnDef) Validate() error {
 		}
 		return err
 	}
+	return v.validateShape()
+}
+
+// validateShape checks Columns, Values and Items against the column type and
+// validates each nested definition recursively.
+func (v *ColumnDef) validateShape() error {
+	isMap := strings.HasPrefix(string(v.Type), "map[") && v.Type != ColumnTypeL10N
+	_, isList := ListElementType(v.Type)
+	if len(v.Columns) > 0 && !isMap && v.Type != ColumnTypeAny {
+		return fmt.Errorf("'columns' requires a map type or any, got %s", v.Type)
+	}
+	if v.Values != nil && !isMap {
+		return fmt.Errorf("'values' requires a map type, got %s", v.Type)
+	}
+	if v.Items != nil && !isList {
+		return fmt.Errorf("'items' requires a list type, got %s", v.Type)
+	}
+	for _, name := range slices.Sorted(maps.Keys(v.Columns)) {
+		if err := v.Columns[name].validateNested(); err != nil {
+			return fmt.Errorf("invalid nested column '%s': %w", name, err)
+		}
+	}
+	if v.Values != nil {
+		if err := v.Values.validateNested(); err != nil {
+			return fmt.Errorf("invalid 'values': %w", err)
+		}
+	}
+	if v.Items != nil {
+		if err := v.Items.validateNested(); err != nil {
+			return fmt.Errorf("invalid 'items': %w", err)
+		}
+	}
 	return nil
+}
+
+// validateNested validates a definition used inside Columns, Values or Items.
+func (v *ColumnDef) validateNested() error {
+	if v == nil {
+		return errors.New("missing definition")
+	}
+	switch {
+	case v.Formula != "":
+		return errors.New("'formula' is not supported in a nested column")
+	case v.RequiredWhen != "":
+		return errors.New("'required_when' is not supported in a nested column")
+	case v.ForeignKey != "":
+		return errors.New("'foreign_key' is not supported in a nested column")
+	case v.Locale != "":
+		return errors.New("'locale' is not supported in a nested column")
+	}
+	return v.Validate()
 }
 
 type ColumnDefWithID struct {

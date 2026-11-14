@@ -221,11 +221,18 @@ func ValidateForeignKeys(def *Definition) error {
 				if fk == "" {
 					continue
 				}
-				if _, ok := ResolveForeignKey(full, fk, def.Collections); !ok {
-					problems = append(problems, fmt.Sprintf(
-						"collection '%s': column '%s' declares foreign_key '%s', which does not resolve to any collection in this definition (known collections: %s)",
-						full, name, fk, strings.Join(targets, ", ")))
+				if _, ok := ResolveForeignKey(full, fk, def.Collections); ok {
+					continue
 				}
+				if IsForeignKeyPath(fk) {
+					if _, err := ResolveForeignKeyPath(full, fk, col, def.Collections); err != nil {
+						problems = append(problems, fmt.Sprintf("collection '%s': column '%s': %v", full, name, err))
+					}
+					continue
+				}
+				problems = append(problems, fmt.Sprintf(
+					"collection '%s': column '%s' declares foreign_key '%s', which does not resolve to any collection in this definition (known collections: %s)",
+					full, name, fk, strings.Join(targets, ", ")))
 			}
 			walk(full, col.SubCollections)
 		}

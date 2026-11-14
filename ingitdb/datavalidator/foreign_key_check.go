@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	ingitdb "github.com/ingitdb/ingitdb-go/ingitdb"
 )
@@ -47,8 +48,9 @@ func validateForeignKeyReferences(def *ingitdb.Definition) []ingitdb.ValidationE
 	if def == nil {
 		return nil
 	}
-	// The index holds root collections only: a foreign_key resolves to a root
-	// collection, never a subcollection.
+	// The index holds root collections. A foreign_key naming a subcollection
+	// by path is checked against the one target instance it gives per record
+	// (checkPathForeignKey, instanceKeyCache).
 	idx := make(foreignKeyIndex, len(def.Collections))
 	for id, col := range def.Collections {
 		records, err := loadCollectionRecords(col)
@@ -62,10 +64,11 @@ func validateForeignKeyReferences(def *ingitdb.Definition) []ingitdb.ValidationE
 		idx[id] = keys
 	}
 
+	instances := instanceKeyCache{}
 	var errors []ingitdb.ValidationError
 	for _, id := range slices.Sorted(maps.Keys(def.Collections)) {
 		col := def.Collections[id]
-		errors = append(errors, checkCollectionForeignKeys(id, col, def, idx)...)
+		errors = append(errors, checkCollectionForeignKeys(id, col, nil, def, idx, instances)...)
 		// Subcollection records live once per parent record, not at the
 		// subcollection's loaded DirPath; walkSubCollectionInstances repoints each
 		// instance at its on-disk data so a foreign_key on a subcollection column
@@ -73,26 +76,40 @@ func validateForeignKeyReferences(def *ingitdb.Definition) []ingitdb.ValidationE
 		// schema pass (validateSubCollections), so the two passes cannot disagree
 		// on where a subcollection's records live.
 		walkSubCollectionInstances(id, col, func(inst subCollectionInstance) {
-			errors = append(errors, checkCollectionForeignKeys(inst.fullID, inst.colDef, def, idx)...)
+			errors = append(errors, checkCollectionForeignKeys(inst.fullID, inst.colDef, inst.ancestorKeys, def, idx, instances)...)
 		})
 	}
 	return errors
 }
 
 // checkCollectionForeignKeys checks one collection's records against the index.
-func checkCollectionForeignKeys(fullID string, col *ingitdb.CollectionDef, def *ingitdb.Definition, idx foreignKeyIndex) []ingitdb.ValidationError {
-	fkColumns := make(map[string]string) // column name -> resolved target collection
+// ancestorKeys are the keys of the records above col's records (nil for a root
+// collection); a path foreign_key needs them for its $same segments.
+func checkCollectionForeignKeys(
+	fullID string,
+	col *ingitdb.CollectionDef,
+	ancestorKeys []string,
+	def *ingitdb.Definition,
+	idx foreignKeyIndex,
+	instances instanceKeyCache,
+) []ingitdb.ValidationError {
+	fkColumns := make(map[string]string)                    // column name -> resolved root target collection
+	pathColumns := make(map[string]*ingitdb.ForeignKeyPath) // column name -> subcollection target
 	for name, colDef := range col.Columns {
 		if colDef.ForeignKey == "" {
 			continue
 		}
 		target, ok := ingitdb.ResolveForeignKey(fullID, colDef.ForeignKey, def.Collections)
-		if !ok {
-			continue // unresolved targets are a load-time error, handled elsewhere
+		if ok {
+			fkColumns[name] = target
+			continue
 		}
-		fkColumns[name] = target
+		if path, err := ingitdb.ResolveForeignKeyPath(fullID, colDef.ForeignKey, col, def.Collections); err == nil {
+			pathColumns[name] = path
+		}
+		// unresolved targets are a load-time error, handled elsewhere
 	}
-	if len(fkColumns) == 0 {
+	if len(fkColumns) == 0 && len(pathColumns) == 0 {
 		return nil
 	}
 
@@ -122,6 +139,81 @@ func checkCollectionForeignKeys(fullID string, col *ingitdb.CollectionDef, def *
 					errors = append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
 				}
 			}
+		}
+		recordKeys := append(slices.Clone(ancestorKeys), r.Key)
+		for _, name := range slices.Sorted(maps.Keys(pathColumns)) {
+			errors = append(errors, checkPathForeignKey(fullID, name, pathColumns[name], r, recordKeys, def, instances)...)
+		}
+	}
+	return errors
+}
+
+// instanceKeyCache holds the record keys of each subcollection instance a path
+// foreign_key pointed at, by instance data directory, so each is read once.
+type instanceKeyCache map[string]map[string]bool
+
+func (c instanceKeyCache) keys(colDef *ingitdb.CollectionDef) map[string]bool {
+	if keys, ok := c[colDef.DirPath]; ok {
+		return keys
+	}
+	records, _ := loadCollectionRecords(colDef) // a parse failure is reported by the schema pass
+	keys := make(map[string]bool, len(records))
+	for _, rec := range records {
+		keys[rec.Key] = true
+	}
+	c[colDef.DirPath] = keys
+	return keys
+}
+
+// checkPathForeignKey checks one record's value of a foreign_key that names a
+// subcollection: it finds the target instance from the path (literal keys, the
+// record's own keys for $same, the record's fields for {field}) and checks
+// every value against that instance's record keys.
+func checkPathForeignKey(
+	fullID, name string,
+	path *ingitdb.ForeignKeyPath,
+	r loadedRecord,
+	recordKeys []string,
+	def *ingitdb.Definition,
+	instances instanceKeyCache,
+) []ingitdb.ValidationError {
+	raw, present := r.Data[name]
+	if !present || raw == nil {
+		return nil
+	}
+	values, elementErrs := ingitdb.ForeignKeyElements(raw)
+	var errors []ingitdb.ValidationError
+	for _, badElem := range elementErrs {
+		message := fmt.Sprintf("foreign key %q has a list element that is not a scalar (%s): foreign key element must be a scalar", name, badElem)
+		errors = append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
+	}
+	if len(values) == 0 {
+		return errors
+	}
+	target := *def.Collections[path.Root]
+	instancePath := []string{path.Root}
+	for level, step := range path.Steps {
+		parentKey := step.Literal
+		switch {
+		case step.Same:
+			parentKey = recordKeys[level]
+		case step.Field != "":
+			parentKey = fmt.Sprintf("%v", r.Data[step.Field])
+			if r.Data[step.Field] == nil || parentKey == "" {
+				message := fmt.Sprintf("foreign key %q = %q: field %q, which gives the parent key in %q, is empty", name, values[0], step.Field, path.String())
+				return append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
+			}
+		}
+		sub := *target.SubCollections[step.Collection]
+		sub.DirPath = subCollectionDataDir(&target, parentKey, step.Collection)
+		instancePath = append(instancePath, parentKey, step.Collection)
+		target = sub
+	}
+	keys := instances.keys(&target)
+	for _, value := range values {
+		if !keys[value] {
+			message := fmt.Sprintf("foreign key %q = %q has no matching record in collection %q", name, value, strings.Join(instancePath, "/"))
+			errors = append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
 		}
 	}
 	return errors

@@ -423,6 +423,12 @@ func buildFKViews(
 		if colDef.ForeignKey == "" {
 			continue
 		}
+		if _, isRoot := ingitdb.ResolveForeignKey(col.ID, colDef.ForeignKey, def.Collections); !isRoot && ingitdb.IsForeignKeyPath(colDef.ForeignKey) {
+			// A foreign_key naming a subcollection has no single target
+			// directory to write a $fk view into; validation checks it, and no
+			// $fk view is built for it.
+			continue
+		}
 
 		// Resolve module-relative (ingitdb.ResolveForeignKey), the same rule
 		// validation uses: a bare `foreign_key: countries` in commerce.addresses

@@ -8,6 +8,7 @@ package datavalidator
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -488,8 +489,75 @@ func validateRecordData(
 			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
 			continue
 		}
+		for _, finding := range shapeFindings(fieldName, value, columnDef) {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, finding.field, finding.message, nil))
+		}
 	}
 	return errors
+}
+
+// shapeFinding is one violation inside a structured value; field is the path
+// to it, e.g. "slots.sl1.durationInMinutes" or "members[2].role".
+type shapeFinding struct {
+	field   string
+	message string
+}
+
+// shapeFindings checks a value that already passed its own column checks
+// against the column's declared Columns, Values and Items, recursively. A
+// column that declares none of them yields nothing, so a column is checked
+// exactly as before unless its definition opts in.
+func shapeFindings(path string, value any, def *ingitdb.ColumnDef) []shapeFinding {
+	var findings []shapeFinding
+	if object, isObject := value.(map[string]any); isObject && len(def.Columns) > 0 {
+		for _, name := range slices.Sorted(maps.Keys(object)) {
+			if _, declared := def.Columns[name]; !declared && !strings.HasPrefix(name, reservedFieldPrefix) {
+				message := fmt.Sprintf("undeclared field %q: no nested column of that name in the definition of %q", path+"."+name, path)
+				findings = append(findings, shapeFinding{path + "." + name, message})
+			}
+		}
+		for _, name := range slices.Sorted(maps.Keys(def.Columns)) {
+			findings = append(findings, nestedValueFindings(path+"."+name, object[name], def.Columns[name])...)
+		}
+	}
+	if def.Values != nil {
+		if object, isObject := value.(map[string]any); isObject {
+			for _, key := range slices.Sorted(maps.Keys(object)) {
+				findings = append(findings, nestedValueFindings(path+"."+key, object[key], def.Values)...)
+			}
+		}
+	}
+	if items, isList := value.([]any); isList && def.Items != nil {
+		for i, item := range items {
+			findings = append(findings, nestedValueFindings(fmt.Sprintf("%s[%d]", path, i), item, def.Items)...)
+		}
+	}
+	return findings
+}
+
+// nestedValueFindings checks one nested value with the same checks, in the
+// same order and with the same messages, as a top-level column: required,
+// type, enum, value range, length, then its own shape.
+func nestedValueFindings(path string, value any, def *ingitdb.ColumnDef) []shapeFinding {
+	if value == nil {
+		if def.Required {
+			return []shapeFinding{{path, "missing required field"}}
+		}
+		return nil
+	}
+	if !valueMatchesColumnType(value, def.Type) {
+		return []shapeFinding{{path, fmt.Sprintf("wrong type for field %q: expected %s, got %T", path, def.Type, value)}}
+	}
+	if err := checkEnum(path, value, def.Enum); err != nil {
+		return []shapeFinding{{path, err.Error()}}
+	}
+	if err := checkValueRange(path, value, def.MinValue, def.MaxValue); err != nil {
+		return []shapeFinding{{path, err.Error()}}
+	}
+	if err := checkLength(path, value, def.Length, def.MinLength, def.MaxLength); err != nil {
+		return []shapeFinding{{path, err.Error()}}
+	}
+	return shapeFindings(path, value, def)
 }
 
 // keyTypeFormats names, for every column type a record key can be parsed as,

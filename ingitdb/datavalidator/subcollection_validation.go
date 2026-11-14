@@ -23,6 +23,10 @@ type subCollectionInstance struct {
 	fullID    string                 // schema full path, e.g. "orders/order_details"
 	colDef    *ingitdb.CollectionDef // a shallow copy of the sub def, DirPath repointed at the instance data dir
 	parentKey string                 // key of the parent record that owns this instance
+	// ancestorKeys are the keys from the root record down to and including
+	// parentKey: the instance at spaces/k3v9q/ext/calendarius/days has
+	// ["k3v9q", "calendarius"]. A path foreign_key's $same segments read them.
+	ancestorKeys []string
 }
 
 // subCollectionDataDir returns the effective data directory for one parent
@@ -63,6 +67,12 @@ func subCollectionDataDir(parentColDef *ingitdb.CollectionDef, parentKey, subID 
 // it for that collection); the level then yields only the directory-discovered
 // instances.
 func walkSubCollectionInstances(fullID string, colDef *ingitdb.CollectionDef, fn func(subCollectionInstance)) {
+	walkSubCollectionInstancesBelow(fullID, colDef, nil, fn)
+}
+
+// walkSubCollectionInstancesBelow is walkSubCollectionInstances for a colDef
+// whose own records sit below the given ancestor keys.
+func walkSubCollectionInstancesBelow(fullID string, colDef *ingitdb.CollectionDef, ancestorKeys []string, fn func(subCollectionInstance)) {
 	if colDef == nil || len(colDef.SubCollections) == 0 {
 		return
 	}
@@ -81,8 +91,9 @@ func walkSubCollectionInstances(fullID string, colDef *ingitdb.CollectionDef, fn
 		for _, parentKey := range parentKeys {
 			inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
 			inst.DirPath = subCollectionDataDir(colDef, parentKey, subID)
-			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey})
-			walkSubCollectionInstances(subFullID, &inst, fn)
+			keys := append(slices.Clone(ancestorKeys), parentKey)
+			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey, ancestorKeys: keys})
+			walkSubCollectionInstancesBelow(subFullID, &inst, keys, fn)
 		}
 	}
 }
