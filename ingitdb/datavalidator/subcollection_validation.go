@@ -4,6 +4,7 @@ package datavalidator
 
 import (
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -48,31 +49,75 @@ func subCollectionDataDir(parentColDef *ingitdb.CollectionDef, parentKey, subID 
 // subcollection instance already repointed by an enclosing level. For each level
 // the parent records are read once (with loadCollectionRecords, the same reader
 // the schema and foreign-key passes use), and every declared subcollection is
-// expanded into one instance per parent record. Subcollection ids and parent
-// keys are visited in sorted order so findings are deterministic.
+// expanded into one instance per parent key. Subcollection ids and parent keys
+// are visited in sorted order so findings are deterministic.
+//
+// A parent key is either the key of a parent record, or the name of a
+// directory that holds data for the subcollection although no parent record
+// file exists (parentKeysWithSubCollectionDir). The second case mirrors
+// Firestore, where a document may own subcollections without existing itself
+// (`ext/commitius/cmSessions/{id}` with no `ext/commitius` document); without it
+// such records were silently never validated.
 //
 // A read/parse failure at a level is not reported here (the schema pass reports
-// it for that collection); the level simply yields no instances.
+// it for that collection); the level then yields only the directory-discovered
+// instances.
 func walkSubCollectionInstances(fullID string, colDef *ingitdb.CollectionDef, fn func(subCollectionInstance)) {
 	if colDef == nil || len(colDef.SubCollections) == 0 {
 		return
 	}
-	parents, err := loadCollectionRecords(colDef)
-	if err != nil {
-		return
+	parents, _ := loadCollectionRecords(colDef)
+	recordKeys := make([]string, 0, len(parents))
+	for _, pr := range parents {
+		recordKeys = append(recordKeys, pr.Key)
 	}
-	slices.SortFunc(parents, func(a, b loadedRecord) int { return strings.Compare(a.Key, b.Key) })
 
 	for _, subID := range slices.Sorted(maps.Keys(colDef.SubCollections)) {
 		sub := colDef.SubCollections[subID]
 		subFullID := fullID + "/" + subID
-		for _, pr := range parents {
+		parentKeys := append(slices.Clone(recordKeys), parentKeysWithSubCollectionDir(colDef, subID)...)
+		slices.Sort(parentKeys)
+		parentKeys = slices.Compact(parentKeys)
+		for _, parentKey := range parentKeys {
 			inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
-			inst.DirPath = subCollectionDataDir(colDef, pr.Key, subID)
-			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: pr.Key})
+			inst.DirPath = subCollectionDataDir(colDef, parentKey, subID)
+			fn(subCollectionInstance{fullID: subFullID, colDef: &inst, parentKey: parentKey})
 			walkSubCollectionInstances(subFullID, &inst, fn)
 		}
 	}
+}
+
+// parentKeysWithSubCollectionDir returns the names of the per-record
+// directories under parentColDef's records base path that contain a directory
+// named subID — the keys of parents that hold data for that subcollection,
+// whether or not a parent record file exists. Hidden entries, `$records`, and
+// names matched by the parent's exclude_regex are skipped, the same entries
+// countEntries skips. An unreadable or missing base directory yields none.
+func parentKeysWithSubCollectionDir(parentColDef *ingitdb.CollectionDef, subID string) []string {
+	base := parentColDef.DirPath
+	if parentColDef.RecordFile != nil {
+		base = filepath.Join(base, parentColDef.RecordFile.RecordsBasePath())
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return nil
+	}
+	var keys []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() || strings.HasPrefix(name, ".") || name == "$records" {
+			continue
+		}
+		if parentColDef.RecordFile != nil && parentColDef.RecordFile.IsExcluded(name) {
+			continue
+		}
+		info, statErr := os.Stat(filepath.Join(base, name, subID))
+		if statErr != nil || !info.IsDir() {
+			continue
+		}
+		keys = append(keys, name)
+	}
+	return keys
 }
 
 // validateSubCollections runs the per-record schema pass and per-parent-instance

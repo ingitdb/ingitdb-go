@@ -119,6 +119,12 @@ An expression evaluating to anything other than Starlark `True`/`False` MUST pro
 
 When `required_when` is present, `required` MUST NOT also be set on the same column — declaring both is a definition-load error.
 
+#### REQ: record-key-type-checked
+
+A record key is always text: a file name, a key of a map-of-records file, or a `$ID` cell. When a collection declares the `$ID` column with type `int`, `float`, `bool`, `date`, `time` or `datetime`, and the record's `$ID` value is a string, the key MUST be parsed as that type instead of being compared by its Go type. The accepted text forms are: `int` a base-10 integer (`42`, `-7`); `float` a decimal number; `bool` exactly `true` or `false`; `date` `YYYY-MM-DD` (a real calendar date, so `2026-02-30` fails); `time` `HH:MM` or `HH:MM:SS` with optional fractional seconds; `datetime` RFC 3339 (`2026-11-18T07:30:00Z`). A key that does not parse MUST produce a wrong-type finding on `$ID` naming the key and the expected form. A key that parses MUST be passed on, parsed, to the `enum` and `min_value`/`max_value` checks, so an `int` key is compared as a number.
+
+This applies to `$ID` only. Ordinary `date`, `time` and `datetime` columns keep accepting any string (their format is not checked); checking them is a separate, possibly breaking change. A `$ID` value that is not a string (a list-of-records row storing `"$ID": 5`) keeps the plain value type check. Before this rule, a `date` key accepted any text, and an `int`, `float` or `bool` key always failed for per-file records (the key text is a string), so the only records whose outcome changes are those whose key is not a valid value of the declared key type.
+
 ### Failing loudly instead of silently
 
 #### REQ: reject-unknown-column-keys
@@ -469,6 +475,14 @@ Verification of record: 337 definition files audited across every layout (`.coll
 **Given** a collection definition with column `state` of type `strng`
 **When** the definition is loaded
 **Then** loading fails with an error naming the unrecognised type `strng` and listing the recognised types
+
+### AC: typed-record-key-checked
+
+**Requirements:** column-validation#req:record-key-type-checked
+
+**Given** a collection whose `$ID` column is `type: date`, holding per-file records `2026-11-24.json` and `notadate.json`
+**When** the database is validated
+**Then** `2026-11-24` passes and `notadate` fails with a wrong-type finding on `$ID` naming the key and `YYYY-MM-DD`; with `$ID` typed `int` and `max_value: 10`, key `3` passes and key `11` fails the range check
 
 ## Not Doing (and Why)
 

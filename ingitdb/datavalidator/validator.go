@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -457,7 +458,19 @@ func validateRecordData(
 			}
 			continue
 		}
-		if !valueMatchesColumnType(value, columnDef.Type) {
+		if key, isKey := value.(string); isKey && fieldName == reservedIDField && keyTypeFormats[columnDef.Type] != "" {
+			// A record key is always text (a file name, a map key, a CSV cell),
+			// so a typed $ID is checked by parsing the key, not by the Go type
+			// of the value. See column-validation#req:record-key-type-checked.
+			parsed, keyOK := parseRecordKey(key, columnDef.Type)
+			if !keyOK {
+				message := fmt.Sprintf("wrong type for field %q: record key %q is not a valid %s (%s)",
+					fieldName, key, columnDef.Type, keyTypeFormats[columnDef.Type])
+				errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil))
+				continue
+			}
+			value = parsed
+		} else if !valueMatchesColumnType(value, columnDef.Type) {
 			message := fmt.Sprintf("wrong type for field %q: expected %s, got %T", fieldName, columnDef.Type, value)
 			validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil)
 			errors = append(errors, validationErr)
@@ -477,6 +490,46 @@ func validateRecordData(
 		}
 	}
 	return errors
+}
+
+// keyTypeFormats names, for every column type a record key can be parsed as,
+// the text form a key of that type must have. Types missing here (string,
+// any, maps, lists) keep the plain value type check.
+var keyTypeFormats = map[ingitdb.ColumnType]string{
+	ingitdb.ColumnTypeInt:      "a base-10 integer",
+	ingitdb.ColumnTypeFloat:    "a decimal number",
+	ingitdb.ColumnTypeBool:     "true or false",
+	ingitdb.ColumnTypeDate:     "YYYY-MM-DD",
+	ingitdb.ColumnTypeTime:     "HH:MM or HH:MM:SS",
+	ingitdb.ColumnTypeDateTime: "RFC 3339, e.g. 2006-01-02T15:04:05Z",
+}
+
+// parseRecordKey parses a record key as columnType, one of the keyTypeFormats
+// types. Numbers and booleans come back parsed, so enum and range checks
+// compare them as numbers; temporal keys stay the key text.
+func parseRecordKey(key string, columnType ingitdb.ColumnType) (any, bool) {
+	switch columnType {
+	case ingitdb.ColumnTypeInt:
+		n, err := strconv.ParseInt(key, 10, 64)
+		return n, err == nil
+	case ingitdb.ColumnTypeFloat:
+		f, err := strconv.ParseFloat(key, 64)
+		return f, err == nil
+	case ingitdb.ColumnTypeBool:
+		return key == "true", key == "true" || key == "false"
+	case ingitdb.ColumnTypeDate:
+		_, err := time.Parse(time.DateOnly, key)
+		return key, err == nil
+	case ingitdb.ColumnTypeTime:
+		_, err := time.Parse(time.TimeOnly, key)
+		if err != nil {
+			_, err = time.Parse("15:04", key)
+		}
+		return key, err == nil
+	default: // ingitdb.ColumnTypeDateTime
+		_, err := time.Parse(time.RFC3339Nano, key)
+		return key, err == nil
+	}
 }
 
 // checkEnum reports whether value is one of the column's permitted members.

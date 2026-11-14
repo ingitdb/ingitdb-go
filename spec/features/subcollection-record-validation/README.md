@@ -47,6 +47,10 @@ The effective data directory for one parent record's instance of a subcollection
 
 and its record file is that directory joined with the subcollection's own records-base-path and `record_file.name`. `demo-ingitdb` is the precedent: parent `orders` stores records at `orders/$records/{key}.yaml`, and order `ord001`'s `order_details` subcollection (a `[]map[string]any` in `details.json`) lives at `orders/$records/ord001/order_details/details.json`. The rule is recursive: a sub-subcollection of a subcollection record resolves the same way, treating the subcollection instance as the parent. Because the parent record file (`ord001.yaml`) and the parent record's subcollection directory (`ord001/`) are siblings differing only by extension, `countRecords` already de-duplicates them so a record owning subcollections is not double-counted.
 
+### REQ: parent-record-optional
+
+A parent record MAY be absent while its subcollections hold records. This is how Firestore works: `ext/commitius/cmSessions/{id}` can exist although no document `ext/commitius` was ever written. A parent key MUST therefore be taken both from the parent's records and from the per-record directories that exist under the parent's records base path: a directory `<parent DirPath>/<parent records-base-path>/<name>/` that contains a directory `<subId>/` is the parent instance `<name>` of subcollection `<subId>`, whether or not a record file for `<name>` exists. The rule applies at every depth, so a record two missing parents below a root collection is validated. Hidden entries, `$records`, and names matched by the parent's `exclude_regex` MUST NOT be parent instances, and a directory that does not contain `<subId>/` MUST NOT create an instance (so no record-count finding is raised for it). A parent key found both ways is one instance, not two. A missing parent is not a record: it MUST NOT be counted in the parent collection's record count. If the parent's records cannot be read (a map- or list-of-records file that fails to parse), the directory-found instances MUST still be validated. Before this rule such records were never opened, so validation passed whatever they held; an author had to write an empty `{}` parent record to get them validated, and that workaround keeps working.
+
 ### REQ: subcollection-records-schema-validated
 
 Whole-database validation MUST recurse into every collection's `SubCollections`, to arbitrary depth, and validate each subcollection record with the same per-record checks the root pass applies (`validateRecordData` plus the foreign-key pass): declared column types, `enum` membership, `required`, `required_when`, `length`/`min_length`/`max_length`, `min_value`/`max_value`, the undeclared-field check, the computed-column-must-not-be-stored rule, and foreign-key existence. A violation in a subcollection record MUST be reported as a finding whose `CollectionID` is the subcollection's full slash-path (e.g. `orders/order_details`) and whose `FilePath` identifies the concrete on-disk record file of the owning parent instance, so two parent records' instances of the same subcollection are distinguishable.
@@ -138,6 +142,38 @@ Adding subcollection validation MUST NOT change the findings produced for root c
 **Given** `demo-ingitdb`, whose `orders/order_details` subcollection records satisfy their schema and foreign keys
 **When** it is loaded and validated through the real reader and validator
 **Then** no finding is reported whose `CollectionID` is `orders/order_details` — the newly-walked subcollection is clean, and the database's pre-existing root-level findings (unrelated `commerce.addresses` type errors) are unchanged
+
+### AC: parentless-subcollection-records-validated
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional
+
+**Given** a parent collection `ext` with no record file `ext/commitius.json`, and subcollection records `ext/commitius/sessions/s1.json` (`minutes: "thirty"` where `minutes` is an `int`) and `s2.json` (valid)
+**When** the database is validated
+**Then** one wrong-type finding is reported for `s1.json` under `ext/sessions`, the record counts for `ext/sessions` are 1 passed of 2, and `ext` counts 0 records
+
+### AC: parentless-nested-records-validated
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional
+
+**Given** `spaces/s1.json` exists but `spaces/s1/ext/commitius.json` does not, and `spaces/s1/ext/commitius/checkIns/c1.json` breaks its schema; and `spaces/s2/...` has no parent record at either level
+**When** the database is validated
+**Then** the finding for `c1.json` is reported under `spaces/ext/checkIns`, and both `checkIns` records are counted
+
+### AC: parentless-foreign-key-checked
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional, subcollection-record-validation#req:foreign-key-pass-reconciled
+
+**Given** a record below a missing parent whose `foreign_key` column holds a value with no target record
+**When** the database is validated
+**Then** a dangling foreign-key finding is reported for it
+
+### AC: parentless-discovery-ignores-other-entries
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional
+
+**Given** a subcollection with `min_records_count: 1` and, under the parent's records base path, a hidden directory, a `$records` directory, a name matched by `exclude_regex`, a directory without the subcollection's directory, and a file named like the subcollection
+**When** the database is validated
+**Then** none of them is a parent instance: no finding is raised for them
 
 ## Not Doing (and Why)
 
