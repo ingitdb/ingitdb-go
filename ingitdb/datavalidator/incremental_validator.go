@@ -4,7 +4,7 @@ package datavalidator
 
 import (
 	"context"
-	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -21,10 +21,13 @@ func NewIncrementalValidator(differ gitdiff.GitDiffer, resolver ChangeSetResolve
 	return &incrementalValidator{differ: differ, resolver: resolver, full: full}
 }
 
+// incrementalValidator's readDir lists directories for the name-collision
+// check (os.ReadDir when nil); tests count listings through it.
 type incrementalValidator struct {
 	differ   gitdiff.GitDiffer
 	resolver ChangeSetResolver
 	full     DataValidator
+	readDir  func(string) ([]os.DirEntry, error)
 }
 
 func (iv *incrementalValidator) ValidateChanges(
@@ -50,12 +53,18 @@ func (iv *incrementalValidator) ValidateChanges(
 	}
 
 	result := &ingitdb.ValidationResult{}
+	names := newNameIndex(dbPath, iv.readDir)
 	type counts struct{ passed, total int }
 	perCollection := map[string]*counts{}
-	wholeFileDone := map[string]bool{} // collectionID → its shared file already validated
+	wholeFileDone := map[string]bool{}  // instance data directory → its shared file already validated
+	parentNameDone := map[string]bool{} // instance data directory → its parent name already checked
 
 	for _, ar := range affected {
-		colDef := def.Collections[ar.CollectionID]
+		levels := ar.levels
+		if levels == nil {
+			levels = []instanceLevel{{id: ar.CollectionID, colDef: def.Collections[ar.CollectionID]}}
+		}
+		colDef := levels[len(levels)-1].colDef
 		if colDef == nil {
 			continue
 		}
@@ -64,24 +73,42 @@ func (iv *incrementalValidator) ValidateChanges(
 			c = &counts{}
 			perCollection[ar.CollectionID] = c
 		}
+		appendErrors(result, parentNameFindings(levels, parentNameDone))
+		names.useRecord(levels, ar.FilePath)
 		switch colDef.RecordFile.RecordType {
 		case ingitdb.SingleRecord:
 			passed, total, errs := validateSingleRecordFile(ar.CollectionID, colDef, ar.FilePath)
 			c.passed += passed
 			c.total += total
 			appendErrors(result, errs)
-			appendErrors(result, changedFileCaseFindings(dbPath, ar.CollectionID, colDef, ar.FilePath))
 		case ingitdb.MapOfRecords, ingitdb.ListOfRecords:
-			if wholeFileDone[ar.CollectionID] {
+			if wholeFileDone[colDef.DirPath] {
 				continue
 			}
-			wholeFileDone[ar.CollectionID] = true
+			wholeFileDone[colDef.DirPath] = true
 			passed, total, errs := validateWholeRecordFile(ar.CollectionID, colDef)
 			c.passed += passed
 			c.total += total
 			appendErrors(result, errs)
 		}
 	}
+	// A deleted record file (or a rename's old name) can leave two names of
+	// one file behind: its group is checked as well.
+	for _, cf := range changed {
+		gone := cf.OldPath
+		if cf.Kind == ingitdb.ChangeKindDeleted {
+			gone = cf.Path
+		}
+		if gone == "" {
+			continue
+		}
+		absPath := filepath.Clean(filepath.Join(dbPath, gone))
+		if levels := resolveRecordFile(def, absPath); levels != nil {
+			names.useRecord(levels, absPath)
+		}
+	}
+	appendErrors(result, definitionNameFindings(names, def))
+	appendErrors(result, names.findings())
 
 	for collectionID, c := range perCollection {
 		result.SetRecordCounts(collectionID, c.passed, c.total)
@@ -90,23 +117,19 @@ func (iv *incrementalValidator) ValidateChanges(
 	return result, nil
 }
 
-// changedFileCaseFindings reports a changed record file when its name, or a
-// directory on its path, is one entry with an existing one on a
-// case-insensitive or normalisation-insensitive file system, with or without
-// a key encoding, as the full pass does
-// (record-key-encoding#req:file-name-collisions-reported).
-func changedFileCaseFindings(dbPath, collectionID string, colDef *ingitdb.CollectionDef, filePath string) []ingitdb.ValidationError {
-	existing, found := ingitdb.PathDifferingInCase(dbPath, filePath)
-	if !found {
-		return nil
+// parentNameFindings reports, once per instance, the subcollection instance
+// directories on the way to a changed record whose parent directory name the
+// parent's key_encoding never writes, as the full pass does.
+func parentNameFindings(levels []instanceLevel, done map[string]bool) []ingitdb.ValidationError {
+	var findings []ingitdb.ValidationError
+	for _, level := range levels[1:] {
+		if level.nameErr == nil || done[level.colDef.DirPath] {
+			continue
+		}
+		done[level.colDef.DirPath] = true
+		findings = append(findings, parentNameFinding(level.id, level.colDef.DirPath, level.parentKey, level.nameErr))
 	}
-	noun := "file"
-	if filepath.Dir(existing) != filepath.Dir(filePath) {
-		noun = "directory"
-	}
-	shown, reason := collisionReason([]string{filePath, existing}, noun)
-	message := fmt.Sprintf("%s and %s %s; rename one", shown[0], shown[1], reason)
-	return []ingitdb.ValidationError{newValidationError(collectionID, filePath, "", "", message, nil)}
+	return findings
 }
 
 // validateWholeRecordFile validates every record in a collection's shared

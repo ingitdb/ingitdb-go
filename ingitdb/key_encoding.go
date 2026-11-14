@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -234,23 +235,92 @@ func (rfd RecordFileDef) validateKeyEncoding() error {
 	}
 }
 
-// sameFileKey returns the form two names share when a case-insensitive file
-// system (Windows, macOS by default) or one that ignores Unicode
-// normalisation (macOS) stores them as one entry: Unicode canonical caseless
-// matching, NFD(fold(NFD(name))). A name that is not valid UTF-8 (only Linux
-// stores one; macOS refuses it) has only its ASCII letters folded, so invalid
-// bytes never compare equal to each other.
+// sameFileKey returns the form two names share when validation counts them
+// as one entry (record-key-encoding#req:file-name-collisions-reported):
+// Unicode canonical caseless matching (Unicode Standard D145),
+// NFD(fold(NFD(name))), with full case folding, plus dotless ı mapped to i
+// as the NTFS upcase table does. It is deliberately stricter than any single
+// file system. A name that is ASCII, or not valid UTF-8 (only Linux stores
+// one; macOS refuses it), has only its ASCII letters folded, so invalid bytes
+// never compare equal to each other.
 func sameFileKey(name string) string {
-	if !utf8.ValidString(name) {
-		b := []byte(name)
-		for i, c := range b {
-			if 'A' <= c && c <= 'Z' {
-				b[i] = c + 'a' - 'A'
-			}
-		}
-		return string(b)
+	if plainBytes(name) {
+		return asciiLower(name)
 	}
-	return norm.NFD.String(cases.Fold().String(norm.NFD.String(name)))
+	return canonicalDecomposition(foldName(canonicalDecomposition(name)))
+}
+
+// NameCollisionKind reports how the names of one CaseOnlyDifferences group
+// differ: in letter case (their decompositions differ), in Unicode
+// normalisation (their case folds differ), or both.
+func NameCollisionKind(names []string) (letterCase, normalisation bool) {
+	decomposed := map[string]bool{}
+	folded := map[string]bool{}
+	for _, name := range names {
+		if plainBytes(name) {
+			decomposed[name] = true
+			folded[asciiLower(name)] = true
+			continue
+		}
+		decomposed[canonicalDecomposition(name)] = true
+		folded[foldName(name)] = true
+	}
+	return len(decomposed) > 1, len(folded) > 1
+}
+
+// plainBytes reports a name that is ASCII or not valid UTF-8: one whose
+// comparison folds ASCII letters only.
+func plainBytes(name string) bool {
+	for i := 0; i < len(name); i++ {
+		if name[i] >= utf8.RuneSelf {
+			return !utf8.ValidString(name)
+		}
+	}
+	return true
+}
+
+func asciiLower(name string) string {
+	b := []byte(name)
+	for i, c := range b {
+		if 'A' <= c && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// foldName is full Unicode case folding with dotless ı (U+0131) mapped to
+// i: NTFS compares names through its upcase table, which maps ı to I (the
+// ntfs-3g default table; not checked on Windows), while case folding keeps ı.
+func foldName(s string) string {
+	return strings.ReplaceAll(cases.Fold().String(s), "\u0131", "i")
+}
+
+// canonicalDecomposition is NFD without the stream-safe limit. norm.NFD
+// inserts U+034F after 30 combining marks (UAX #15 stream-safe text format),
+// so two canonically equivalent names with a long run of marks in another
+// order decompose differently. Here each rune is decomposed on its own (a
+// single rune's decomposition is short) and every run of combining marks is
+// put in canonical order, a stable sort by combining class. An explicit
+// U+034F is a starter and stays.
+func canonicalDecomposition(s string) string {
+	var out []rune
+	for _, r := range s {
+		out = append(out, []rune(norm.NFD.String(string(r)))...)
+	}
+	for i := 0; i < len(out); i++ {
+		j := i
+		for j < len(out) && combiningClass(out[j]) != 0 {
+			j++
+		}
+		slices.SortStableFunc(out[i:j], func(a, b rune) int { return int(combiningClass(a)) - int(combiningClass(b)) })
+		i = j
+	}
+	return string(out)
+}
+
+func combiningClass(r rune) uint8 {
+	return norm.NFD.PropertiesString(string(r)).CCC()
 }
 
 // CaseOnlyDifferences returns the groups of names that are one entry on a
@@ -260,8 +330,13 @@ func sameFileKey(name string) string {
 // every such name, however many. Groups and names are in the order of names.
 func CaseOnlyDifferences(names []string) [][]string {
 	index := map[string]int{}
+	listed := map[string]bool{}
 	var groups [][]string
 	for _, name := range names {
+		if listed[name] {
+			continue
+		}
+		listed[name] = true
 		folded := sameFileKey(name)
 		i, seen := index[folded]
 		if !seen {
@@ -269,9 +344,7 @@ func CaseOnlyDifferences(names []string) [][]string {
 			groups = append(groups, []string{name})
 			continue
 		}
-		if !containsString(groups[i], name) {
-			groups[i] = append(groups[i], name)
-		}
+		groups[i] = append(groups[i], name)
 	}
 	var out [][]string
 	for _, g := range groups {
@@ -318,13 +391,4 @@ func PathDifferingInCase(root, path string) (string, bool) {
 		dir = filepath.Join(dir, segment)
 	}
 	return "", false
-}
-
-func containsString(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

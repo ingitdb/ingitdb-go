@@ -29,14 +29,20 @@ func NewValidator() DataValidator {
 	return &simpleValidator{}
 }
 
-type simpleValidator struct{}
+// simpleValidator's readDir lists directories for the name-collision check
+// (os.ReadDir when nil); tests count listings through it.
+type simpleValidator struct {
+	readDir func(string) ([]os.DirEntry, error)
+}
 
 // Validate performs basic validation of records against their collection schemas.
 // Returns a ValidationResult with any errors found.
 func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingitdb.Definition) (*ingitdb.ValidationResult, error) {
 	result := &ingitdb.ValidationResult{}
+	names := newNameIndex(dbPath, sv.readDir)
 
-	for collectionKey, colDef := range def.Collections {
+	for _, collectionKey := range slices.Sorted(maps.Keys(def.Collections)) {
+		colDef := def.Collections[collectionKey]
 		passed, total, errors := validateCollectionRecords(collectionKey, colDef)
 		for _, validationErr := range errors {
 			result.Append(validationErr)
@@ -54,6 +60,9 @@ func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingit
 		}
 		result.SetRecordCounts(collectionKey, passed, total)
 		result.SetRecordCount(collectionKey, total)
+		if colDef != nil && colDef.DirPath != "" {
+			names.useRecordsDir(collectionKey, recordsBaseDir(colDef))
+		}
 	}
 
 	// Subcollection records are not reached by the root loop above (it iterates
@@ -62,8 +71,11 @@ func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingit
 	// per parent record, and validates their records with the same per-record
 	// checks and record-count enforcement. See
 	// spec/features/subcollection-record-validation.
-	validateSubCollections(dbPath, def, result)
-	for _, finding := range collectionDirCollisionFindings(def) {
+	validateSubCollections(dbPath, def, result, names)
+	for _, finding := range definitionNameFindings(names, def) {
+		result.Append(finding)
+	}
+	for _, finding := range names.findings() {
 		result.Append(finding)
 	}
 	for _, finding := range mislaidSubCollectionFindings(dbPath, def) {
@@ -131,45 +143,7 @@ func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionD
 		total += fileTotal
 		errors = append(errors, fileErrors...)
 	}
-	return passed, total, append(errors, caseCollisionFindings(collectionKey, colDef, matches)...)
-}
-
-// caseCollisionFindings reports records whose key names are one entry on a
-// case-insensitive or normalisation-insensitive file system (Windows, macOS
-// by default): names that differ only in letter case or Unicode
-// normalisation, whether the name is a file ({key}.yaml) or a directory
-// ({key}/index.yaml). A checkout there loses all but one record. This holds
-// for every one-record-per-file collection, with or without a key encoding
-// (record-key-encoding#req:file-name-collisions-reported).
-func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, matches []string) []ingitdb.ValidationError {
-	baseDir := recordsBaseDir(colDef)
-	var names []string
-	pathOf := map[string]string{}
-	for _, filePath := range matches {
-		if skipRecordPath(filePath, colDef.RecordFile) {
-			continue
-		}
-		name := recordNameFromCollectionFilePath(colDef, filePath)
-		names = append(names, name)
-		pathOf[name] = filePath
-	}
-	var findings []ingitdb.ValidationError
-	for _, group := range ingitdb.CaseOnlyDifferences(names) {
-		rels := make([]string, 0, len(group))
-		for _, name := range group {
-			rel, _ := filepath.Rel(baseDir, pathOf[name])
-			rels = append(rels, filepath.ToSlash(rel))
-		}
-		noun := "file"
-		if strings.Contains(rels[0], "/") {
-			noun = "directory"
-		}
-		shown, reason := collisionReason(rels, noun)
-		message := fmt.Sprintf("record files %s in %s %s; a checkout there keeps only one of them and loses the other records: rename all but one",
-			strings.Join(shown, ", "), baseDir, reason)
-		findings = append(findings, newValidationError(collectionKey, pathOf[group[0]], "", "", message, nil))
-	}
-	return findings
+	return passed, total, errors
 }
 
 // validateSingleRecordFile validates one single-record file: it stats, reads,

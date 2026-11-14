@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	dalrecord "github.com/dal-go/record"
+	"golang.org/x/text/unicode/norm"
 )
 
 // Verifies record-key-encoding#ac:tilde-v1-examples.
@@ -349,5 +350,72 @@ func TestNameDifferingInCase_Normalisation(t *testing.T) {
 	}
 	if _, ok := NameDifferingInCase(dir, "cafe.yaml"); ok {
 		t.Error("an accent is a difference")
+	}
+}
+
+// Canonically equivalent names whose combining marks are in another order
+// collide even past 30 marks, where norm.NFD's stream-safe format inserts
+// U+034F and so keeps them apart; an explicit U+034F in a name is kept.
+func TestCaseOnlyDifferences_LongCombiningSequences(t *testing.T) {
+	t.Parallel()
+	marks := strings.Repeat("̅", 34)
+	a, b := "a"+marks+"̖.yaml", "a̖"+marks+".yaml"
+	if norm.NFD.String(a) == norm.NFD.String(b) {
+		t.Fatal("norm.NFD no longer splits long sequences; this test no longer guards anything")
+	}
+	if got := CaseOnlyDifferences([]string{a, b}); len(got) != 1 {
+		t.Errorf("reordered marks: %q", got)
+	}
+	if got := CaseOnlyDifferences([]string{"a̖̅.yaml", "a͏̖̅.yaml"}); got != nil {
+		t.Errorf("explicit U+034F: %q", got)
+	}
+	if lc, nf := NameCollisionKind([]string{a, b}); lc || !nf {
+		t.Errorf("reordered marks differ in normalisation only: %v %v", lc, nf)
+	}
+}
+
+// Full case folding merges ß and ss; dotless ı is mapped to i as the NTFS
+// upcase table does (ı, i and I upcase to I); İ folds to i + U+0307 and stays
+// apart from i.
+func TestCaseOnlyDifferences_FullFoldingAndDotlessI(t *testing.T) {
+	t.Parallel()
+	got := CaseOnlyDifferences([]string{"straße", "STRASSE", "ı.yaml", "i.yaml", "I.yaml", "İ.yaml"})
+	if len(got) != 2 || strings.Join(got[0], " ") != "straße STRASSE" || strings.Join(got[1], " ") != "ı.yaml i.yaml I.yaml" {
+		t.Errorf("got %q", got)
+	}
+	if lc, nf := NameCollisionKind([]string{"ı.yaml", "I.yaml"}); !lc || nf {
+		t.Errorf("dotless i differs in case only: %v %v", lc, nf)
+	}
+}
+
+// The key is stable: the key of a key is the key (Unicode D145 needs the
+// inner decomposition for that; the outer one decomposes what folding made).
+func TestSameFileKey_Stable(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"Ab", "café", "café", "ẞ", "ͅ", "ǰ̣", "가", "ı", "İ", "a\xff", "ﬃ"} {
+		k := sameFileKey(name)
+		if sameFileKey(k) != k {
+			t.Errorf("%q: key %q is not stable", name, k)
+		}
+	}
+	if sameFileKey("ǰ̣") != sameFileKey("J̣̌") {
+		t.Error("folding then decomposing")
+	}
+}
+
+func TestNameCollisionKind(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		names  []string
+		lc, nf bool
+	}{
+		{[]string{"Ab", "ab"}, true, false},
+		{[]string{"café", "café"}, false, true},
+		{[]string{"Café", "café"}, true, true},
+		{[]string{"a\xff", "A\xff"}, true, false},
+	} {
+		if lc, nf := NameCollisionKind(tc.names); lc != tc.lc || nf != tc.nf {
+			t.Errorf("%q: %v %v", tc.names, lc, nf)
+		}
 	}
 }

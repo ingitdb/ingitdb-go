@@ -86,10 +86,6 @@ func subCollectionDataDir(parentColDef *ingitdb.CollectionDef, parentKey, subID 
 type instanceWalk struct {
 	root      string
 	onOutside func(subFullID, parentDir, key string)
-	// onCaseCollision, when set, receives each group of subcollection parent
-	// directory names that are one directory on a case-insensitive or
-	// normalisation-insensitive file system, with or without a key encoding.
-	onCaseCollision func(subFullID, parentDir string, names []string)
 }
 
 // walkSubCollectionInstances invokes fn for every subcollection instance
@@ -146,11 +142,6 @@ func (w instanceWalk) walkBelow(fullID string, colDef *ingitdb.CollectionDef, an
 		sub := colDef.SubCollections[subID]
 		subFullID := fullID + "/" + subID
 		dirKeys, outside := scan.KeysWith(subID)
-		if w.onCaseCollision != nil {
-			for _, group := range ingitdb.CaseOnlyDifferences(dirKeys) {
-				w.onCaseCollision(subFullID, base, group)
-			}
-		}
 		if w.onOutside != nil {
 			for _, key := range outside {
 				w.onOutside(subFullID, base, key)
@@ -192,16 +183,11 @@ func recordsBaseDir(colDef *ingitdb.CollectionDef) string {
 // instances under its full path, so SetRecordCounts is called once per
 // subcollection id after the walk rather than per instance (which would let a
 // later instance overwrite an earlier one).
-func validateSubCollections(root string, def *ingitdb.Definition, result *ingitdb.ValidationResult) {
+func validateSubCollections(root string, def *ingitdb.Definition, result *ingitdb.ValidationResult, names *nameIndex) {
 	if def == nil {
 		return
 	}
-	w := instanceWalk{root: root, onCaseCollision: func(subFullID, parentDir string, names []string) {
-		shown, reason := collisionReason(names, "directory")
-		result.Append(newValidationError(subFullID, filepath.Join(parentDir, names[0]), "", "",
-			fmt.Sprintf("parent directories %s in %s %s; a checkout there keeps one directory and the %s records of all of them are mixed: rename all but one",
-				strings.Join(shown, ", "), parentDir, reason, lastSegment(subFullID)), nil))
-	}, onOutside: func(subFullID, parentDir, key string) {
+	w := instanceWalk{root: root, onOutside: func(subFullID, parentDir, key string) {
 		// An error, not a warning: select --group refuses such a link, and a
 		// pass that skipped records must not exit 0.
 		result.Append(newValidationError(subFullID, filepath.Join(parentDir, key), "", "",
@@ -214,11 +200,16 @@ func validateSubCollections(root string, def *ingitdb.Definition, result *ingitd
 
 	for _, rootID := range slices.Sorted(maps.Keys(def.Collections)) {
 		w.walk(rootID, def.Collections[rootID], func(inst subCollectionInstance) {
-			if inst.nameErr != nil && isDir(inst.colDef.DirPath) {
-				// A parent record file with such a name is reported by the
-				// parent's own pass; this is the directory.
-				result.Append(newValidationError(inst.fullID, inst.colDef.DirPath, inst.parentKey, "",
-					"the parent directory name is not one the parent collection's key_encoding writes, so it names no parent record; rename the directory: "+inst.nameErr.Error(), nil))
+			// An instance with no directory (a parent record without this
+			// subcollection's data) has no names to compare.
+			if isDir(inst.colDef.DirPath) {
+				if inst.nameErr != nil {
+					// A parent record file with such a name is reported by the
+					// parent's own pass; this is the directory.
+					result.Append(parentNameFinding(inst.fullID, inst.colDef.DirPath, inst.parentKey, inst.nameErr))
+				}
+				names.useRecordsDir(inst.fullID, recordsBaseDir(inst.colDef))
+				names.own(inst.fullID[:strings.LastIndex(inst.fullID, "/")], filepath.Dir(inst.colDef.DirPath))
 			}
 			passed, total, errs := validateCollectionRecords(inst.fullID, inst.colDef)
 			for _, validationErr := range errs {
