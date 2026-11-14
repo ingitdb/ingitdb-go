@@ -464,7 +464,7 @@ func validateRecordData(
 			// of the value. See column-validation#req:record-key-type-checked.
 			parsed, keyOK := parseRecordKey(key, columnDef.Type)
 			if !keyOK {
-				message := fmt.Sprintf("wrong type for field %q: record key %q is not a valid %s (%s)",
+				message := fmt.Sprintf("wrong type for field %q: %q is not a valid %s (%s)",
 					fieldName, key, columnDef.Type, keyTypeFormats[columnDef.Type])
 				errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil))
 				continue
@@ -496,12 +496,12 @@ func validateRecordData(
 // the text form a key of that type must have. Types missing here (string,
 // any, maps, lists) keep the plain value type check.
 var keyTypeFormats = map[ingitdb.ColumnType]string{
-	ingitdb.ColumnTypeInt:      "a base-10 integer",
-	ingitdb.ColumnTypeFloat:    "a decimal number",
+	ingitdb.ColumnTypeInt:      "a base-10 integer without a plus sign or leading zeros",
+	ingitdb.ColumnTypeFloat:    "a finite decimal number",
 	ingitdb.ColumnTypeBool:     "true or false",
 	ingitdb.ColumnTypeDate:     "YYYY-MM-DD",
-	ingitdb.ColumnTypeTime:     "HH:MM or HH:MM:SS",
-	ingitdb.ColumnTypeDateTime: "RFC 3339, e.g. 2006-01-02T15:04:05Z",
+	ingitdb.ColumnTypeTime:     "H:MM or HH:MM:SS, optional fractional seconds",
+	ingitdb.ColumnTypeDateTime: "YYYY-MM-DDTHH:MM:SS, optional fractional seconds and zone, e.g. 2006-01-02T15:04:05Z",
 }
 
 // parseRecordKey parses a record key as columnType, one of the keyTypeFormats
@@ -510,11 +510,14 @@ var keyTypeFormats = map[ingitdb.ColumnType]string{
 func parseRecordKey(key string, columnType ingitdb.ColumnType) (any, bool) {
 	switch columnType {
 	case ingitdb.ColumnTypeInt:
+		// Canonical form only, so "7" and "007" cannot be two records with
+		// one value.
 		n, err := strconv.ParseInt(key, 10, 64)
-		return n, err == nil
+		return n, err == nil && strconv.FormatInt(n, 10) == key
 	case ingitdb.ColumnTypeFloat:
 		f, err := strconv.ParseFloat(key, 64)
-		return f, err == nil
+		finite := err == nil && !math.IsNaN(f) && !math.IsInf(f, 0)
+		return f, finite && !strings.ContainsAny(key, "xX")
 	case ingitdb.ColumnTypeBool:
 		return key == "true", key == "true" || key == "false"
 	case ingitdb.ColumnTypeDate:
@@ -528,6 +531,9 @@ func parseRecordKey(key string, columnType ingitdb.ColumnType) (any, bool) {
 		return key, err == nil
 	default: // ingitdb.ColumnTypeDateTime
 		_, err := time.Parse(time.RFC3339Nano, key)
+		if err != nil {
+			_, err = time.Parse("2006-01-02T15:04:05", key) // no zone
+		}
 		return key, err == nil
 	}
 }

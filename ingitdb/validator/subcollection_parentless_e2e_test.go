@@ -139,6 +139,7 @@ func TestSubcolE2E_ParentlessDiscoveryIgnoresOtherEntries(t *testing.T) {
 		"ext/real/sessions/s1.json":                               `{"minutes": 1}`,
 		"ext/.hidden/sessions/s1.json":                            `{"minutes": "x"}`,
 		"ext/$records/sessions/s1.json":                           `{"minutes": "x"}`,
+		"ext/$views/sessions/s1.json":                             `{"minutes": "x"}`,
 		"ext/skipme/sessions/s1.json":                             `{"minutes": "x"}`,
 		"ext/other/unrelated/u1.json":                             `{"minutes": "x"}`,
 		"ext/fileonly/sessions":                                   "not a directory",

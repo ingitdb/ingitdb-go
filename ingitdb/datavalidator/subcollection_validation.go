@@ -90,9 +90,10 @@ func walkSubCollectionInstances(fullID string, colDef *ingitdb.CollectionDef, fn
 // parentKeysWithSubCollectionDir returns the names of the per-record
 // directories under parentColDef's records base path that contain a directory
 // named subID — the keys of parents that hold data for that subcollection,
-// whether or not a parent record file exists. Hidden entries, `$records`, and
-// names matched by the parent's exclude_regex are skipped, the same entries
-// countEntries skips. An unreadable or missing base directory yields none.
+// whether or not a parent record file exists. Hidden entries, `$`-prefixed
+// entries (inGitDB's own `$records`, `$views`, ...; no record key starts with
+// `$`), and names matched by the parent's exclude_regex are skipped. An
+// unreadable or missing base directory yields none.
 func parentKeysWithSubCollectionDir(parentColDef *ingitdb.CollectionDef, subID string) []string {
 	base := parentColDef.DirPath
 	if parentColDef.RecordFile != nil {
@@ -105,7 +106,7 @@ func parentKeysWithSubCollectionDir(parentColDef *ingitdb.CollectionDef, subID s
 	var keys []string
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() || strings.HasPrefix(name, ".") || name == "$records" {
+		if !entry.IsDir() || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "$") {
 			continue
 		}
 		if parentColDef.RecordFile != nil && parentColDef.RecordFile.IsExcluded(name) {
