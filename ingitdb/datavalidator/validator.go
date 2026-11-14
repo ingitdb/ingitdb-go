@@ -165,7 +165,7 @@ func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, 
 			noun = "directory"
 		}
 		shown, reason := collisionReason(rels, noun)
-		message := fmt.Sprintf("record files %s in %s %s; a checkout there keeps one and all but one record is lost: rename all but one",
+		message := fmt.Sprintf("record files %s in %s %s; a checkout there keeps only one of them and loses the other records: rename all but one",
 			strings.Join(shown, ", "), baseDir, reason)
 		findings = append(findings, newValidationError(collectionKey, pathOf[group[0]], "", "", message, nil))
 	}
