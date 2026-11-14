@@ -73,7 +73,7 @@ A column MAY declare `enum` as a non-empty list of permitted values. A record va
 
 #### REQ: list-column-type
 
-The column type grammar MUST support lists, spelled `[]<element-type>` where `<element-type>` is exactly one of `string`, `int`, `float`, `bool`, `date`, `time`, `datetime`, or `any`. `map[...]` and nested list element types are out of scope. A value that is not a list, or whose elements do not all match `<element-type>`, MUST produce a validation error; `[]any` accepts any element but still requires the value to be a list. `min_length`/`max_length` on a list column constrain element count per `length-constraints-enforced`, which is what makes "at least one entry" expressible.
+The column type grammar MUST support lists, spelled `[]<element-type>` where `<element-type>` is exactly one of `string`, `int`, `float`, `bool`, `date`, `time`, `datetime`, or `any`. `map[...]` and nested list element types are out of scope: a list of objects is written `type: "[]any"` with `items: {type: map[string]any, columns: …}`, which checks every element. A value that is not a list, or whose elements do not all match `<element-type>`, MUST produce a validation error; `[]any` accepts any element but still requires the value to be a list. `min_length`/`max_length` on a list column constrain element count per `length-constraints-enforced`, which is what makes "at least one entry" expressible.
 
 `[]string` is already declared in the wild (`geo-ingitdb/.../provinces.yaml:10`) and currently validates nothing, so this REQ retrofits enforcement onto existing data. That data MUST be verified against the new rule as part of this Feature.
 
