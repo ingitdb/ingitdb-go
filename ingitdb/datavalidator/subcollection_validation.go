@@ -87,8 +87,8 @@ type instanceWalk struct {
 	root      string
 	onOutside func(subFullID, parentDir, key string)
 	// onCaseCollision, when set, receives each group of subcollection parent
-	// directory names that differ only in letter case, for a parent that
-	// declares a key encoding.
+	// directory names that are one directory on a case-insensitive or
+	// normalisation-insensitive file system, with or without a key encoding.
 	onCaseCollision func(subFullID, parentDir string, names []string)
 }
 
@@ -146,7 +146,7 @@ func (w instanceWalk) walkBelow(fullID string, colDef *ingitdb.CollectionDef, an
 		sub := colDef.SubCollections[subID]
 		subFullID := fullID + "/" + subID
 		dirKeys, outside := scan.KeysWith(subID)
-		if w.onCaseCollision != nil && colDef.RecordFile != nil && colDef.RecordFile.EncodesKeys() {
+		if w.onCaseCollision != nil {
 			for _, group := range ingitdb.CaseOnlyDifferences(dirKeys) {
 				w.onCaseCollision(subFullID, base, group)
 			}
@@ -197,9 +197,10 @@ func validateSubCollections(root string, def *ingitdb.Definition, result *ingitd
 		return
 	}
 	w := instanceWalk{root: root, onCaseCollision: func(subFullID, parentDir string, names []string) {
+		shown, reason := collisionReason(names, "directory")
 		result.Append(newValidationError(subFullID, filepath.Join(parentDir, names[0]), "", "",
-			fmt.Sprintf("parent directories %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one directory and the %s records of all but one parent are mixed; give the parents keys that differ in more than case",
-				strings.Join(names, ", "), parentDir, lastSegment(subFullID)), nil))
+			fmt.Sprintf("parent directories %s in %s %s; a checkout there keeps one directory and the %s records of all of them are mixed: rename all but one",
+				strings.Join(shown, ", "), parentDir, reason, lastSegment(subFullID)), nil))
 	}, onOutside: func(subFullID, parentDir, key string) {
 		// An error, not a warning: select --group refuses such a link, and a
 		// pass that skipped records must not exit 0.

@@ -317,3 +317,37 @@ func TestCaseOnlyDifferences(t *testing.T) {
 		t.Error("no groups expected")
 	}
 }
+
+// Names that differ only in Unicode normalisation (NFC "é" against NFD
+// "e" + U+0301) are one file on macOS, so they collide like a case-only
+// pair; a group holds every name of one file, however many there are.
+func TestCaseOnlyDifferences_NormalisationAndGroups(t *testing.T) {
+	t.Parallel()
+	nfc, nfd := "café.yaml", "café.yaml"
+	got := CaseOnlyDifferences([]string{nfc, "x.yaml", nfd, "CAFÉ.yaml", "Bob", "bob", "BOB"})
+	if len(got) != 2 || strings.Join(got[0], " ") != nfc+" "+nfd+" CAFÉ.yaml" || strings.Join(got[1], " ") != "Bob bob BOB" {
+		t.Errorf("got %q", got)
+	}
+	// Names that differ otherwise, an accent included, and invalid UTF-8
+	// (compared as it is) are not collisions.
+	if got := CaseOnlyDifferences([]string{"bob", "bobby", "b0b", "cafe.yaml", nfc, "\xff", "\xfe", "a\xff", "A\xfe"}); got != nil {
+		t.Errorf("false positives: %q", got)
+	}
+	if got := CaseOnlyDifferences([]string{"a\xff", "A\xff"}); len(got) != 1 {
+		t.Errorf("invalid UTF-8 differing in ASCII case: %q", got)
+	}
+}
+
+func TestNameDifferingInCase_Normalisation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "café.yaml"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := NameDifferingInCase(dir, "CAFÉ.yaml"); !ok || got != "café.yaml" {
+		t.Errorf("got %q, %v", got, ok)
+	}
+	if _, ok := NameDifferingInCase(dir, "cafe.yaml"); ok {
+		t.Error("an accent is a difference")
+	}
+}

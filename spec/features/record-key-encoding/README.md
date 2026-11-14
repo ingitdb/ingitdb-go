@@ -104,6 +104,20 @@ A longer key is never hashed or truncated:
 
 Compatibility: for a collection without `key_encoding` this adds an error only where a write already failed (every common file system refuses a name over 255 bytes, so a local write used to fail with a bare "file name too long") or where the GitHub driver committed a name that no local checkout can create. No write that works today changes.
 
+### REQ: file-name-collisions-reported
+
+Two names that are one entry on a case-insensitive or normalisation-insensitive file system lose data there. Windows and macOS by default ignore letter case; macOS also ignores Unicode normalisation (NFC `é` and NFD `e` + U+0301 are one name). A Linux checkout can hold both, and a clone on such a system keeps only one. This applies to every collection, with or without `key_encoding`. Validation, full and incremental alike, MUST report as an error each group of such names in one directory:
+
+- the record files or record directories (`{key}/index.yaml`) of one collection instance, top-level or subcollection;
+- the subcollection parent directories of one parent collection;
+- the data directories of root collections that share a parent directory, and the subcollection ids of one collection (their directories sit side by side under every parent record).
+
+Two names are one entry when they are equal under Unicode canonical caseless matching, `NFD(fold(NFD(name)))`. A name that is not valid UTF-8 has only its ASCII letters folded. A group is one error naming every name in it, with the reason: they differ only in letter case, only in normalisation, or both. A group needs one remedy: keep one name and rename the others. One error per pair would repeat each name.
+
+Incremental validation reports a changed record file when its name, or a directory on its path, is one entry with an existing name. Collection and subcollection directories come from the definition. A definition change already makes incremental validation run the full pass, so incremental validation never checks them.
+
+Compatibility: for a collection without `key_encoding`, a database that validated before can now fail with this error. Each such error is a pair of names a case-insensitive or normalisation-insensitive checkout cannot hold. Exit codes are unchanged: an error exits 1, as every validation error does. With `tilde-v1` every non-ASCII byte is escaped, so its names are ASCII and this adds nothing to `letter-case-kept-collisions-reported`. Writers of a collection without `key_encoding` are not changed.
+
 ### REQ: hidden-files-skipped
 
 In a collection that declares `key_encoding`, no key encodes to a name starting with `.`. A reader listing the collection's records MUST skip such a file (an editor lock, a macOS `._` file) instead of failing the whole read. Validation MUST still report it as a name the encoding never writes.
@@ -167,6 +181,14 @@ URL percent-encoding was considered. It needs the same extensions for edge dots,
 **Given** a `tilde-v1` collection with `name: "{key}.yaml"` and a key whose encoded file name is 263 bytes
 **When** the record file name is computed, or a found name of that length is validated
 **Then** it fails with `ErrKeyNotStorable` naming 263 bytes, the 255-byte limit and the shared-file remedy; a 255-byte name and a shared-file collection are not affected; a collection without an encoding fails the same way for a key over 250 bytes (`{key}.yaml` as it is)
+
+### AC: file-name-collisions-reported
+
+**Requirements:** record-key-encoding#req:file-name-collisions-reported
+
+**Given** in collections without `key_encoding` the record files `Bob.yaml` and `bob.yaml`, `BOB.yaml` too, an NFC `café.yaml` and an NFD `café.yaml`, subcollection record files `N.yaml` and `n.yaml`, parent directories `Pq/` and `pq/`, root collection directories `Users/` and `users/`, and subcollections `Notes` and `notes`
+**When** the database is validated, or a commit that adds `bob.yaml` next to `Bob.yaml` is validated incrementally
+**Then** each group is one error naming every name in it, NFC/NFD names escaped, with the reason and "rename"; `bobby.yaml`, `b0b.yaml` and `cafe.yaml` are not reported
 
 ## Open Questions
 

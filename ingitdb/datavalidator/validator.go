@@ -63,6 +63,9 @@ func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingit
 	// checks and record-count enforcement. See
 	// spec/features/subcollection-record-validation.
 	validateSubCollections(dbPath, def, result)
+	for _, finding := range collectionDirCollisionFindings(def) {
+		result.Append(finding)
+	}
 	for _, finding := range mislaidSubCollectionFindings(dbPath, def) {
 		result.Append(finding)
 	}
@@ -131,15 +134,14 @@ func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionD
 	return passed, total, append(errors, caseCollisionFindings(collectionKey, colDef, matches)...)
 }
 
-// caseCollisionFindings reports, for a collection that declares a key
-// encoding, records whose key names differ only in letter case, whether the
-// name is a file ({key}.yaml) or a directory ({key}/index.yaml): on a
-// case-insensitive file system (Windows, macOS by default) they are one
-// entry, so a checkout there loses all but one record.
+// caseCollisionFindings reports records whose key names are one entry on a
+// case-insensitive or normalisation-insensitive file system (Windows, macOS
+// by default): names that differ only in letter case or Unicode
+// normalisation, whether the name is a file ({key}.yaml) or a directory
+// ({key}/index.yaml). A checkout there loses all but one record. This holds
+// for every one-record-per-file collection, with or without a key encoding
+// (record-key-encoding#req:file-name-collisions-reported).
 func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, matches []string) []ingitdb.ValidationError {
-	if !colDef.RecordFile.EncodesKeys() {
-		return nil
-	}
 	baseDir := recordsBaseDir(colDef)
 	var names []string
 	pathOf := map[string]string{}
@@ -158,8 +160,13 @@ func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, 
 			rel, _ := filepath.Rel(baseDir, pathOf[name])
 			rels = append(rels, filepath.ToSlash(rel))
 		}
-		message := fmt.Sprintf("record files %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one file and all but one record is lost; give the records keys that differ in more than case",
-			strings.Join(rels, ", "), baseDir)
+		noun := "file"
+		if strings.Contains(rels[0], "/") {
+			noun = "directory"
+		}
+		shown, reason := collisionReason(rels, noun)
+		message := fmt.Sprintf("record files %s in %s %s; a checkout there keeps one and all but one record is lost: rename all but one",
+			strings.Join(shown, ", "), baseDir, reason)
 		findings = append(findings, newValidationError(collectionKey, pathOf[group[0]], "", "", message, nil))
 	}
 	return findings

@@ -152,8 +152,14 @@ func TestChangedFileCaseFindings(t *testing.T) {
 	if got := changedFileCaseFindings(root, "spaces", def, filepath.Join(root, "spaces", "$records", "zz.yaml")); got != nil {
 		t.Errorf("no collision: %+v", got)
 	}
-	if got := changedFileCaseFindings(root, "refs", tildeDB(root).Collections["refs"], filepath.Join(root, "spaces", "$records", "ab.yaml")); got != nil {
+	// A collection without key_encoding collides the same way
+	// (record-key-encoding#req:file-name-collisions-reported).
+	if got := changedFileCaseFindings(root, "refs", tildeDB(root).Collections["refs"], filepath.Join(root, "spaces", "$records", "ab.yaml")); len(got) != 1 {
 		t.Errorf("no encoding: %+v", got)
+	}
+	// A collision of a directory on the path is named as a directory.
+	if got := changedFileCaseFindings(root, "spaces", def, filepath.Join(root, "Spaces", "$records", "zz.yaml")); len(got) != 1 || !strings.Contains(got[0].Message, "the same directory") {
+		t.Errorf("directory: %+v", got)
 	}
 }
 
