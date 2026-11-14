@@ -104,8 +104,8 @@ func TestCSV_RemainingBranches(t *testing.T) {
 	// encodeCSVForCollection: missing col, nil value, and primitive value
 	rows := []map[string]any{
 		{"id": "1", "name": nil}, // name is nil
-		{"id": "2"},               // name missing
-		{"id": 3, "name": true},   // primitive int and bool
+		{"id": "2"},              // name missing
+		{"id": 3, "name": true},  // primitive int and bool
 	}
 	out, err := encodeCSVForCollection(rows, colDef)
 	if err != nil {
