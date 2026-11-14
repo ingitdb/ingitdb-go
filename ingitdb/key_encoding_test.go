@@ -266,6 +266,25 @@ func TestNameDifferingInCase(t *testing.T) {
 	}
 }
 
+func TestPathDifferingInCase(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "s", "Ab", "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := PathDifferingInCase(root, filepath.Join(root, "s", "ab", "notes", "n.yaml")); !ok || got != filepath.Join(root, "s", "Ab") {
+		t.Errorf("directory: %q, %v", got, ok)
+	}
+	if _, ok := PathDifferingInCase(root, filepath.Join(root, "s", "Ab", "notes", "n.yaml")); ok {
+		t.Error("same names are not a collision")
+	}
+	for _, p := range []string{root, filepath.Dir(root), "relative"} {
+		if _, ok := PathDifferingInCase(root, p); ok {
+			t.Errorf("%s: outside or root itself", p)
+		}
+	}
+}
+
 func TestCaseOnlyDifferences(t *testing.T) {
 	t.Parallel()
 	got := CaseOnlyDifferences([]string{"a.yaml", "b.yaml", "A.yaml", "a.yaml", "B.yaml", "c.yaml"})

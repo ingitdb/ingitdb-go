@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -183,7 +184,9 @@ func (rfd RecordFileDef) CheckKeyFits(key string) error {
 	if err != nil {
 		return err
 	}
-	for _, segment := range strings.Split(strings.ReplaceAll(rfd.Name, "{key}", name), "/") {
+	// Substituted as GetRecordFileName does: the first {key} only. Other
+	// placeholders ({field}) are not part of the key and are not measured.
+	for _, segment := range strings.Split(strings.Replace(rfd.Name, "{key}", name, 1), "/") {
 		if len(segment) > MaxFileNameBytes {
 			return fmt.Errorf("%w: with key_encoding %s the key %.40q... (%d bytes) makes the file name %.40q... %d bytes long, over the %d-byte limit of a file name; keys are never shortened: keep this collection's records in one file (record_file.type %q) instead of one file per record",
 				ErrKeyNotStorable, rfd.KeyEncoding, key, len(key), segment, len(segment), MaxFileNameBytes, MapOfRecords)
@@ -256,6 +259,26 @@ func NameDifferingInCase(dir, name string) (string, bool) {
 		if e.Name() != name && strings.EqualFold(e.Name(), name) {
 			return e.Name(), true
 		}
+	}
+	return "", false
+}
+
+// PathDifferingInCase checks every segment of path below root, the record
+// file and the directories a write would create (parent record directories
+// included), with NameDifferingInCase. It returns the first existing entry
+// whose name differs from the segment only in letter case. A path outside
+// root is not checked.
+func PathDifferingInCase(root, path string) (string, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	dir := root
+	for _, segment := range strings.Split(rel, string(filepath.Separator)) {
+		if existing, found := NameDifferingInCase(dir, segment); found {
+			return filepath.Join(dir, existing), true
+		}
+		dir = filepath.Join(dir, segment)
 	}
 	return "", false
 }

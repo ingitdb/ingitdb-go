@@ -130,32 +130,35 @@ func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionD
 }
 
 // caseCollisionFindings reports, for a collection that declares a key
-// encoding, record files of one directory whose names differ only in letter
-// case: on a case-insensitive file system (Windows, macOS by default) they
-// are one file, so a checkout there loses all but one record.
+// encoding, records whose key names differ only in letter case, whether the
+// name is a file ({key}.yaml) or a directory ({key}/index.yaml): on a
+// case-insensitive file system (Windows, macOS by default) they are one
+// entry, so a checkout there loses all but one record.
 func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, matches []string) []ingitdb.ValidationError {
 	if !colDef.RecordFile.EncodesKeys() {
 		return nil
 	}
-	byDir := map[string][]string{}
-	var dirs []string
+	baseDir := recordsBaseDir(colDef)
+	var names []string
+	pathOf := map[string]string{}
 	for _, filePath := range matches {
 		if skipRecordPath(filePath, colDef.RecordFile) {
 			continue
 		}
-		dir := filepath.Dir(filePath)
-		if _, seen := byDir[dir]; !seen {
-			dirs = append(dirs, dir)
-		}
-		byDir[dir] = append(byDir[dir], filepath.Base(filePath))
+		name := recordNameFromCollectionFilePath(colDef, filePath)
+		names = append(names, name)
+		pathOf[name] = filePath
 	}
 	var findings []ingitdb.ValidationError
-	for _, dir := range dirs {
-		for _, group := range ingitdb.CaseOnlyDifferences(byDir[dir]) {
-			message := fmt.Sprintf("record files %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one file and all but one record is lost; give the records keys that differ in more than case",
-				strings.Join(group, ", "), dir)
-			findings = append(findings, newValidationError(collectionKey, filepath.Join(dir, group[0]), "", "", message, nil))
+	for _, group := range ingitdb.CaseOnlyDifferences(names) {
+		rels := make([]string, 0, len(group))
+		for _, name := range group {
+			rel, _ := filepath.Rel(baseDir, pathOf[name])
+			rels = append(rels, filepath.ToSlash(rel))
 		}
+		message := fmt.Sprintf("record files %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one file and all but one record is lost; give the records keys that differ in more than case",
+			strings.Join(rels, ", "), baseDir)
+		findings = append(findings, newValidationError(collectionKey, pathOf[group[0]], "", "", message, nil))
 	}
 	return findings
 }

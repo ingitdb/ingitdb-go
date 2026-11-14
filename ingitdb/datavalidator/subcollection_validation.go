@@ -82,6 +82,10 @@ func subCollectionDataDir(parentColDef *ingitdb.CollectionDef, parentKey, subID 
 type instanceWalk struct {
 	root      string
 	onOutside func(subFullID, parentDir, key string)
+	// onCaseCollision, when set, receives each group of subcollection parent
+	// directory names that differ only in letter case, for a parent that
+	// declares a key encoding.
+	onCaseCollision func(subFullID, parentDir string, names []string)
 }
 
 // walkSubCollectionInstances invokes fn for every subcollection instance
@@ -132,6 +136,11 @@ func (w instanceWalk) walk(fullID string, colDef *ingitdb.CollectionDef, fn func
 		sub := colDef.SubCollections[subID]
 		subFullID := fullID + "/" + subID
 		dirKeys, outside := scan.KeysWith(subID)
+		if w.onCaseCollision != nil && colDef.RecordFile != nil && colDef.RecordFile.EncodesKeys() {
+			for _, group := range ingitdb.CaseOnlyDifferences(dirKeys) {
+				w.onCaseCollision(subFullID, base, group)
+			}
+		}
 		if w.onOutside != nil {
 			for _, key := range outside {
 				w.onOutside(subFullID, base, key)
@@ -176,7 +185,11 @@ func validateSubCollections(root string, def *ingitdb.Definition, result *ingitd
 	if def == nil {
 		return
 	}
-	w := instanceWalk{root: root, onOutside: func(subFullID, parentDir, key string) {
+	w := instanceWalk{root: root, onCaseCollision: func(subFullID, parentDir string, names []string) {
+		result.Append(newValidationError(subFullID, filepath.Join(parentDir, names[0]), "", "",
+			fmt.Sprintf("parent directories %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one directory and the %s records of all but one parent are mixed; give the parents keys that differ in more than case",
+				strings.Join(names, ", "), parentDir, lastSegment(subFullID)), nil))
+	}, onOutside: func(subFullID, parentDir, key string) {
 		result.AddWarning(ingitdb.ValidationError{
 			CollectionID: subFullID,
 			FilePath:     filepath.Join(parentDir, key),

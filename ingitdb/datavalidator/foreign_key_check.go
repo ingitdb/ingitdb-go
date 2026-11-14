@@ -171,7 +171,11 @@ func loadSingleRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
 		if parseErr != nil {
 			continue
 		}
-		records = append(records, loadedRecord{Key: recordKeyFromCollectionFilePath(colDef, filePath), Data: data, FilePath: filePath})
+		key, nameErr := decodedRecordKey(colDef, filePath)
+		if nameErr != nil {
+			continue // names no record (reported by the record pass)
+		}
+		records = append(records, loadedRecord{Key: key, Data: data, FilePath: filePath})
 	}
 	return records, nil
 }

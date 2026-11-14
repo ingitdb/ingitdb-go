@@ -82,18 +82,19 @@ So a name is pure ASCII. It is never hidden, never `.` or `..`, never ends in a 
 - a byte that should have been escaped (a space, a leading dot);
 - an empty name.
 
-`ingitdb.EncodeRecordKey(encoding, key)` and `ingitdb.DecodeRecordKey(encoding, name)` in `github.com/ingitdb/ingitdb-go/ingitdb` implement this. `RecordFileDef.EncodeKey` and `RecordFileDef.DecodeKey` call them with the collection's setting. Every Go reader and writer calls these functions, and so does the DataTug mirror. Other implementations, such as the TypeScript client, follow this text.
+`ingitdb.EncodeRecordKey(encoding, key)` and `ingitdb.DecodeRecordKey(encoding, name)` in `github.com/ingitdb/ingitdb-go/ingitdb` implement this. `RecordFileDef.EncodeKey` and `RecordFileDef.DecodeKey` call them with the collection's setting. Every Go reader and writer in ingitdb-go, dalgo2ingitdb and dalgo2ingitdb4local calls these functions. The DataTug mirror has its own copy of the scheme, byte-identical today; it should call these functions. Other implementations, such as the TypeScript client, follow this text.
 
 ### REQ: letter-case-kept-collisions-reported
 
 `tilde-v1` keeps letter case: Firestore ids are case-sensitive, and most generated ids mix cases. On a case-insensitive file system (Windows, macOS by default), two names that differ only in case are one file. So:
 
-- Validation MUST report an error for each group of record files in one directory whose names differ only in letter case.
-- A writer MUST refuse to create a record whose name equals an existing record's name when letter case is ignored, unless it is the same name.
+- Validation MUST report an error for each group of records of one collection instance whose key names differ only in letter case, whether the name is a file (`{key}.yaml`) or a directory (`{key}/index.yaml`), and for each group of subcollection parent directories that differ only in letter case.
+- A writer MUST refuse to create a record when its file name, or a directory on its path, equals an existing entry's name when letter case is ignored, unless it is the same name.
+- Reads and deletes are not checked. On a case-insensitive file system, a read or delete of `ab` reaches an existing `Ab`.
 
 ### REQ: over-long-key-fails
 
-A collection that keeps one record per file (a `{key}` in `record_file.name`) and declares `key_encoding` stores a key only if every path segment the encoded key produces fits 255 bytes. That is the file name with its extension, and the record's subcollection directory.
+A collection that keeps one record per file (a `{key}` in `record_file.name`) and declares `key_encoding` stores a key only if every path segment the encoded key produces fits 255 bytes. That is the file name with its extension, and the record's subcollection directory. The first `{key}` of `record_file.name` is substituted, as the writer does. Other placeholders are not measured.
 
 A longer key is never hashed or truncated:
 
@@ -104,7 +105,7 @@ A collection without `key_encoding` is not checked, so the file system decides, 
 
 ### Rollout
 
-Definitions are decoded strictly. A tool built before this feature rejects a definition that declares `key_encoding` (unknown field) instead of misreading its keys. Upgrade the readers before adding the setting.
+A tool built before this feature does not know `key_encoding`. Readers that decode definitions strictly reject such a definition (unknown field). Others ignore the field and show the encoded names as keys: the ingitdb-cli reading a database from GitHub, the TypeScript client, and the GitHub driver before it refuses the setting. Upgrade every reader of a database before declaring the setting in it.
 
 ### Rationale
 
