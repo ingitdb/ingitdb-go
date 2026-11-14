@@ -104,6 +104,39 @@ A longer key is never hashed or truncated:
 
 Compatibility: for a collection without `key_encoding` this adds an error only where a write already failed (every common file system refuses a name over 255 bytes, so a local write used to fail with a bare "file name too long") or where the GitHub driver committed a name that no local checkout can create. No write that works today changes.
 
+### REQ: file-name-collisions-reported
+
+A Linux checkout can hold two names that a case-insensitive or normalisation-insensitive file system stores as one entry. Windows and macOS ignore letter case by default, and macOS also ignores Unicode normalisation (NFC `é` and NFD `e` + U+0301). A clone there keeps only one of the two. This applies to every collection, with or without `key_encoding`.
+
+Validation, full and incremental alike, MUST report as an error each group of two or more such names in one directory, in these directories:
+
+- every records directory of a collection instance, top-level or subcollection: all its entries (record files, record directories of `{key}/index.yaml`, subcollection parent directories, any other file);
+- every directory on the path from the database root to such a records directory: collection directories, `$records`, parent record directories and subcollection directories, each compared with its siblings;
+- the data directories of root collections as the definition declares them, compared at every level of their path under the same parent (`Data/users` and `data/Users` collide at `Data`/`data`), whether or not both are on disk;
+- the subcollection ids of one collection, from the definition alone, because their directories sit side by side under every parent record.
+
+Validation counts two names as one entry when they are equal under Unicode canonical caseless matching, `NFD(fold(NFD(name)))` (Unicode Standard D145), with these details:
+
+- Folding is full case folding, so `ß` matches `ss`. Dotless `ı` (U+0131) is then mapped to `i`, as the NTFS upcase table does: `ı`, `i` and `I` are one name there. This mapping is taken from the ntfs-3g default table and has not been checked on Windows.
+- NFD is computed without the stream-safe limit of `golang.org/x/text/unicode/norm`, which inserts U+034F after 30 combining marks. Two canonically equivalent names with a long run of marks in another order therefore match. An explicit U+034F in a name is kept.
+- A name that is ASCII, or not valid UTF-8, has only its ASCII letters folded.
+- The Unicode tables are those of `golang.org/x/text`.
+
+The comparison is a portability policy. It is deliberately stricter than any single file system. It reports pairs that only full folding merges (`ß`/`ss`, which NTFS keeps apart), and it does not model every file system's own tables.
+
+Known gaps, not reported:
+
+- the code points HFS+ ignores (such as U+200C);
+- NTFS upcase-table differences other than `ı`;
+- APFS's own Unicode version;
+- Windows dropping trailing dots and spaces, and Windows device names (`tilde-v1` escapes these).
+
+A group is one error naming every name in it. Names are shown escaped when they differ in normalisation or do not print as they are. The error gives the reason: the names differ only in letter case, only in normalisation (an NFC and an NFD form, or a character such as the Kelvin sign whose decomposition is another character), or in both. It says that they may be the same file on case-insensitive or normalisation-insensitive file systems, for example macOS, and Windows for letter case. A group needs one remedy: keep one name and rename the others. One error per pair would repeat each name. Errors are sorted by directory.
+
+Incremental validation resolves each changed record file to its collection instance, subcollection instances included, and validates it there. It enters a subcollection instance only below a parent the full pass walks: a directory name the parent-directory rule accepts (`ingitdb.IsParentDirName`), or the name of a parent record. Directory names are literal in every pass: a records directory is listed, never turned into a glob, and only the segments of `record_file.name` are patterns, matched one path segment at a time against the names a directory lists, exactly and case-sensitively, as a glob matches them. `record_file.name` is cleaned first, as joining it onto the directory cleaned it, so `./{key}.yaml` and `{key}//index.yaml` name the same records in every pass. A checkout under `proj[1]`, parent keys such as `[p]` or `p\q`, names that are not UTF-8, and a Windows volume prefix are therefore never read as patterns. Every changed path in a records directory counts for collisions, whether or not it is a record file, and so do deleted files and the old names of renamed files. Two collections that keep their shared files in one data directory are validated separately. It checks the changed file's path below the database root, the declared collection directories and the subcollection ids. It reports the same group, with the same text, as the full pass for every collision that involves a changed, added, deleted or renamed record path. Collisions elsewhere are left to the full pass. One validation call lists each directory at most once for this check.
+
+Compatibility: a database that validated before can now fail with this error. This holds for a collection without `key_encoding`, and for any database whose names collide only under normalisation or full folding. Each such error is a group of names that a case-insensitive or normalisation-insensitive checkout may not be able to hold. The CLI exits with its existing validation-failure code (2 in ingitdb-cli v0.71.0), as for every validation error; no other exit code changes. Writers that call `ingitdb.PathDifferingInCase` check every path segment with the same comparison. Today these are the writers of collections that declare a key encoding, and they may now refuse a rare write whose collection directory, `$records` or subcollection segment has an NFC/NFD or full-fold sibling. Writers of collections without `key_encoding` are not changed. Validation also now reads records it used to skip silently. These are records below a directory whose path holds `[`, `*` or `?` (or `\` on Linux and macOS): a checkout such as `proj[1]/`, or a parent key such as `[p]` in a collection without `key_encoding`. Such records used to be validated as zero records and exit 0. They are now validated, so an invalid one fails on the first run after the upgrade. A records directory that exists but cannot be read (no permission, or a file where the directory should be), and a directory below it that cannot be read for lack of permission, is now an error (`failed to read the records directory`) in full validation; it used to be validated as zero records and exit 0. A missing records directory still holds no records. A tool that validates its output fails such output too: `datatug db copy` marks a run Incomplete when its output holds both `Bob.yaml` and `bob.yaml`.
+
 ### REQ: hidden-files-skipped
 
 In a collection that declares `key_encoding`, no key encodes to a name starting with `.`. A reader listing the collection's records MUST skip such a file (an editor lock, a macOS `._` file) instead of failing the whole read. Validation MUST still report it as a name the encoding never writes.
@@ -167,6 +200,28 @@ URL percent-encoding was considered. It needs the same extensions for edge dots,
 **Given** a `tilde-v1` collection with `name: "{key}.yaml"` and a key whose encoded file name is 263 bytes
 **When** the record file name is computed, or a found name of that length is validated
 **Then** it fails with `ErrKeyNotStorable` naming 263 bytes, the 255-byte limit and the shared-file remedy; a 255-byte name and a shared-file collection are not affected; a collection without an encoding fails the same way for a key over 250 bytes (`{key}.yaml` as it is)
+
+### AC: file-name-collisions-reported
+
+**Requirements:** record-key-encoding#req:file-name-collisions-reported
+
+**Given** collections without `key_encoding` holding:
+- the record files `Bob.yaml`, `bob.yaml` and `BOB.yaml`;
+- an NFC `café.yaml` and an NFD `café.yaml`;
+- `ı.yaml` and `I.yaml`;
+- names with long runs of combining marks in another order;
+- subcollection record files `N.yaml` and `n.yaml`;
+- parent directories `Pq/notes` and `pq/tasks`;
+- root collection directories `Data/teams` and `data/users`, `data/Users` and `data/users`, and `solo/A` (declared, not on disk) and `solo/a`;
+- subcollections `Notes` and `notes`.
+
+**When** the database is validated, or a commit that adds, deletes or renames one of the names is validated incrementally, its paths read from `git diff -z`
+
+**Then**:
+- each group is one error naming every name in it, with the reason and "rename all but one";
+- NFC/NFD names are escaped;
+- incremental validation reports the group exactly as the full pass does, listing each directory once;
+- `bobby.yaml`, `b0b.yaml`, `cafe.yaml`, and a name with an explicit U+034F are not reported.
 
 ## Open Questions
 

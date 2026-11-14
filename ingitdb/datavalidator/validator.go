@@ -29,14 +29,20 @@ func NewValidator() DataValidator {
 	return &simpleValidator{}
 }
 
-type simpleValidator struct{}
+// simpleValidator's readDir lists directories for the name-collision check
+// (os.ReadDir when nil); tests count listings through it.
+type simpleValidator struct {
+	readDir func(string) ([]os.DirEntry, error)
+}
 
 // Validate performs basic validation of records against their collection schemas.
 // Returns a ValidationResult with any errors found.
 func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingitdb.Definition) (*ingitdb.ValidationResult, error) {
 	result := &ingitdb.ValidationResult{}
+	names := newNameIndex(dbPath, sv.readDir)
 
-	for collectionKey, colDef := range def.Collections {
+	for _, collectionKey := range slices.Sorted(maps.Keys(def.Collections)) {
+		colDef := def.Collections[collectionKey]
 		passed, total, errors := validateCollectionRecords(collectionKey, colDef)
 		for _, validationErr := range errors {
 			result.Append(validationErr)
@@ -54,6 +60,9 @@ func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingit
 		}
 		result.SetRecordCounts(collectionKey, passed, total)
 		result.SetRecordCount(collectionKey, total)
+		if colDef != nil && colDef.DirPath != "" {
+			names.useRecordsDir(collectionKey, recordsBaseDir(colDef))
+		}
 	}
 
 	// Subcollection records are not reached by the root loop above (it iterates
@@ -62,7 +71,13 @@ func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingit
 	// per parent record, and validates their records with the same per-record
 	// checks and record-count enforcement. See
 	// spec/features/subcollection-record-validation.
-	validateSubCollections(dbPath, def, result)
+	validateSubCollections(dbPath, def, result, names)
+	for _, finding := range definitionNameFindings(names, def) {
+		result.Append(finding)
+	}
+	for _, finding := range names.findings() {
+		result.Append(finding)
+	}
 	for _, finding := range mislaidSubCollectionFindings(dbPath, def) {
 		result.Append(finding)
 	}
@@ -113,56 +128,27 @@ func shouldSkipRecordParsing(colDef *ingitdb.CollectionDef) bool {
 }
 
 func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionDef) (int, int, []ingitdb.ValidationError) {
-	pattern := singleRecordGlobPattern(colDef)
-	matches, err := filepath.Glob(pattern)
+	matches, unreadable, err := recordFiles(colDef)
 	if err != nil {
+		pattern := filepath.Join(recordsBaseDir(colDef), strings.ReplaceAll(colDef.RecordFile.Name, "{key}", "*"))
 		validationErr := newValidationError(collectionKey, pattern, "", "", "failed to glob record files", err)
 		return 0, 0, []ingitdb.ValidationError{validationErr}
 	}
 	passed := 0
 	total := 0
 	var errors []ingitdb.ValidationError
+	// A records directory that exists but cannot be read is an error, not an
+	// empty collection: a checkout with wrong permissions must not pass.
+	for _, u := range unreadable {
+		errors = append(errors, newValidationError(collectionKey, u.dir, "", "", "failed to read the records directory; its records are not validated", u.err))
+	}
 	for _, filePath := range matches {
 		filePassed, fileTotal, fileErrors := validateSingleRecordFile(collectionKey, colDef, filePath)
 		passed += filePassed
 		total += fileTotal
 		errors = append(errors, fileErrors...)
 	}
-	return passed, total, append(errors, caseCollisionFindings(collectionKey, colDef, matches)...)
-}
-
-// caseCollisionFindings reports, for a collection that declares a key
-// encoding, records whose key names differ only in letter case, whether the
-// name is a file ({key}.yaml) or a directory ({key}/index.yaml): on a
-// case-insensitive file system (Windows, macOS by default) they are one
-// entry, so a checkout there loses all but one record.
-func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, matches []string) []ingitdb.ValidationError {
-	if !colDef.RecordFile.EncodesKeys() {
-		return nil
-	}
-	baseDir := recordsBaseDir(colDef)
-	var names []string
-	pathOf := map[string]string{}
-	for _, filePath := range matches {
-		if skipRecordPath(filePath, colDef.RecordFile) {
-			continue
-		}
-		name := recordNameFromCollectionFilePath(colDef, filePath)
-		names = append(names, name)
-		pathOf[name] = filePath
-	}
-	var findings []ingitdb.ValidationError
-	for _, group := range ingitdb.CaseOnlyDifferences(names) {
-		rels := make([]string, 0, len(group))
-		for _, name := range group {
-			rel, _ := filepath.Rel(baseDir, pathOf[name])
-			rels = append(rels, filepath.ToSlash(rel))
-		}
-		message := fmt.Sprintf("record files %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one file and all but one record is lost; give the records keys that differ in more than case",
-			strings.Join(rels, ", "), baseDir)
-		findings = append(findings, newValidationError(collectionKey, pathOf[group[0]], "", "", message, nil))
-	}
-	return findings
+	return passed, total, errors
 }
 
 // validateSingleRecordFile validates one single-record file: it stats, reads,
@@ -199,16 +185,6 @@ func validateSingleRecordFile(collectionKey string, colDef *ingitdb.CollectionDe
 		return 0, 1, recordErrors
 	}
 	return 1, 1, nil
-}
-
-func singleRecordGlobPattern(colDef *ingitdb.CollectionDef) string {
-	baseDir := filepath.Join(colDef.DirPath, colDef.RecordFile.RecordsBasePath())
-	fileName := colDef.RecordFile.Name
-	if strings.Contains(fileName, "{key}") {
-		globName := strings.ReplaceAll(fileName, "{key}", "*")
-		return filepath.Join(baseDir, globName)
-	}
-	return filepath.Join(baseDir, fileName)
 }
 
 func skipRecordPath(filePath string, rfd *ingitdb.RecordFileDef) bool {

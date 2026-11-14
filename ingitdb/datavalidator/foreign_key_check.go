@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -280,35 +279,43 @@ func loadCollectionRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error
 }
 
 func loadSingleRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
-	pattern := singleRecordGlobPattern(colDef)
-	matches, err := filepath.Glob(pattern)
+	matches, _, err := recordFiles(colDef) // an unreadable directory is reported by the schema pass
 	if err != nil {
 		return nil, err
 	}
 	var records []loadedRecord
 	for _, filePath := range matches {
-		if skipRecordPath(filePath, colDef.RecordFile) {
-			continue
+		if record, ok := loadSingleRecordFile(colDef, filePath); ok {
+			records = append(records, record)
 		}
-		info, statErr := os.Stat(filePath)
-		if statErr != nil || info.IsDir() {
-			continue
-		}
-		content, readErr := os.ReadFile(filePath)
-		if readErr != nil {
-			continue
-		}
-		data, parseErr := ingitdb.ParseRecordContentForCollection(content, colDef)
-		if parseErr != nil {
-			continue
-		}
-		key, nameErr := decodedRecordKey(colDef, filePath)
-		if nameErr != nil {
-			continue // names no record (reported by the record pass)
-		}
-		records = append(records, loadedRecord{Key: key, Data: data, FilePath: filePath})
 	}
 	return records, nil
+}
+
+// loadSingleRecordFile reads one record file of a single-record collection;
+// ok is false when it is no record (hidden, excluded, missing, a directory,
+// unreadable, unparsable, or a name that names no record).
+func loadSingleRecordFile(colDef *ingitdb.CollectionDef, filePath string) (loadedRecord, bool) {
+	if skipRecordPath(filePath, colDef.RecordFile) {
+		return loadedRecord{}, false
+	}
+	info, statErr := os.Stat(filePath)
+	if statErr != nil || info.IsDir() {
+		return loadedRecord{}, false
+	}
+	content, readErr := os.ReadFile(filePath)
+	if readErr != nil {
+		return loadedRecord{}, false
+	}
+	data, parseErr := ingitdb.ParseRecordContentForCollection(content, colDef)
+	if parseErr != nil {
+		return loadedRecord{}, false
+	}
+	key, nameErr := decodedRecordKey(colDef, filePath)
+	if nameErr != nil {
+		return loadedRecord{}, false // names no record (reported by the record pass)
+	}
+	return loadedRecord{Key: key, Data: data, FilePath: filePath}, true
 }
 
 func loadMapRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {

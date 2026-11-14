@@ -33,6 +33,10 @@ type AffectedRecord struct {
 	FilePath     string
 	RecordKey    string // empty if entire file changed (list/map format)
 	ChangeKind   ingitdb.ChangeKind
+	// levels, set by the default resolver, are the collection instances
+	// from the root collection down to the one that owns FilePath; when
+	// unset the record is in root collection CollectionID.
+	levels []instanceLevel
 }
 
 // ChangeSetResolver maps changed files → (collectionID, recordKey) pairs.

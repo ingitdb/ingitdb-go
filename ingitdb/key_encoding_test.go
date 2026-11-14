@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	dalrecord "github.com/dal-go/record"
+	"golang.org/x/text/unicode/norm"
 )
 
 // Verifies record-key-encoding#ac:tilde-v1-examples.
@@ -315,5 +316,114 @@ func TestCaseOnlyDifferences(t *testing.T) {
 	}
 	if CaseOnlyDifferences([]string{"x", "y"}) != nil {
 		t.Error("no groups expected")
+	}
+}
+
+// Names that differ only in Unicode normalisation (NFC "é" against NFD
+// "e" + U+0301) are one file on macOS, so they collide like a case-only
+// pair; a group holds every name of one file, however many there are.
+func TestCaseOnlyDifferences_NormalisationAndGroups(t *testing.T) {
+	t.Parallel()
+	nfc, nfd := "café.yaml", "café.yaml"
+	got := CaseOnlyDifferences([]string{nfc, "x.yaml", nfd, "CAFÉ.yaml", "Bob", "bob", "BOB"})
+	if len(got) != 2 || strings.Join(got[0], " ") != nfc+" "+nfd+" CAFÉ.yaml" || strings.Join(got[1], " ") != "Bob bob BOB" {
+		t.Errorf("got %q", got)
+	}
+	// Names that differ otherwise, an accent included, and invalid UTF-8
+	// (compared as it is) are not collisions.
+	if got := CaseOnlyDifferences([]string{"bob", "bobby", "b0b", "cafe.yaml", nfc, "\xff", "\xfe", "a\xff", "A\xfe"}); got != nil {
+		t.Errorf("false positives: %q", got)
+	}
+	if got := CaseOnlyDifferences([]string{"a\xff", "A\xff"}); len(got) != 1 {
+		t.Errorf("invalid UTF-8 differing in ASCII case: %q", got)
+	}
+}
+
+func TestNameDifferingInCase_Normalisation(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "café.yaml"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := NameDifferingInCase(dir, "CAFÉ.yaml"); !ok || got != "café.yaml" {
+		t.Errorf("got %q, %v", got, ok)
+	}
+	if _, ok := NameDifferingInCase(dir, "cafe.yaml"); ok {
+		t.Error("an accent is a difference")
+	}
+}
+
+// Canonically equivalent names whose combining marks are in another order
+// collide even past 30 marks, where norm.NFD's stream-safe format inserts
+// U+034F and so keeps them apart; an explicit U+034F in a name is kept.
+func TestCaseOnlyDifferences_LongCombiningSequences(t *testing.T) {
+	t.Parallel()
+	marks := strings.Repeat("̅", 34)
+	a, b := "a"+marks+"̖.yaml", "a̖"+marks+".yaml"
+	if norm.NFD.String(a) == norm.NFD.String(b) {
+		t.Fatal("norm.NFD no longer splits long sequences; this test no longer guards anything")
+	}
+	if got := CaseOnlyDifferences([]string{a, b}); len(got) != 1 {
+		t.Errorf("reordered marks: %q", got)
+	}
+	if got := CaseOnlyDifferences([]string{"a̖̅.yaml", "a͏̖̅.yaml"}); got != nil {
+		t.Errorf("explicit U+034F: %q", got)
+	}
+	if lc, nf := NameCollisionKind([]string{a, b}); lc || !nf {
+		t.Errorf("reordered marks differ in normalisation only: %v %v", lc, nf)
+	}
+}
+
+// Full case folding merges ß and ss; dotless ı is mapped to i as the NTFS
+// upcase table does (ı, i and I upcase to I); İ folds to i + U+0307 and stays
+// apart from i.
+func TestCaseOnlyDifferences_FullFoldingAndDotlessI(t *testing.T) {
+	t.Parallel()
+	got := CaseOnlyDifferences([]string{"straße", "STRASSE", "ı.yaml", "i.yaml", "I.yaml", "İ.yaml"})
+	if len(got) != 2 || strings.Join(got[0], " ") != "straße STRASSE" || strings.Join(got[1], " ") != "ı.yaml i.yaml I.yaml" {
+		t.Errorf("got %q", got)
+	}
+	if lc, nf := NameCollisionKind([]string{"ı.yaml", "I.yaml"}); !lc || nf {
+		t.Errorf("dotless i differs in case only: %v %v", lc, nf)
+	}
+}
+
+// The key is stable: the key of a key is the key (Unicode D145 needs the
+// inner decomposition for that; the outer one decomposes what folding made).
+func TestSameFileKey_Stable(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"Ab", "café", "café", "ẞ", "ͅ", "ǰ̣", "가", "ı", "İ", "a\xff", "ﬃ"} {
+		k := sameFileKey(name)
+		if sameFileKey(k) != k {
+			t.Errorf("%q: key %q is not stable", name, k)
+		}
+	}
+	if sameFileKey("ǰ̣") != sameFileKey("J̣̌") {
+		t.Error("folding then decomposing")
+	}
+}
+
+func TestNameCollisionKind(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		names  []string
+		lc, nf bool
+	}{
+		{[]string{"Ab", "ab"}, true, false},
+		{[]string{"café", "café"}, false, true},
+		{[]string{"Café", "café"}, true, true},
+		{[]string{"a\xff", "A\xff"}, true, false},
+		// Singleton decompositions: the Kelvin, Ohm and Angstrom signs are
+		// canonically equivalent to letters (case folding merges them too).
+		{[]string{"K.yaml", "\u212a.yaml"}, false, true},
+		{[]string{"\u03a9", "\u2126"}, false, true},
+		{[]string{"\u00c5", "\u212b"}, false, true},
+		{[]string{"k", "\u212a"}, true, true},
+		{[]string{"\u00c9", "\u00e9"}, true, false},
+		{[]string{"E\u0301", "e\u0301"}, true, false},
+	} {
+		if lc, nf := NameCollisionKind(tc.names); lc != tc.lc || nf != tc.nf {
+			t.Errorf("%q: %v %v", tc.names, lc, nf)
+		}
 	}
 }

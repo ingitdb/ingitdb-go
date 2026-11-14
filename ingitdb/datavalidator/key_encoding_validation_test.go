@@ -61,11 +61,11 @@ func TestValidate_KeyEncodingTildeV1(t *testing.T) {
 	for _, want := range []string{
 		`bad~2f.yaml: the file name is not one the collection's key_encoding writes`,
 		`"bad~2f" is not a tilde-v1 name; the name of key "bad/" is "bad~2F"`,
-		`Ab.yaml: record files Ab.yaml, ab.yaml in `,
+		`Ab.yaml: names Ab.yaml, ab.yaml in `,
 		`notes: the parent directory name is not one the parent collection's key_encoding writes`,
 		`foreign key "space" = "a~2Fb" has no matching record in collection "spaces"`,
 		`foreign key "space" = "bad~2f" has no matching record in collection "spaces"`,
-		`Pq: parent directories Pq, pq in `,
+		`Pq: names Pq, pq in `,
 	} {
 		if !strings.Contains(all, want) {
 			t.Errorf("findings lack %q:\n%s", want, all)
@@ -133,27 +133,8 @@ func TestValidate_KeyEncodingCaseCollisionInDirectoryNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if errs := res.Errors(); len(errs) != 1 || !strings.Contains(errs[0].Message, "record files Ab/index.yaml, ab/index.yaml in ") {
+	if errs := res.Errors(); len(errs) != 1 || !strings.Contains(errs[0].Message, "names Ab, ab in ") {
 		t.Fatalf("got %s", findingTexts(errs))
-	}
-}
-
-// Incremental validation reports a changed record file whose name, or a
-// directory on its path, differs from an existing one only in letter case.
-func TestChangedFileCaseFindings(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	writeTree(t, root, map[string]string{"spaces/$records/Ab.yaml": "title: x\n", "spaces/$records/ab.yaml": "title: y\n"})
-	def := tildeDB(root).Collections["spaces"]
-	got := changedFileCaseFindings(root, "spaces", def, filepath.Join(root, "spaces", "$records", "ab.yaml"))
-	if len(got) != 1 || !strings.Contains(got[0].Message, "Ab.yaml differ only in letter case") {
-		t.Fatalf("got %+v", got)
-	}
-	if got := changedFileCaseFindings(root, "spaces", def, filepath.Join(root, "spaces", "$records", "zz.yaml")); got != nil {
-		t.Errorf("no collision: %+v", got)
-	}
-	if got := changedFileCaseFindings(root, "refs", tildeDB(root).Collections["refs"], filepath.Join(root, "spaces", "$records", "ab.yaml")); got != nil {
-		t.Errorf("no encoding: %+v", got)
 	}
 }
 

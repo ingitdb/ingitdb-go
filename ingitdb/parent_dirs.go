@@ -56,16 +56,22 @@ func ScanParentDirs(root, base string, recordFile *RecordFileDef) ParentDirs {
 		return scan
 	}
 	for _, entry := range entries {
-		name := entry.Name()
-		if strings.HasPrefix(name, ".") || reservedDirNames[name] {
-			continue
+		if name := entry.Name(); IsParentDirName(name, recordFile) {
+			scan.candidates = append(scan.candidates, name)
 		}
-		if recordFile != nil && (recordFile.IsExcluded(name) || name == recordsDirHead(recordFile)) {
-			continue
-		}
-		scan.candidates = append(scan.candidates, name)
 	}
 	return scan
+}
+
+// IsParentDirName reports whether a directory named name in a collection's
+// records directory is a parent instance by the rule of ParentDirs (hidden,
+// reserved, records-directory and excluded names are not). A parent record
+// of any name owns its instance directory whatever this says.
+func IsParentDirName(name string, recordFile *RecordFileDef) bool {
+	if strings.HasPrefix(name, ".") || reservedDirNames[name] {
+		return false
+	}
+	return recordFile == nil || (!recordFile.IsExcluded(name) && name != recordsDirHead(recordFile))
 }
 
 // KeysWith returns, in name order, the parent keys whose <key>/<subID>
