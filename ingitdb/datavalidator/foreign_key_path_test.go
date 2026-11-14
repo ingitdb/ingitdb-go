@@ -80,7 +80,7 @@ func TestForeignKeyReferences_SubcollectionPaths(t *testing.T) {
 	slices.Sort(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("findings:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}	// Every path foreign-key finding names the record file it is about.
+	} // Every path foreign-key finding names the record file it is about.
 	for _, e := range res.Errors() {
 		if filepath.Base(e.FilePath) != "data.yaml" || !strings.HasPrefix(e.FilePath, dir) {
 			t.Errorf("finding %q has FilePath %q, want the record file", e.Message, e.FilePath)
@@ -112,9 +112,68 @@ func TestParentKeyFromField(t *testing.T) {
 		{`a\b`, "", `is "a\\b", which is not a valid record key`},
 	}
 	for _, tt := range tests {
-		key, problem := parentKeyFromField(tt.raw)
+		key, problem := parentKeyFromField(tt.raw, false)
 		if key != tt.key || problem != tt.problem {
 			t.Errorf("%#v: got (%q, %q), want (%q, %q)", tt.raw, key, problem, tt.key, tt.problem)
 		}
+	}
+}
+
+// A path foreign_key below a parent collection with key_encoding tilde-v1
+// finds the target instance under the parent's encoded directory name, for
+// $same, {field} and literal parent keys alike; a {field} key that no plain
+// collection could store (a/b, ../x) is a real key there.
+func TestForeignKeyReferences_SubcollectionPathsTildeV1(t *testing.T) {
+	dir := t.TempDir()
+	str := &ingitdb.ColumnDef{Type: ingitdb.ColumnTypeString}
+	tilde := &ingitdb.RecordFileDef{Name: "{key}.yaml", Format: ingitdb.RecordFormatYAML, RecordType: ingitdb.SingleRecord, KeyEncoding: ingitdb.KeyEncodingTildeV1}
+	writeTree(t, dir, map[string]string{
+		"spaces/$records/a~2Fb.yaml":                 "title: AB\n",
+		"spaces/$records/~43ON.yaml":                 "title: CON\n",
+		"spaces/$records/a~2Fb/agreements/data.yaml": "a1:\n  title: A1\n",
+		"spaces/$records/~43ON/agreements/data.yaml": "c1:\n  title: C1\n",
+		"spaces/$records/a~2Fb/grants/data.yaml":     "g1:\n  agreementID: a1\ng2:\n  agreementID: c1\n",
+		"bookings/data.yaml":                         "b1:\n  spaceID: a/b\n  agreementID: a1\nb2:\n  spaceID: ../x\n  agreementID: a1\nb3:\n  literal: c1\nb4:\n  spaceID: " + strings.Repeat("x", 300) + "\n  agreementID: a1\n",
+	})
+	agreements := &ingitdb.CollectionDef{ID: "agreements", RecordFile: mapRecordFile(), Columns: map[string]*ingitdb.ColumnDef{"title": str}}
+	grants := &ingitdb.CollectionDef{ID: "grants", RecordFile: mapRecordFile(), Columns: map[string]*ingitdb.ColumnDef{
+		"agreementID": {Type: ingitdb.ColumnTypeString, ForeignKey: "spaces/$same/agreements"},
+	}}
+	spaces := &ingitdb.CollectionDef{ID: "spaces", DirPath: filepath.Join(dir, "spaces"), RecordFile: tilde,
+		Columns:        map[string]*ingitdb.ColumnDef{"title": str},
+		SubCollections: map[string]*ingitdb.CollectionDef{"agreements": agreements, "grants": grants}}
+	bookings := &ingitdb.CollectionDef{ID: "bookings", DirPath: filepath.Join(dir, "bookings"), RecordFile: mapRecordFile(),
+		Columns: map[string]*ingitdb.ColumnDef{
+			"spaceID":     str,
+			"agreementID": {Type: ingitdb.ColumnTypeString, ForeignKey: "spaces/{spaceID}/agreements"},
+			"literal":     {Type: ingitdb.ColumnTypeString, ForeignKey: "spaces/CON/agreements"},
+		}}
+	def := &ingitdb.Definition{Collections: map[string]*ingitdb.CollectionDef{"spaces": spaces, "bookings": bookings}}
+	res, err := NewValidator().Validate(context.Background(), dir, def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range res.Errors() {
+		got = append(got, e.Message)
+	}
+	slices.Sort(got)
+	want := []string{
+		`foreign key "agreementID" = "a1" has no matching record in collection "spaces/../x/agreements"`,
+		`foreign key "agreementID" = "c1" has no matching record in collection "spaces/a/b/agreements"`,
+		`foreign key "agreementID" = "a1": the parent key "` + strings.Repeat("x", 300) + `" in "spaces/{spaceID}/agreements": ` + "%s",
+	}
+	for i, w := range want {
+		if strings.Contains(w, "%s") {
+			for _, g := range got {
+				if strings.HasPrefix(g, strings.TrimSuffix(w, "%s")) && strings.Contains(g, ingitdb.ErrKeyNotStorable.Error()) {
+					want[i] = g
+				}
+			}
+		}
+	}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("got\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
 	}
 }

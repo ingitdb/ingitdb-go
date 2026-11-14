@@ -200,15 +200,22 @@ func checkPathForeignKey(
 		case step.Same:
 			parentKey = recordKeys[level]
 		case step.Field != "":
-			key, problem := parentKeyFromField(r.Data[step.Field])
+			key, problem := parentKeyFromField(r.Data[step.Field], target.RecordFile.EncodesKeys())
 			if problem != "" {
 				message := fmt.Sprintf("foreign key %q = %q: field %q, which gives the parent key in %q, %s", name, values[0], step.Field, path.String(), problem)
 				return append(errors, newValidationError(fullID, r.FilePath, r.Key, name, message, nil))
 			}
 			parentKey = key
 		}
+		// The instance directory is named by the parent's key as its record
+		// file names it: encoded when the parent declares a key_encoding.
+		dirName, err := target.RecordFile.KeyDirName(parentKey)
+		if err != nil {
+			message := fmt.Sprintf("foreign key %q = %q: the parent key %q in %q: %v", name, values[0], parentKey, path.String(), err)
+			return append(errors, newValidationError(fullID, r.FilePath, r.Key, name, message, nil))
+		}
 		sub := *target.SubCollections[step.Collection]
-		sub.DirPath = subCollectionDataDir(&target, parentKey, step.Collection)
+		sub.DirPath = subCollectionDataDir(&target, dirName, step.Collection)
 		instancePath = append(instancePath, parentKey, step.Collection)
 		target = sub
 	}
@@ -226,8 +233,10 @@ func checkPathForeignKey(
 // record key: a string as is, a number as written (a whole JSON number 1000000
 // is "1000000", not "1e+06"), a bool as true/false. It returns a problem
 // (completing "field X, which gives the parent key in P, ...") when the value
-// is empty, not a scalar, or not a valid record key (e.g. "..", "a/b").
-func parentKeyFromField(raw any) (string, string) {
+// is empty, not a scalar, or, for a parent collection without a key encoding,
+// not a valid record key (e.g. "..", "a/b"). With a key encoding every
+// non-empty key has a directory name, so any such key is accepted.
+func parentKeyFromField(raw any, encoded bool) (string, string) {
 	var key string
 	switch v := raw.(type) {
 	case nil:
@@ -244,7 +253,7 @@ func parentKeyFromField(raw any) (string, string) {
 	if key == "" {
 		return "", "is empty"
 	}
-	if !ingitdb.IsPlainKeySegment(key) {
+	if !encoded && !ingitdb.IsPlainKeySegment(key) {
 		return "", fmt.Sprintf("is %q, which is not a valid record key", key)
 	}
 	return key, ""
