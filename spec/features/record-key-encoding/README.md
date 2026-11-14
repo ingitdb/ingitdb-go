@@ -82,7 +82,7 @@ So a name is pure ASCII. It is never hidden, never `.` or `..`, never ends in a 
 - a byte that should have been escaped (a space, a leading dot);
 - an empty name.
 
-`ingitdb.EncodeRecordKey(encoding, key)` and `ingitdb.DecodeRecordKey(encoding, name)` in `github.com/ingitdb/ingitdb-go/ingitdb` implement this. `RecordFileDef.EncodeKey` and `RecordFileDef.DecodeKey` call them with the collection's setting. Every Go reader and writer in ingitdb-go, dalgo2ingitdb and dalgo2ingitdb4local calls these functions. The DataTug mirror has its own copy of the scheme, byte-identical today; it should call these functions. Other implementations, such as the TypeScript client, follow this text.
+`ingitdb.EncodeRecordKey(encoding, key)` and `ingitdb.DecodeRecordKey(encoding, name)` in `github.com/ingitdb/ingitdb-go/ingitdb` implement this. `RecordFileDef.EncodeKey` and `RecordFileDef.DecodeKey` call them with the collection's setting. Every Go reader and writer in ingitdb-go, dalgo2ingitdb and dalgo2ingitdb4local calls these functions. The DataTug mirror has its own copy of the scheme, which it names `tilde-hex/v1`; it is byte-identical to `tilde-v1` (checked on 300,000 random ids and the mirror's documented examples, on 2026-11-14), and the mirror should call these functions and record the name `tilde-v1`. Other implementations, such as the TypeScript client, follow this text.
 
 ### REQ: letter-case-kept-collisions-reported
 
