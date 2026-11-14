@@ -10,7 +10,7 @@ import (
 
 func TestForeignKeyCheck_RemainingCoverage(t *testing.T) {
 	// 1. def == nil
-	if errs := validateForeignKeyReferences(nil); len(errs) != 0 {
+	if errs := validateForeignKeyReferences("", nil); len(errs) != 0 {
 		t.Errorf("expected nil errors for nil def, got %v", errs)
 	}
 
@@ -47,7 +47,7 @@ func TestForeignKeyCheck_RemainingCoverage(t *testing.T) {
 			},
 		},
 	}
-	_ = validateForeignKeyReferences(defWithBroken)
+	_ = validateForeignKeyReferences("", defWithBroken)
 
 	// 3. Unresolvable foreign key target (!ok in ResolveForeignKey)
 	unresolvedCol := &ingitdb.CollectionDef{
@@ -56,7 +56,7 @@ func TestForeignKeyCheck_RemainingCoverage(t *testing.T) {
 			"bad_fk": {ForeignKey: "missing_target"},
 		},
 	}
-	errs := checkCollectionForeignKeys("unresolved", unresolvedCol, &ingitdb.Definition{}, nil)
+	errs := checkCollectionForeignKeys("unresolved", unresolvedCol, nil, &ingitdb.Definition{}, nil, nil)
 	if len(errs) != 0 {
 		t.Errorf("expected 0 errors for unresolved target, got %v", errs)
 	}
@@ -85,7 +85,7 @@ func TestForeignKeyCheck_RemainingCoverage(t *testing.T) {
 			"orders": parent,
 		},
 	}
-	_ = validateForeignKeyReferences(defWithSub)
+	_ = validateForeignKeyReferences("", defWithSub)
 
 	// 5. loadCollectionRecords: ListOfRecords & default case
 	listCol := &ingitdb.CollectionDef{

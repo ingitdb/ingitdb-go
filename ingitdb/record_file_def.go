@@ -53,6 +53,11 @@ type RecordFileDef struct {
 	// `exclude_regex: '^README\.md$'` to keep those auxiliary files from
 	// being treated as records.
 	ExcludeRegex string `yaml:"exclude_regex,omitempty"`
+
+	// KeyEncoding names how a record key becomes a file or directory name
+	// and back (KeyEncodingTildeV1; see EncodeRecordKey). Empty or "none"
+	// keeps the historical behaviour: the name is the key as it is.
+	KeyEncoding string `yaml:"key_encoding,omitempty" json:"key_encoding,omitempty"`
 }
 
 func (rfd RecordFileDef) Validate() error {
@@ -100,7 +105,7 @@ func (rfd RecordFileDef) Validate() error {
 			return fmt.Errorf("invalid exclude_regex %q: %w", rfd.ExcludeRegex, err)
 		}
 	}
-	return nil
+	return rfd.validateKeyEncoding()
 }
 
 // IsExcluded reports whether a filename's basename matches the configured
@@ -187,7 +192,14 @@ func (rfd RecordFileDef) GetRecordFileName(record dalrecord.Record) (string, err
 
 	if strings.Contains(name, "{key}") {
 		s := fmt.Sprintf("%v", record.Key().ID)
-		if err := checkFileNameSegment("key", s); err != nil {
+		if rfd.EncodesKeys() {
+			if err := rfd.CheckKeyFits(s); err != nil {
+				return "", err
+			}
+			s, _ = rfd.EncodeKey(s) // CheckKeyFits encoded it
+		} else if err := checkFileNameSegment("key", s); err != nil {
+			return "", err
+		} else if err := rfd.CheckKeyFits(s); err != nil {
 			return "", err
 		}
 		name = strings.Replace(name, "{key}", s, 1)

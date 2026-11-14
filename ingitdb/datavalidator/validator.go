@@ -7,11 +7,14 @@ package datavalidator
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -30,7 +33,7 @@ type simpleValidator struct{}
 
 // Validate performs basic validation of records against their collection schemas.
 // Returns a ValidationResult with any errors found.
-func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.Definition) (*ingitdb.ValidationResult, error) {
+func (sv *simpleValidator) Validate(_ context.Context, dbPath string, def *ingitdb.Definition) (*ingitdb.ValidationResult, error) {
 	result := &ingitdb.ValidationResult{}
 
 	for collectionKey, colDef := range def.Collections {
@@ -59,13 +62,16 @@ func (sv *simpleValidator) Validate(_ context.Context, _ string, def *ingitdb.De
 	// per parent record, and validates their records with the same per-record
 	// checks and record-count enforcement. See
 	// spec/features/subcollection-record-validation.
-	validateSubCollections(def, result)
+	validateSubCollections(dbPath, def, result)
+	for _, finding := range mislaidSubCollectionFindings(dbPath, def) {
+		result.Append(finding)
+	}
 
 	// Referential integrity is a whole-definition concern — a value must exist
 	// as a key in the resolved target collection — so it runs after the
 	// per-collection schema pass, once every collection's keys are known. It
 	// covers both root and subcollection records (shared walk).
-	for _, validationErr := range validateForeignKeyReferences(def) {
+	for _, validationErr := range validateForeignKeyReferences(dbPath, def) {
 		result.Append(validationErr)
 	}
 	for _, validationErr := range validateSourceForeignKeys(def) {
@@ -122,7 +128,41 @@ func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionD
 		total += fileTotal
 		errors = append(errors, fileErrors...)
 	}
-	return passed, total, errors
+	return passed, total, append(errors, caseCollisionFindings(collectionKey, colDef, matches)...)
+}
+
+// caseCollisionFindings reports, for a collection that declares a key
+// encoding, records whose key names differ only in letter case, whether the
+// name is a file ({key}.yaml) or a directory ({key}/index.yaml): on a
+// case-insensitive file system (Windows, macOS by default) they are one
+// entry, so a checkout there loses all but one record.
+func caseCollisionFindings(collectionKey string, colDef *ingitdb.CollectionDef, matches []string) []ingitdb.ValidationError {
+	if !colDef.RecordFile.EncodesKeys() {
+		return nil
+	}
+	baseDir := recordsBaseDir(colDef)
+	var names []string
+	pathOf := map[string]string{}
+	for _, filePath := range matches {
+		if skipRecordPath(filePath, colDef.RecordFile) {
+			continue
+		}
+		name := recordNameFromCollectionFilePath(colDef, filePath)
+		names = append(names, name)
+		pathOf[name] = filePath
+	}
+	var findings []ingitdb.ValidationError
+	for _, group := range ingitdb.CaseOnlyDifferences(names) {
+		rels := make([]string, 0, len(group))
+		for _, name := range group {
+			rel, _ := filepath.Rel(baseDir, pathOf[name])
+			rels = append(rels, filepath.ToSlash(rel))
+		}
+		message := fmt.Sprintf("record files %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one file and all but one record is lost; give the records keys that differ in more than case",
+			strings.Join(rels, ", "), baseDir)
+		findings = append(findings, newValidationError(collectionKey, pathOf[group[0]], "", "", message, nil))
+	}
+	return findings
 }
 
 // validateSingleRecordFile validates one single-record file: it stats, reads,
@@ -150,7 +190,10 @@ func validateSingleRecordFile(collectionKey string, colDef *ingitdb.CollectionDe
 		validationErr := newValidationError(collectionKey, filePath, "", "", "failed to parse record file", parseErr)
 		return 0, 1, []ingitdb.ValidationError{validationErr}
 	}
-	recordKey := recordKeyFromCollectionFilePath(colDef, filePath)
+	recordKey, nameErr := decodedRecordKey(colDef, filePath)
+	if nameErr != nil {
+		return 0, 1, []ingitdb.ValidationError{newValidationError(collectionKey, filePath, recordKey, "", fileNameFinding(nameErr), nil)}
+	}
 	recordErrors := validateRecordData(collectionKey, filePath, recordKey, colDef, data)
 	if len(recordErrors) > 0 {
 		return 0, 1, recordErrors
@@ -182,7 +225,44 @@ func recordKeyFromFilePath(filePath string) string {
 	return strings.TrimSuffix(name, ext)
 }
 
+// decodedRecordKey returns the record key of a record file path: its key
+// name decoded with the collection's key_encoding. When the name is not one
+// the encoding writes, or (with a declared encoding) is longer than a file
+// name may be, it returns the name as it is with the error.
+func decodedRecordKey(colDef *ingitdb.CollectionDef, filePath string) (string, error) {
+	name := recordNameFromCollectionFilePath(colDef, filePath)
+	if colDef == nil || colDef.RecordFile == nil {
+		return name, nil
+	}
+	key, err := colDef.RecordFile.DecodeKey(name)
+	if err != nil {
+		return name, err
+	}
+	if err := colDef.RecordFile.CheckKeyFits(key); err != nil {
+		return key, err
+	}
+	return key, nil
+}
+
+// fileNameFinding is the message of a record file whose name names no record:
+// one the key encoding never writes, or one over the file-name length limit.
+// The reason is said once (the finding carries no separate error).
+func fileNameFinding(err error) string {
+	if errors.Is(err, ingitdb.ErrKeyNotStorable) {
+		return "the file name is too long to be stored on every file system: " + err.Error()
+	}
+	return "the file name is not one the collection's key_encoding writes, so it names no record; rename the file: " + err.Error()
+}
+
+// recordKeyFromCollectionFilePath is decodedRecordKey without the error.
 func recordKeyFromCollectionFilePath(colDef *ingitdb.CollectionDef, filePath string) string {
+	key, _ := decodedRecordKey(colDef, filePath)
+	return key
+}
+
+// recordNameFromCollectionFilePath returns the key name part of a record
+// file path, as it is on disk.
+func recordNameFromCollectionFilePath(colDef *ingitdb.CollectionDef, filePath string) string {
 	if colDef == nil || colDef.RecordFile == nil || !strings.Contains(colDef.RecordFile.Name, "{key}") {
 		return recordKeyFromFilePath(filePath)
 	}
@@ -457,7 +537,19 @@ func validateRecordData(
 			}
 			continue
 		}
-		if !valueMatchesColumnType(value, columnDef.Type) {
+		if key, isKey := value.(string); isKey && fieldName == reservedIDField && keyTypeFormats[columnDef.Type] != "" {
+			// A record key is always text (a file name, a map key, a CSV cell),
+			// so a typed $ID is checked by parsing the key, not by the Go type
+			// of the value. See column-validation#req:record-key-type-checked.
+			parsed, keyOK := parseRecordKey(key, columnDef.Type)
+			if !keyOK {
+				message := fmt.Sprintf("wrong type for field %q: %q is not a valid %s (%s)",
+					fieldName, key, columnDef.Type, keyTypeFormats[columnDef.Type])
+				errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil))
+				continue
+			}
+			value = parsed
+		} else if !valueMatchesColumnType(value, columnDef.Type) {
 			message := fmt.Sprintf("wrong type for field %q: expected %s, got %T", fieldName, columnDef.Type, value)
 			validationErr := newValidationError(collectionKey, filePath, recordKey, fieldName, message, nil)
 			errors = append(errors, validationErr)
@@ -475,8 +567,124 @@ func validateRecordData(
 			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, fieldName, err.Error(), nil))
 			continue
 		}
+		for _, finding := range shapeFindings(fieldName, value, columnDef) {
+			errors = append(errors, newValidationError(collectionKey, filePath, recordKey, finding.field, finding.message, nil))
+		}
 	}
 	return errors
+}
+
+// shapeFinding is one violation inside a structured value; field is the path
+// to it, e.g. "slots.sl1.durationInMinutes" or "members[2].role".
+type shapeFinding struct {
+	field   string
+	message string
+}
+
+// shapeFindings checks a value that already passed its own column checks
+// against the column's declared Columns, Values and Items, recursively. A
+// column that declares none of them yields nothing, so a column is checked
+// exactly as before unless its definition opts in.
+func shapeFindings(path string, value any, def *ingitdb.ColumnDef) []shapeFinding {
+	var findings []shapeFinding
+	if object, isObject := value.(map[string]any); isObject && len(def.Columns) > 0 {
+		for _, name := range slices.Sorted(maps.Keys(object)) {
+			if _, declared := def.Columns[name]; !declared && !strings.HasPrefix(name, reservedFieldPrefix) {
+				message := fmt.Sprintf("undeclared field %q: no nested column of that name in the definition of %q", path+"."+name, path)
+				findings = append(findings, shapeFinding{path + "." + name, message})
+			}
+		}
+		for _, name := range slices.Sorted(maps.Keys(def.Columns)) {
+			findings = append(findings, nestedValueFindings(path+"."+name, object[name], def.Columns[name])...)
+		}
+	}
+	if def.Values != nil {
+		if object, isObject := value.(map[string]any); isObject {
+			for _, key := range slices.Sorted(maps.Keys(object)) {
+				findings = append(findings, nestedValueFindings(path+"."+key, object[key], def.Values)...)
+			}
+		}
+	}
+	if items, isList := value.([]any); isList && def.Items != nil {
+		for i, item := range items {
+			findings = append(findings, nestedValueFindings(fmt.Sprintf("%s[%d]", path, i), item, def.Items)...)
+		}
+	}
+	return findings
+}
+
+// nestedValueFindings checks one nested value with the same checks, in the
+// same order and with the same messages, as a top-level column: required,
+// type, enum, value range, length, then its own shape.
+func nestedValueFindings(path string, value any, def *ingitdb.ColumnDef) []shapeFinding {
+	if value == nil {
+		if def.Required {
+			return []shapeFinding{{path, "missing required field"}}
+		}
+		return nil
+	}
+	if !valueMatchesColumnType(value, def.Type) {
+		return []shapeFinding{{path, fmt.Sprintf("wrong type for field %q: expected %s, got %T", path, def.Type, value)}}
+	}
+	if err := checkEnum(path, value, def.Enum); err != nil {
+		return []shapeFinding{{path, err.Error()}}
+	}
+	if err := checkValueRange(path, value, def.MinValue, def.MaxValue); err != nil {
+		return []shapeFinding{{path, err.Error()}}
+	}
+	if err := checkLength(path, value, def.Length, def.MinLength, def.MaxLength); err != nil {
+		return []shapeFinding{{path, err.Error()}}
+	}
+	return shapeFindings(path, value, def)
+}
+
+// keyTypeFormats names, for every column type a record key can be parsed as,
+// the text form a key of that type must have. Types missing here (string,
+// any, maps, lists) keep the plain value type check.
+var keyTypeFormats = map[ingitdb.ColumnType]string{
+	ingitdb.ColumnTypeInt:      "a base-10 integer without a plus sign or leading zeros",
+	ingitdb.ColumnTypeFloat:    "a finite decimal number in shortest form, e.g. 1.5 (not 1.50, 1e+06, +1, .5 or -0)",
+	ingitdb.ColumnTypeBool:     "true or false",
+	ingitdb.ColumnTypeDate:     "YYYY-MM-DD",
+	ingitdb.ColumnTypeTime:     "H:MM or H:MM:SS (hour of one or two digits), optional fractional seconds",
+	ingitdb.ColumnTypeDateTime: "YYYY-MM-DDTHH:MM:SS, optional fractional seconds and zone, e.g. 2006-01-02T15:04:05Z",
+}
+
+// parseRecordKey parses a record key as columnType, one of the keyTypeFormats
+// types. Numbers and booleans come back parsed, so enum and range checks
+// compare them as numbers; temporal keys stay the key text.
+func parseRecordKey(key string, columnType ingitdb.ColumnType) (any, bool) {
+	switch columnType {
+	case ingitdb.ColumnTypeInt:
+		// Canonical form only, so "7" and "007" cannot be two records with
+		// one value.
+		n, err := strconv.ParseInt(key, 10, 64)
+		return n, err == nil && strconv.FormatInt(n, 10) == key
+	case ingitdb.ColumnTypeFloat:
+		// Canonical (shortest decimal) form only, as for int keys, so "1.5"
+		// and "1.50" cannot be two records with one value. This also rules
+		// out NaN, Inf, hex, exponents, "+", "_" and "-0".
+		f, err := strconv.ParseFloat(key, 64)
+		finite := err == nil && !math.IsNaN(f) && !math.IsInf(f, 0)
+		return f, finite && key != "-0" && strconv.FormatFloat(f, 'f', -1, 64) == key
+	case ingitdb.ColumnTypeBool:
+		return key == "true", key == "true" || key == "false"
+	case ingitdb.ColumnTypeDate:
+		_, err := time.Parse(time.DateOnly, key)
+		return key, err == nil
+	case ingitdb.ColumnTypeTime:
+		_, err := time.Parse(time.TimeOnly, key)
+		if err != nil {
+			_, err = time.Parse("15:04", key)
+		}
+		return key, err == nil
+	default: // ingitdb.ColumnTypeDateTime
+		_, err := time.Parse(time.RFC3339Nano, key)
+		if err != nil {
+			_, err = time.Parse("2006-01-02T15:04:05", key) // no zone
+		}
+		return key, err == nil
+	}
 }
 
 // checkEnum reports whether value is one of the column's permitted members.

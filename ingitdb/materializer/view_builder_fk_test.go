@@ -1330,3 +1330,28 @@ func TestBuildFKViews_ElementErrs_DedupedAndNameRecordKey(t *testing.T) {
 		t.Errorf("error must still say the element must be a scalar, got: %v", errs[0])
 	}
 }
+
+// A foreign_key that names a subcollection (a path) has no single target
+// directory: no $fk view is built for it and no error is reported; validation
+// checks the reference instead.
+func TestBuildFKViews_SubcollectionPathForeignKeySkipped(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	col := makeCompaniesCol(t, filepath.Join(tmpDir, "companies"))
+	col.Columns["country"].ForeignKey = "regions/eu/countries"
+	view := makeDefaultView("json")
+	def := &ingitdb.Definition{}
+
+	records := []ingitdb.IRecordEntry{
+		ingitdb.NewMapRecordEntry("acme", map[string]any{"$ID": "acme", "name": "Acme", "country": "gb"}),
+	}
+
+	created, updated, unchanged, errs := buildFKViews(tmpDir, "", col, def, view, records, nil, defaultFSops())
+	if len(errs) != 0 {
+		t.Errorf("expected no error for a path foreign key, got %v", errs)
+	}
+	if created+updated+unchanged != 0 {
+		t.Errorf("expected no $fk view, got created=%d updated=%d unchanged=%d", created, updated, unchanged)
+	}
+}

@@ -35,9 +35,9 @@ A subcollection has no single data directory — its records live once per paren
 
 ### REQ: subcollection-storage-convention
 
-The on-disk storage convention for subcollection records MUST be defined and documented as follows, and the validator MUST resolve subcollection data by it rather than by the subcollection's loaded `DirPath`.
+The on-disk storage convention for subcollection records MUST be defined and documented as follows, and the validator MUST resolve subcollection data by it rather than by the subcollection's loaded `DirPath`. Every other reader and writer (the storage drivers, `ingitdb select`, collection-group reads) MUST use the same location.
 
-A parent record MAY own a directory named by its record key, located as a sibling of where that parent collection stores its records — that is, under the parent collection's records base path (`<parent DirPath>/<parent record_file records-base-path>/<parentKey>/`, where the records-base-path is `$records` when the parent's `record_file.name` contains `{key}` and empty otherwise). That per-record directory holds the parent record's subcollections, one subdirectory per subcollection, named by the subcollection id. A subcollection's records then live inside its subdirectory exactly as a root collection's do, addressed by the subcollection's own `record_file` (its own records-base-path and name).
+A parent record MAY own a directory named by its record key, located as a sibling of where that parent collection stores its records — that is, under the parent collection's records base path (`<parent DirPath>/<parent record_file records-base-path>/<parentKey>/`, where the records-base-path is the parent's `record_file.records_dir` when it is set, `.` meaning empty (see [explicit-record-base-directory](../explicit-record-base-directory/README.md)), and otherwise `$records` when the parent's `record_file.name` contains `{key}` and empty otherwise; this is `RecordFileDef.RecordsBasePath`). That per-record directory holds the parent record's subcollections, one subdirectory per subcollection, named by the subcollection id. A subcollection's records then live inside its subdirectory exactly as a root collection's do, addressed by the subcollection's own `record_file` (its own records-base-path and name).
 
 The effective data directory for one parent record's instance of a subcollection is therefore:
 
@@ -46,6 +46,20 @@ The effective data directory for one parent record's instance of a subcollection
 ```
 
 and its record file is that directory joined with the subcollection's own records-base-path and `record_file.name`. `demo-ingitdb` is the precedent: parent `orders` stores records at `orders/$records/{key}.yaml`, and order `ord001`'s `order_details` subcollection (a `[]map[string]any` in `details.json`) lives at `orders/$records/ord001/order_details/details.json`. The rule is recursive: a sub-subcollection of a subcollection record resolves the same way, treating the subcollection instance as the parent. Because the parent record file (`ord001.yaml`) and the parent record's subcollection directory (`ord001/`) are siblings differing only by extension, `countRecords` already de-duplicates them so a record owning subcollections is not double-counted.
+
+### REQ: parent-record-optional
+
+A parent record MAY be absent while its subcollections hold records. This is how Firestore works: `ext/commitius/cmSessions/{id}` can exist although no document `ext/commitius` was ever written. A parent key MUST therefore be taken both from the parent's records and from the per-record directories that exist under the parent's records base path: a directory `<parent DirPath>/<parent records-base-path>/<name>/` that contains a directory `<subId>/` is the parent instance `<name>` of subcollection `<subId>`, whether or not a record file for `<name>` exists. The rule applies at every depth, so a record two missing parents below a root collection is validated. Which directories are parent instances is decided by [REQ: parent-dirs-one-rule](#req-parent-dirs-one-rule), and a directory that does not contain `<subId>/` MUST NOT create an instance (so no record-count finding is raised for it). A parent key found both ways is one instance, not two. A missing parent is not a record: it MUST NOT be counted in the parent collection's record count. If the parent's records cannot be read (a map- or list-of-records file that fails to parse), the directory-found instances MUST still be validated. Before this rule such records were never opened, so validation passed whatever they held (a database with invalid data below a missing parent therefore fails now, by design); an author had to write an empty `{}` parent record to get them validated, and that workaround keeps working.
+
+**Layout.** Discovery reads the location the definition gives an instance, `<parent DirPath>/<parent records-base-path>/<name>/<subId>/` ([REQ: subcollection-storage-convention](#req-subcollection-storage-convention)), for every `records_dir`: with `records_dir: .` (the Firestore-mirror layout) that is `<parent DirPath>/<name>/<subId>/`; under the default `$records` it is `<parent DirPath>/$records/<name>/<subId>/`; under a custom `records_dir: data` it is `<parent DirPath>/data/<name>/<subId>/`. Data in any other place is mislaid ([REQ: mislaid-subcollection-records-rejected](#req-mislaid-subcollection-records-rejected)).
+
+### REQ: parent-dirs-one-rule
+
+One exported rule, `ingitdb.ScanParentDirs`, MUST decide which directories are parent instances, for validation and for any reader that enumerates instances (the local storage driver's collection-group read), so a reader can never return a record that validation did not consider. The rule is applied to the directory the definition gives (`<parent DirPath>/<parent records-base-path>/`). The rule: hidden entries are not parents; the names inGitDB itself writes in a collection directory (`$records`, `$views`, `$ingitdb`, and the first path segment of the parent's own `records_dir`, so `data` for `records_dir: data/items`) are not parents, even under `records_dir: .` where a mirrored Firestore document could carry such an id (such a document's subcollections are not read: rename the id); every other name is a parent key, including other `$`-prefixed names, because Firestore allows document ids such as `$x`; names matched by the parent's `exclude_regex` are not parents; and an instance directory reached through a symbolic link is used only when it resolves inside the database root. One that resolves outside MUST NOT be read, also when the parent has a record file, and validation MUST report it as an error naming the link (as the collection-group read refuses it), so a pass that skipped records does not succeed. The parent directory MUST be read once per level, not once per subcollection.
+
+### REQ: mislaid-subcollection-records-rejected
+
+Every reader MUST follow the layout the definition gives ([REQ: subcollection-storage-convention](#req-subcollection-storage-convention)). When a parent's records-base-path is not empty (its `records_dir` is not `.`), an instance directory found at `<parent DirPath>/<key>/<subId>/` holding at least one non-hidden file is mislaid: that is the layout earlier storage-driver versions (dalgo2ingitdb, dalgo2ingitdb4local) wrote. Validation MUST NOT validate its records and MUST report one error finding per mislaid directory, with `CollectionID` the subcollection's full path, `RecordKey` the parent key, `FilePath` the found directory, and a message naming the found path, the number of files, the path the definition expects, and the two fixes: move the files there, or set `record_file.records_dir: "."` on the parent and move the parent's own records out of its records directory. This makes a database that kept such data and used to pass fail; that is intended (owner decision, 2026-11-14: the layout the definition defines is the right one, and a detectable other layout is an error with details).
 
 ### REQ: subcollection-records-schema-validated
 
@@ -138,6 +152,54 @@ Adding subcollection validation MUST NOT change the findings produced for root c
 **Given** `demo-ingitdb`, whose `orders/order_details` subcollection records satisfy their schema and foreign keys
 **When** it is loaded and validated through the real reader and validator
 **Then** no finding is reported whose `CollectionID` is `orders/order_details` — the newly-walked subcollection is clean, and the database's pre-existing root-level findings (unrelated `commerce.addresses` type errors) are unchanged
+
+### AC: parentless-subcollection-records-validated
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional
+
+**Given** a parent collection `ext` with no record file `ext/commitius.json`, and subcollection records `ext/commitius/sessions/s1.json` (`minutes: "thirty"` where `minutes` is an `int`) and `s2.json` (valid)
+**When** the database is validated
+**Then** one wrong-type finding is reported for `s1.json` under `ext/sessions`, the record counts for `ext/sessions` are 1 passed of 2, and `ext` counts 0 records
+
+### AC: parentless-nested-records-validated
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional
+
+**Given** `spaces/s1.json` exists but `spaces/s1/ext/commitius.json` does not, and `spaces/s1/ext/commitius/checkIns/c1.json` breaks its schema; and `spaces/s2/...` has no parent record at either level
+**When** the database is validated
+**Then** the finding for `c1.json` is reported under `spaces/ext/checkIns`, and both `checkIns` records are counted
+
+### AC: parentless-foreign-key-checked
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional, subcollection-record-validation#req:foreign-key-pass-reconciled
+
+**Given** a record below a missing parent whose `foreign_key` column holds a value with no target record
+**When** the database is validated
+**Then** a dangling foreign-key finding is reported for it
+
+### AC: parentless-discovery-ignores-other-entries
+
+**Requirements:** subcollection-record-validation#req:parent-record-optional
+
+**Given** a subcollection with `min_records_count: 1` and, under the parent's records base path, a hidden directory, `$records` and `$views` directories, a name matched by `exclude_regex`, a directory without the subcollection's directory, and a file named like the subcollection
+**When** the database is validated
+**Then** none of them is a parent instance: no finding is raised for them
+
+### AC: parent-dirs-one-rule
+
+**Requirements:** subcollection-record-validation#req:parent-dirs-one-rule
+
+**Given** below a parent with `records_dir: .`: a `$x` directory, a symbolic link to a directory inside the database, a symbolic link to a directory outside it, `$views`, `$records`, `$ingitdb`, the parent's own `records_dir`, a hidden directory and a name matched by `exclude_regex`, each holding the subcollection
+**When** the database is validated, and `ingitdb.ScanParentDirs` is asked for the parent keys
+**Then** `$x` and the inside link are parent instances and their records are validated; the outside link is not read and is reported as one error naming the link; the other names are not parents
+
+### AC: mislaid-subcollection-records-rejected
+
+**Requirements:** subcollection-record-validation#req:mislaid-subcollection-records-rejected
+
+**Given** `spaces` with the default `records_dir` and records of its `notes` subcollection both at `spaces/$records/s1/notes/` and, as earlier storage drivers wrote them, at `spaces/family/notes/` (two files)
+**When** the database is validated
+**Then** the `$records` record is validated, and one error for `spaces/notes`, parent key `family`, says that 2 files at `spaces/family/notes/` belong at `spaces/$records/family/notes/` and how to fix it
 
 ## Not Doing (and Why)
 

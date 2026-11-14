@@ -12,7 +12,7 @@ import (
 
 type nilDataRecord struct{}
 
-func (nilDataRecord) GetID() string            { return "nil-rec" }
+func (nilDataRecord) GetID() string           { return "nil-rec" }
 func (nilDataRecord) GetData() map[string]any { return nil }
 
 type outcomeWriter struct {

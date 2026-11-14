@@ -73,7 +73,7 @@ A column MAY declare `enum` as a non-empty list of permitted values. A record va
 
 #### REQ: list-column-type
 
-The column type grammar MUST support lists, spelled `[]<element-type>` where `<element-type>` is exactly one of `string`, `int`, `float`, `bool`, `date`, `time`, `datetime`, or `any`. `map[...]` and nested list element types are out of scope. A value that is not a list, or whose elements do not all match `<element-type>`, MUST produce a validation error; `[]any` accepts any element but still requires the value to be a list. `min_length`/`max_length` on a list column constrain element count per `length-constraints-enforced`, which is what makes "at least one entry" expressible.
+The column type grammar MUST support lists, spelled `[]<element-type>` where `<element-type>` is exactly one of `string`, `int`, `float`, `bool`, `date`, `time`, `datetime`, or `any`. `map[...]` and nested list element types are out of scope: a list of objects is written `type: "[]any"` with `items: {type: map[string]any, columns: …}`, which checks every element. A value that is not a list, or whose elements do not all match `<element-type>`, MUST produce a validation error; `[]any` accepts any element but still requires the value to be a list. `min_length`/`max_length` on a list column constrain element count per `length-constraints-enforced`, which is what makes "at least one entry" expressible.
 
 `[]string` is already declared in the wild (`geo-ingitdb/.../provinces.yaml:10`) and currently validates nothing, so this REQ retrofits enforcement onto existing data. That data MUST be verified against the new rule as part of this Feature.
 
@@ -118,6 +118,42 @@ Supplying the predicate is a deliberate behaviour change to `Formula`: an undecl
 An expression evaluating to anything other than Starlark `True`/`False` MUST produce a validation error rather than a silent truthiness coercion — `starlarkToGo` (`column_formula_eval.go:139-158`) can return `bool`, `string`, `int64` or `float64`, so `required_when: 'name'` is an error, not "required when name is non-empty".
 
 When `required_when` is present, `required` MUST NOT also be set on the same column — declaring both is a definition-load error.
+
+#### REQ: record-key-type-checked
+
+A record key is always text: a file name, a key of a map-of-records file, or a `$ID` cell. When a collection declares the `$ID` column with type `int`, `float`, `bool`, `date`, `time` or `datetime`, and the record's `$ID` value is a string, the key MUST be parsed as that type instead of being compared by its Go type. The accepted text forms are: `int` a base-10 integer in canonical form (`42`, `-7`, `0`; not `+5` or `007`, so two files cannot hold one value); `float` a finite decimal number in shortest form (`4.2`, `1000`, `-2.25`; not `1.50`, `1e3`, `1e+06`, `1_000`, `+1`, `.5`, `-0`, `NaN`, `Inf` or hex, so two files cannot hold one value); `bool` exactly `true` or `false`; `date` `YYYY-MM-DD` (a real calendar date, so `2026-02-30` fails); `time` `H:MM` or `H:MM:SS` with an hour of one or two digits (`7:30`, `07:30:15`, `7:30:00`), with optional fractional seconds; `datetime` `YYYY-MM-DDTHH:MM:SS` with optional fractional seconds and an optional zone (RFC 3339 `2026-11-18T07:30:00Z`, or `2026-11-24T10:00:00`). A key that does not parse MUST produce a wrong-type finding on `$ID` naming the key and the expected form. This can make a database that passed before fail, but only when it holds a key that is not a valid value of the type its own definition declares for `$ID`; no known database declares a non-string `$ID`.
+
+**Key vs column strictness.** This parse applies to the record key only. An ordinary `date`, `time` or `datetime` column keeps its existing check (any text is accepted), so `2026-02-30` passes in a `date` column and fails as a `date` key. Tightening columns would newly reject stored values, so it is offered as an opt-in instead: [REQ: strict-temporal-opt-in](#req-strict-temporal-opt-in).
+
+#### REQ: strict-temporal-opt-in
+
+`datavalidator.StrictTemporalFindings(root, definition)` MUST report every text value of a top-level `date`, `time` or `datetime` column, in root and subcollection records, that the `$ID` key parser rejects, naming the file, record, field, value and expected form. It MUST NOT run as part of `Validate`, whose result for such columns is unchanged. A key that parses MUST be passed on, parsed, to the `enum` and `min_value`/`max_value` checks, so an `int` key is compared as a number.
+
+This applies to `$ID` only. Ordinary `date`, `time` and `datetime` columns keep accepting any string (their format is not checked); checking them is a separate, possibly breaking change. A `$ID` value that is not a string (a list-of-records row storing `"$ID": 5`) keeps the plain value type check. Before this rule, a `date` key accepted any text, and an `int`, `float` or `bool` key always failed for per-file records (the key text is a string), so the only records whose outcome changes are those whose key is not a valid value of the declared key type.
+
+#### REQ: subcollection-foreign-key
+
+A `foreign_key` MAY name a subcollection. It is then written as a path like a Firestore document path without the final id, alternating collection ids and parent keys and ending with a collection id: `ext/commitius/cmSessions`. The first segment resolves module-relative, exactly as a root `foreign_key`; each further collection segment MUST be a declared subcollection of the one before. A parent-key segment is one of:
+
+- a literal key (`commitius`): that parent record;
+- `$same`: the key the referring record itself has at that level. It is allowed only while the path follows the referring collection's own schema path (the referring collection included), so `spaces/$same/ext/$same/financialAgreements` from `spaces/ext/financialAgreementGrants` means "an agreement of the same space and extension";
+- `{field}`: the referring record's value of `field`, which MUST be a declared, stored (not `formula`) column of the referring collection (`spaces/{spaceID}/ext/calendarius/happenings`). `{$ID}` MUST be rejected at load in favour of `$same`.
+
+A literal parent key, and the value a `{field}` gives, MUST be a plain record key: non-empty, not `.` or `..`, without `/` or `\`, so a path can never reach outside its parent's directory. A `{field}` value that is a number is used as written (`1000000`, not `1e+06`); a list or map value, or a value that is not a plain key, MUST produce a finding naming the field.
+
+A malformed path (an even number of segments, an empty segment, a literal key that is not a plain record key), an unknown root or subcollection, a `$same` off the referring path, or an undeclared, computed or `$ID` `{field}` MUST be a definition-load error. Record validation MUST check each value (list values element by element, as for a root `foreign_key`) against the record keys of the one target instance the path gives for that record; a missing key MUST produce a finding naming the field, the value and the concrete instance path (`ext/commitius/cmSessions`). When a `{field}` parent key is empty, a value present in the column MUST produce a finding naming that field. The target instance's parent records need not exist (subcollection-record-validation#req:parent-record-optional).
+
+This is additive: a `foreign_key` value that resolves as a root collection keeps its meaning, and a path is tried only for a value containing `/`, which no root collection id resolved before (such a value was a load error). Readers that only know root targets MUST skip a path instead of failing: the `$fk` view builder builds no view for it (`ingitdb.IsForeignKeyPath`), and dalgo2ingitdb's write-time foreign-key check leaves it to validation.
+
+#### REQ: nested-column-shape
+
+A column MAY declare the shape of a structured value with the same column definition, recursively: `columns` (the fields of a nested object; on `any` or a map type other than `map[locale]string`), `values` (every value of a map type), and `items` (every element of a list type). Declaring one on any other type MUST be a definition-load error, and so MUST a `values` or `items` type that contradicts the declared value or element type (`map[string]int` with `values: {type: string}`). The two types are compared as written, so they must be the same type name: `map[string]float` with `values: {type: int}` is rejected although every int is a valid float. A nested definition supports `type`, `required`, `enum`, `length`/`min_length`/`max_length`, `min_value`/`max_value` and its own `columns`/`values`/`items`; `formula`, `required_when`, `foreign_key` and `locale` MUST be rejected at load when nested.
+
+Record validation MUST check each nested value with the same type, enum, length and range checks and messages as a top-level column, and report it under its path: `slots.sl1.durationInMinutes`, `members[2].role`. Inside an object with `columns`, a missing `required` field MUST be reported, and a key the object holds but `columns` does not declare MUST be an undeclared-field finding, `undeclared field "<path>": no nested column of that name in the definition of "<parent path>"` (keys starting with `$` excepted, as at the top level). On a `type: any` column, `columns` applies only when the value is an object: a list or a scalar in that column gets no shape finding (declare `items` on a list type instead). A `null` nested value is treated as absent. A value whose own type check fails is not descended into.
+
+This is additive: a column that declares none of `columns`, `values`, `items` is checked exactly as before (the content of its maps and lists is not checked, and the value type in `map[K]V` stays unchecked).
+
+**Rollout order.** Definitions are decoded strictly, so a reader built before this feature fails to open the whole database when any definition uses `columns`, `values` or `items` (`field values not found in type ingitdb.ColumnDef`), and an older `validate` or dalgo2ingitdb write rejects a path `foreign_key` ([REQ: subcollection-foreign-key](#req-subcollection-foreign-key)). This cannot be detected or hinted at retroactively: a `min_ingitdb_version` setting would itself be an unknown field to those readers. So every consumer of a database (the CLI, dalgo2ingitdb, dalgo2ingitdb4local, dalgo2ingitdb4github, DataTug, and backends that embed ingitdb-go) MUST be on an ingitdb-go release that has these features before any of its definitions uses them. The release note says the same.
 
 ### Failing loudly instead of silently
 
@@ -469,6 +505,86 @@ Verification of record: 337 definition files audited across every layout (`.coll
 **Given** a collection definition with column `state` of type `strng`
 **When** the definition is loaded
 **Then** loading fails with an error naming the unrecognised type `strng` and listing the recognised types
+
+### AC: typed-record-key-checked
+
+**Requirements:** column-validation#req:record-key-type-checked
+
+**Given** a collection whose `$ID` column is `type: date`, holding per-file records `2026-11-24.json` and `notadate.json`
+**When** the database is validated
+**Then** `2026-11-24` passes and `notadate` fails with a wrong-type finding on `$ID` naming the key and `YYYY-MM-DD`; with `$ID` typed `int` and `max_value: 10`, key `3` passes and key `11` fails the range check
+
+### AC: subcollection-foreign-key-literal-parent
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** `spaces/ext/checkIns` declaring `sessionID` with `foreign_key: ext/commitius/sessions`, and records holding `sess1` (exists), `ghost`, and `[sess1, ghost2, [nested]]`
+**When** the database is validated
+**Then** `ghost` and `ghost2` are reported as missing in `ext/commitius/sessions`, the nested element as not a scalar, and `sess1`, `null` and `""` produce nothing
+
+### AC: subcollection-foreign-key-same-parent
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** grants in spaces `s1` and `s2` declaring `foreign_key: spaces/$same/ext/$same/agreements`, and agreement `a1` only in `s1`
+**When** both grants reference `a1`
+**Then** only the grant in `s2` is reported, naming `spaces/s2/ext/calendarius/agreements`
+
+### AC: subcollection-foreign-key-parent-from-field
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** root `bookings` declaring `agreementID` with `foreign_key: spaces/{spaceID}/ext/calendarius/agreements`
+**When** bookings reference `a1` with `spaceID` `s1`, with `spaceID` `s2`, and with no `spaceID`
+**Then** the second is reported as missing in `spaces/s2/ext/calendarius/agreements` and the third as having an empty `spaceID`
+
+### AC: subcollection-foreign-key-checked-at-load
+
+**Requirements:** column-validation#req:subcollection-foreign-key
+
+**Given** a path `foreign_key` with an even number of segments, an empty segment, an unknown root, an unknown subcollection, a `$same` off the referring path, or an undeclared `{field}`
+**When** the definition is loaded with validation
+**Then** loading fails naming the problem; so do a literal parent key `..`, `{$ID}`, and a `{field}` naming a computed column, and a `{field}` value `../../evil` (or a list) is a finding instead of a lookup outside the database
+
+### AC: nested-shape-declared
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** `slots: {type: map[string]any, values: {type: map[string]any, columns: {durationInMinutes: {type: int, required: true}, weekdays: {type: "[]string", items: {type: string, enum: [mo, ...]}}}}}` in a `definition.yaml`
+**When** a record holds `slots: {sl1: {durationInMinutes: "x", weekdays: [mo, xx]}}`
+**Then** findings are reported on `slots.sl1.durationInMinutes` and `slots.sl1.weekdays[1]`
+
+### AC: nested-values-validated
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** nested definitions with `required`, `enum`, `min_value`, `max_length`, `min_length` and `columns`
+**When** values break each of them, or hold an undeclared nested key
+**Then** each is reported under its path with the message a top-level column would give
+
+### AC: nested-shape-rejected-where-meaningless
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** `columns` on a `string` or `map[locale]string`, `values` on a list, `items` on a map, or a nested `formula`, `required_when`, `foreign_key` or `locale`
+**When** the definition is loaded
+**Then** loading fails naming the problem
+
+### AC: undeclared-shape-unchanged
+
+**Requirements:** column-validation#req:nested-column-shape
+
+**Given** map and list columns without `columns`, `values` or `items`
+**When** a record holds structured content that does not match anything
+**Then** no finding is reported, as before
+
+### AC: strict-temporal-opt-in
+
+**Requirements:** column-validation#req:strict-temporal-opt-in
+
+**Given** a `date` column holding `2026-02-30` in a root record and a `time` column holding `25:00` in a subcollection record
+**When** the database is validated, and `StrictTemporalFindings` is run
+**Then** validation reports neither value, and `StrictTemporalFindings` reports both with the expected form
 
 ## Not Doing (and Why)
 

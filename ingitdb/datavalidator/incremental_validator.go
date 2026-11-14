@@ -4,6 +4,7 @@ package datavalidator
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -69,6 +70,7 @@ func (iv *incrementalValidator) ValidateChanges(
 			c.passed += passed
 			c.total += total
 			appendErrors(result, errs)
+			appendErrors(result, changedFileCaseFindings(dbPath, ar.CollectionID, colDef, ar.FilePath))
 		case ingitdb.MapOfRecords, ingitdb.ListOfRecords:
 			if wholeFileDone[ar.CollectionID] {
 				continue
@@ -86,6 +88,21 @@ func (iv *incrementalValidator) ValidateChanges(
 		result.SetRecordCount(collectionID, c.total)
 	}
 	return result, nil
+}
+
+// changedFileCaseFindings reports a changed record file of a collection that
+// declares a key encoding when its name, or a directory on its path, differs
+// from an existing entry only in letter case.
+func changedFileCaseFindings(dbPath, collectionID string, colDef *ingitdb.CollectionDef, filePath string) []ingitdb.ValidationError {
+	if !colDef.RecordFile.EncodesKeys() {
+		return nil
+	}
+	existing, found := ingitdb.PathDifferingInCase(dbPath, filePath)
+	if !found {
+		return nil
+	}
+	message := fmt.Sprintf("%s and %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one entry; give the records keys that differ in more than case", filePath, existing)
+	return []ingitdb.ValidationError{newValidationError(collectionID, filePath, "", "", message, nil)}
 }
 
 // validateWholeRecordFile validates every record in a collection's shared
