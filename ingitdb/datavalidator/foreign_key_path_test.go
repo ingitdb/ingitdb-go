@@ -80,6 +80,11 @@ func TestForeignKeyReferences_SubcollectionPaths(t *testing.T) {
 	slices.Sort(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("findings:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}	// Every path foreign-key finding names the record file it is about.
+	for _, e := range res.Errors() {
+		if filepath.Base(e.FilePath) != "data.yaml" || !strings.HasPrefix(e.FilePath, dir) {
+			t.Errorf("finding %q has FilePath %q, want the record file", e.Message, e.FilePath)
+		}
 	}
 }
 

@@ -187,7 +187,7 @@ func checkPathForeignKey(
 	var errors []ingitdb.ValidationError
 	for _, badElem := range elementErrs {
 		message := fmt.Sprintf("foreign key %q has a list element that is not a scalar (%s): foreign key element must be a scalar", name, badElem)
-		errors = append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
+		errors = append(errors, newValidationError(fullID, r.FilePath, r.Key, name, message, nil))
 	}
 	if len(values) == 0 {
 		return errors
@@ -203,7 +203,7 @@ func checkPathForeignKey(
 			key, problem := parentKeyFromField(r.Data[step.Field])
 			if problem != "" {
 				message := fmt.Sprintf("foreign key %q = %q: field %q, which gives the parent key in %q, %s", name, values[0], step.Field, path.String(), problem)
-				return append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
+				return append(errors, newValidationError(fullID, r.FilePath, r.Key, name, message, nil))
 			}
 			parentKey = key
 		}
@@ -216,7 +216,7 @@ func checkPathForeignKey(
 	for _, value := range values {
 		if !keys[value] {
 			message := fmt.Sprintf("foreign key %q = %q has no matching record in collection %q", name, value, strings.Join(instancePath, "/"))
-			errors = append(errors, newValidationError(fullID, "", r.Key, name, message, nil))
+			errors = append(errors, newValidationError(fullID, r.FilePath, r.Key, name, message, nil))
 		}
 	}
 	return errors
