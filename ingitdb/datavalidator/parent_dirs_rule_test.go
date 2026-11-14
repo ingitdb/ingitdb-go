@@ -87,12 +87,19 @@ func TestValidate_ParentDirsOneRule(t *testing.T) {
 			t.Errorf("expected a finding for %s, got:\n%s", want, errs)
 		}
 	}
-	if len(res.Errors()) != 2 {
-		t.Errorf("expected exactly 2 findings ($x and inlink), got:\n%s", errs)
+	if len(res.Errors()) != 3 {
+		t.Errorf("expected exactly 3 findings ($x, inlink and the outside link), got:\n%s", errs)
 	}
-	warnings := res.Warnings()
-	if len(warnings) != 1 || !strings.Contains(warnings[0].Message, "spaces/outlink/notes resolves outside the database through a symbolic link") {
-		t.Fatalf("expected one outside-link warning, got %+v", warnings)
+	// An error, as select --group refuses such a link: a pass that skipped
+	// records must not exit 0.
+	var outsideErrs []ingitdb.ValidationError
+	for _, e := range res.Errors() {
+		if strings.Contains(e.Message, "spaces/outlink/notes resolves outside the database through a symbolic link") {
+			outsideErrs = append(outsideErrs, e)
+		}
+	}
+	if len(outsideErrs) != 1 || len(res.Warnings()) != 0 {
+		t.Fatalf("expected one outside-link error and no warning, got %+v / %+v", outsideErrs, res.Warnings())
 	}
 	if passed, total := res.GetRecordCounts("spaces/notes"); passed != 1 || total != 3 {
 		t.Errorf("spaces/notes counts = %d/%d, want 1/3", passed, total)
@@ -122,11 +129,17 @@ func TestValidate_OutsideLinkWithParentRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	errs := res.Errors()
-	if len(errs) != 1 || !strings.HasSuffix(filepath.ToSlash(errs[0].FilePath), "spaces/s2/notes/r.yaml") {
-		t.Fatalf("expected one finding for s2, got:\n%s", findingTexts(errs))
+	var s2, outsideLink int
+	for _, e := range errs {
+		if strings.HasSuffix(filepath.ToSlash(e.FilePath), "spaces/s2/notes/r.yaml") {
+			s2++
+		}
+		if strings.Contains(e.Message, "spaces/s1/notes resolves outside the database") {
+			outsideLink++
+		}
 	}
-	if w := res.Warnings(); len(w) != 1 || !strings.Contains(w[0].Message, "spaces/s1/notes resolves outside the database") {
-		t.Fatalf("expected the outside-link warning, got %+v", w)
+	if len(errs) != 2 || s2 != 1 || outsideLink != 1 {
+		t.Fatalf("expected a finding for s2 and the outside-link error, got:\n%s", findingTexts(errs))
 	}
 	if passed, total := res.GetRecordCounts("spaces/notes"); passed != 0 || total != 1 {
 		t.Errorf("spaces/notes counts = %d/%d, want 0/1", passed, total)

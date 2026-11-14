@@ -7,6 +7,7 @@ package datavalidator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -191,8 +192,7 @@ func validateSingleRecordFile(collectionKey string, colDef *ingitdb.CollectionDe
 	}
 	recordKey, nameErr := decodedRecordKey(colDef, filePath)
 	if nameErr != nil {
-		return 0, 1, []ingitdb.ValidationError{newValidationError(collectionKey, filePath, recordKey, "",
-			"the file name is not one the collection's key_encoding writes, so it names no record: rename the file ("+nameErr.Error()+")", nameErr)}
+		return 0, 1, []ingitdb.ValidationError{newValidationError(collectionKey, filePath, recordKey, "", fileNameFinding(nameErr), nil)}
 	}
 	recordErrors := validateRecordData(collectionKey, filePath, recordKey, colDef, data)
 	if len(recordErrors) > 0 {
@@ -242,6 +242,16 @@ func decodedRecordKey(colDef *ingitdb.CollectionDef, filePath string) (string, e
 		return key, err
 	}
 	return key, nil
+}
+
+// fileNameFinding is the message of a record file whose name names no record:
+// one the key encoding never writes, or one over the file-name length limit.
+// The reason is said once (the finding carries no separate error).
+func fileNameFinding(err error) string {
+	if errors.Is(err, ingitdb.ErrKeyNotStorable) {
+		return "the file name is too long to be stored on every file system: " + err.Error()
+	}
+	return "the file name is not one the collection's key_encoding writes, so it names no record; rename the file: " + err.Error()
 }
 
 // recordKeyFromCollectionFilePath is decodedRecordKey without the error.

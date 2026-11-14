@@ -199,6 +199,8 @@ func (rfd RecordFileDef) GetRecordFileName(record dalrecord.Record) (string, err
 			s, _ = rfd.EncodeKey(s) // CheckKeyFits encoded it
 		} else if err := checkFileNameSegment("key", s); err != nil {
 			return "", err
+		} else if err := rfd.CheckKeyFits(s); err != nil {
+			return "", err
 		}
 		name = strings.Replace(name, "{key}", s, 1)
 	}

@@ -214,14 +214,22 @@ func TestKeyEncoding_LengthLimit(t *testing.T) {
 	if err := rf.CheckKeyFits(""); !errors.Is(err, ErrKeyNotStorable) {
 		t.Errorf("empty key: %v", err)
 	}
-	// Not checked without an encoding, or without one record per file.
+	// Without an encoding the key is measured as it is: the same rule, so a
+	// per-file collection never meets a bare "file name too long".
 	none := RecordFileDef{Name: "{key}.yaml"}
-	if err := none.CheckKeyFits(long + long + long); err != nil {
-		t.Errorf("no encoding: %v", err)
+	if err := none.CheckKeyFits(long + long + long); !errors.Is(err, ErrKeyNotStorable) || strings.Contains(err.Error(), "key_encoding") {
+		t.Errorf("no encoding, over-long: %v", err)
 	}
-	if name, err := none.KeyDirName(long + long + long); err != nil || name != long+long+long {
-		t.Errorf("no encoding KeyDirName: %v", err)
+	if err := none.CheckKeyFits(long); err != nil { // 86 bytes as it is
+		t.Errorf("no encoding, fits as it is: %v", err)
 	}
+	if _, err := none.KeyDirName(long + long + long); !errors.Is(err, ErrKeyNotStorable) {
+		t.Errorf("no encoding KeyDirName over-long: %v", err)
+	}
+	if name, err := none.KeyDirName("a b"); err != nil || name != "a b" {
+		t.Errorf("no encoding KeyDirName: %q, %v", name, err)
+	}
+	// Not checked without one record per file.
 	shared := RecordFileDef{Name: "all.yaml", KeyEncoding: KeyEncodingTildeV1}
 	if err := shared.CheckKeyFits(long); err != nil {
 		t.Errorf("one file: %v", err)
@@ -246,6 +254,11 @@ func TestGetRecordFileName_KeyEncoding(t *testing.T) {
 	// Without an encoding a separator is still refused.
 	if _, err := (RecordFileDef{Name: "{key}.yaml"}).GetRecordFileName(rec); err == nil {
 		t.Error("separator accepted without an encoding")
+	}
+	// ...and a key whose file name is over 255 bytes fails with the remedy.
+	plainLong := dalrecord.NewRecordWithData(dalrecord.NewKeyWithID("c", strings.Repeat("k", 251)), map[string]any{})
+	if _, err := (RecordFileDef{Name: "{key}.yaml"}).GetRecordFileName(plainLong); !errors.Is(err, ErrKeyNotStorable) {
+		t.Errorf("over-long without an encoding: %v", err)
 	}
 }
 

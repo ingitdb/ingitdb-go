@@ -156,3 +156,22 @@ func TestChangedFileCaseFindings(t *testing.T) {
 		t.Errorf("no encoding: %+v", got)
 	}
 }
+
+// A name finding says its reason once, and a file name over the length limit
+// is named as such (with or without a key encoding).
+func TestFileNameFinding(t *testing.T) {
+	t.Parallel()
+	_, err := ingitdb.DecodeRecordKey(ingitdb.KeyEncodingTildeV1, "bad~2f")
+	msg := fileNameFinding(err)
+	if strings.Count(msg, "is not a tilde-v1 name") != 1 || !strings.Contains(msg, "rename the file") {
+		t.Errorf("invalid name: %s", msg)
+	}
+	long := (ingitdb.RecordFileDef{Name: "{key}.yaml"}).CheckKeyFits(strings.Repeat("k", 300))
+	if msg := fileNameFinding(long); !strings.HasPrefix(msg, "the file name is too long") || !strings.Contains(msg, "record_file.type") {
+		t.Errorf("over-long: %s", msg)
+	}
+	v := newValidationError("c", "c/x", "x", "", fileNameFinding(long), nil)
+	if strings.Count(v.Error(), ingitdb.ErrKeyNotStorable.Error()) != 1 {
+		t.Errorf("reason repeated: %s", v.Error())
+	}
+}

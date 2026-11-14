@@ -94,14 +94,19 @@ So a name is pure ASCII. It is never hidden, never `.` or `..`, never ends in a 
 
 ### REQ: over-long-key-fails
 
-A collection that keeps one record per file (a `{key}` in `record_file.name`) and declares `key_encoding` stores a key only if every path segment the encoded key produces fits 255 bytes. That is the file name with its extension, and the record's subcollection directory. Every `{key}` of `record_file.name` is substituted, as the drivers do. Other placeholders are not measured.
+A collection that keeps one record per file (a `{key}` in `record_file.name`) stores a key only if every path segment the key produces fits 255 bytes: the encoded key when the collection declares `key_encoding`, the key as it is otherwise. This applies to every such collection, with or without `key_encoding`. That is the file name with its extension, and the record's subcollection directory. Every `{key}` of `record_file.name` is substituted, as the drivers do. Other placeholders are not measured.
 
 A longer key is never hashed or truncated:
 
 - A writer MUST fail with `ingitdb.ErrKeyNotStorable`. The error names the length and the remedy: keep the collection's records in one shared file, `record_file.type: map[$record_id]map[$field_name]any`.
 - Validation reports any longer name it finds as an error.
+- The GitHub driver applies the same check before it commits, so it never writes a tree that no checkout can hold.
 
-A collection without `key_encoding` is not checked, so the file system decides, as before.
+Compatibility: for a collection without `key_encoding` this adds an error only where a write already failed (every common file system refuses a name over 255 bytes, so a local write used to fail with a bare "file name too long") or where the GitHub driver committed a name that no local checkout can create. No write that works today changes.
+
+### REQ: hidden-files-skipped
+
+In a collection that declares `key_encoding`, no key encodes to a name starting with `.`. A reader listing the collection's records MUST skip such a file (an editor lock, a macOS `._` file) instead of failing the whole read. Validation MUST still report it as a name the encoding never writes.
 
 ### Rollout
 
@@ -161,7 +166,7 @@ URL percent-encoding was considered. It needs the same extensions for edge dots,
 
 **Given** a `tilde-v1` collection with `name: "{key}.yaml"` and a key whose encoded file name is 263 bytes
 **When** the record file name is computed, or a found name of that length is validated
-**Then** it fails with `ErrKeyNotStorable` naming 263 bytes, the 255-byte limit and the shared-file remedy; a 255-byte name, a collection without an encoding, and a shared-file collection are not affected
+**Then** it fails with `ErrKeyNotStorable` naming 263 bytes, the 255-byte limit and the shared-file remedy; a 255-byte name and a shared-file collection are not affected; a collection without an encoding fails the same way for a key over 250 bytes (`{key}.yaml` as it is)
 
 ## Open Questions
 

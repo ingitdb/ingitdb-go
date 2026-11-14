@@ -201,12 +201,11 @@ func validateSubCollections(root string, def *ingitdb.Definition, result *ingitd
 			fmt.Sprintf("parent directories %s in %s differ only in letter case: on a case-insensitive file system (Windows, macOS by default) they are one directory and the %s records of all but one parent are mixed; give the parents keys that differ in more than case",
 				strings.Join(names, ", "), parentDir, lastSegment(subFullID)), nil))
 	}, onOutside: func(subFullID, parentDir, key string) {
-		result.AddWarning(ingitdb.ValidationError{
-			CollectionID: subFullID,
-			FilePath:     filepath.Join(parentDir, key),
-			Message: fmt.Sprintf("%s: %s/%s resolves outside the database through a symbolic link; its records are not read or validated",
-				subFullID, relToRoot(root, filepath.Join(parentDir, key)), lastSegment(subFullID)),
-		})
+		// An error, not a warning: select --group refuses such a link, and a
+		// pass that skipped records must not exit 0.
+		result.Append(newValidationError(subFullID, filepath.Join(parentDir, key), "", "",
+			fmt.Sprintf("%s: %s/%s resolves outside the database through a symbolic link; its records are not read or validated: replace the link with the directory, or move the data inside the database",
+				subFullID, relToRoot(root, filepath.Join(parentDir, key)), lastSegment(subFullID)), nil))
 	}}
 	passedByID := make(map[string]int)
 	totalByID := make(map[string]int)
@@ -218,7 +217,7 @@ func validateSubCollections(root string, def *ingitdb.Definition, result *ingitd
 				// A parent record file with such a name is reported by the
 				// parent's own pass; this is the directory.
 				result.Append(newValidationError(inst.fullID, inst.colDef.DirPath, inst.parentKey, "",
-					"the parent directory name is not one the parent collection's key_encoding writes, so it names no parent record: rename the directory ("+inst.nameErr.Error()+")", inst.nameErr))
+					"the parent directory name is not one the parent collection's key_encoding writes, so it names no parent record; rename the directory: "+inst.nameErr.Error(), nil))
 			}
 			passed, total, errs := validateCollectionRecords(inst.fullID, inst.colDef)
 			for _, validationErr := range errs {

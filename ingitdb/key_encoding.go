@@ -171,13 +171,14 @@ func (rfd RecordFileDef) DecodeKey(name string) (string, error) {
 }
 
 // CheckKeyFits fails with ErrKeyNotStorable, and the remedy, when the record
-// file declares a key encoding, keeps one record per file (a {key} name), and
-// a path segment record_file.name makes from the encoded key is longer than
-// MaxFileNameBytes. Keys are never hashed or truncated: such a key needs a
-// collection that keeps its records in one file. A record file that declares
-// no key encoding is not checked (the file system decides, as before).
+// file keeps one record per file (a {key} name) and a path segment
+// record_file.name makes from the key (encoded when the record file declares
+// a key encoding, as it is otherwise) is longer than MaxFileNameBytes. Keys
+// are never hashed or truncated: such a key needs a collection that keeps its
+// records in one file. Without an encoding this only names the cause and the
+// remedy where the file system would refuse the name anyway.
 func (rfd RecordFileDef) CheckKeyFits(key string) error {
-	if !rfd.EncodesKeys() || !strings.Contains(rfd.Name, "{key}") {
+	if !strings.Contains(rfd.Name, "{key}") {
 		return nil
 	}
 	name, err := rfd.EncodeKey(key)
@@ -189,26 +190,35 @@ func (rfd RecordFileDef) CheckKeyFits(key string) error {
 	// placeholders ({field}) are not part of the key and are not measured.
 	for _, segment := range strings.Split(strings.ReplaceAll(rfd.Name, "{key}", name), "/") {
 		if len(segment) > MaxFileNameBytes {
-			return fmt.Errorf("%w: with key_encoding %s the key %.40q... (%d bytes) makes the file name %.40q... %d bytes long, over the %d-byte limit of a file name; keys are never shortened: keep this collection's records in one file (record_file.type %q) instead of one file per record",
-				ErrKeyNotStorable, rfd.KeyEncoding, key, len(key), segment, len(segment), MaxFileNameBytes, MapOfRecords)
+			return fmt.Errorf("%w: %sthe key %.40q... (%d bytes) makes the file name %.40q... %d bytes long, over the %d-byte limit of a file name; keys are never shortened: keep this collection's records in one file (record_file.type %q) instead of one file per record",
+				ErrKeyNotStorable, rfd.encodingClause(), key, len(key), segment, len(segment), MaxFileNameBytes, MapOfRecords)
 		}
 	}
 	return nil
 }
 
 // KeyDirName returns the name of the directory that holds the subcollection
-// instances of the record of key: the encoded key. With a declared key
-// encoding a name longer than MaxFileNameBytes fails with ErrKeyNotStorable.
+// instances of the record of key: the encoded key, or the key as it is
+// without an encoding. A name longer than MaxFileNameBytes fails with
+// ErrKeyNotStorable.
 func (rfd RecordFileDef) KeyDirName(key string) (string, error) {
 	name, err := rfd.EncodeKey(key)
 	if err != nil {
 		return "", err
 	}
-	if rfd.EncodesKeys() && len(name) > MaxFileNameBytes {
-		return "", fmt.Errorf("%w: with key_encoding %s the key %.40q... (%d bytes) makes a directory name %d bytes long, over the %d-byte limit, so its subcollections cannot be stored; keys are never shortened",
-			ErrKeyNotStorable, rfd.KeyEncoding, key, len(key), len(name), MaxFileNameBytes)
+	if len(name) > MaxFileNameBytes {
+		return "", fmt.Errorf("%w: %sthe key %.40q... (%d bytes) makes a directory name %d bytes long, over the %d-byte limit, so its subcollections cannot be stored; keys are never shortened",
+			ErrKeyNotStorable, rfd.encodingClause(), key, len(key), len(name), MaxFileNameBytes)
 	}
 	return name, nil
+}
+
+// encodingClause starts a length error with the key encoding, if any.
+func (rfd RecordFileDef) encodingClause() string {
+	if rfd.EncodesKeys() {
+		return "with key_encoding " + rfd.KeyEncoding + " "
+	}
+	return ""
 }
 
 func (rfd RecordFileDef) validateKeyEncoding() error {
