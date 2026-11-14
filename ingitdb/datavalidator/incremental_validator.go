@@ -28,6 +28,16 @@ type incrementalValidator struct {
 	resolver ChangeSetResolver
 	full     DataValidator
 	readDir  func(string) ([]os.DirEntry, error)
+	// paths makes the call's pathResolver (newPathResolver when nil); tests
+	// count its reads through it.
+	paths func(*ingitdb.Definition) *pathResolver
+}
+
+func (iv *incrementalValidator) pathResolver(def *ingitdb.Definition) *pathResolver {
+	if iv.paths != nil {
+		return iv.paths(def)
+	}
+	return newPathResolver(def)
 }
 
 func (iv *incrementalValidator) ValidateChanges(
@@ -47,8 +57,13 @@ func (iv *incrementalValidator) ValidateChanges(
 		return iv.full.Validate(ctx, dbPath, def)
 	}
 
-	affected, err := iv.resolver.Resolve(dbPath, def, changed)
-	if err != nil {
+	// One pathResolver serves the whole call, so each parent collection is
+	// read once however many changed paths lie below it.
+	paths := iv.pathResolver(def)
+	var affected []AffectedRecord
+	if r, ok := iv.resolver.(changeSetResolver); ok {
+		affected = r.resolveWith(paths, dbPath, changed)
+	} else if affected, err = iv.resolver.Resolve(dbPath, def, changed); err != nil {
 		return nil, err
 	}
 
@@ -97,7 +112,6 @@ func (iv *incrementalValidator) ValidateChanges(
 	// every entry there does in the full pass: a file that is no record (a
 	// bob.YAML next to Bob.yaml), a deleted file, or a rename's old name that
 	// leaves two names of one file behind.
-	paths := newPathResolver(def)
 	for _, cf := range changed {
 		for _, p := range []string{cf.Path, cf.OldPath} {
 			if p == "" {

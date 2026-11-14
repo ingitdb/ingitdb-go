@@ -128,7 +128,7 @@ func shouldSkipRecordParsing(colDef *ingitdb.CollectionDef) bool {
 }
 
 func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionDef) (int, int, []ingitdb.ValidationError) {
-	matches, err := recordFiles(colDef)
+	matches, unreadable, err := recordFiles(colDef)
 	if err != nil {
 		pattern := filepath.Join(recordsBaseDir(colDef), strings.ReplaceAll(colDef.RecordFile.Name, "{key}", "*"))
 		validationErr := newValidationError(collectionKey, pattern, "", "", "failed to glob record files", err)
@@ -137,6 +137,11 @@ func validateSingleRecordFiles(collectionKey string, colDef *ingitdb.CollectionD
 	passed := 0
 	total := 0
 	var errors []ingitdb.ValidationError
+	// A records directory that exists but cannot be read is an error, not an
+	// empty collection: a checkout with wrong permissions must not pass.
+	for _, u := range unreadable {
+		errors = append(errors, newValidationError(collectionKey, u.dir, "", "", "failed to read the records directory; its records are not validated", u.err))
+	}
 	for _, filePath := range matches {
 		filePassed, fileTotal, fileErrors := validateSingleRecordFile(collectionKey, colDef, filePath)
 		passed += filePassed

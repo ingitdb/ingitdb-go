@@ -4,6 +4,7 @@ package datavalidator
 
 import (
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -27,9 +28,14 @@ type changeSetResolver struct{}
 // single-record layouts the affected record key is derived from the file
 // name; for map/list layouts the whole shared file is marked affected
 // (RecordKey == "").
-func (changeSetResolver) Resolve(dbPath string, def *ingitdb.Definition, changedFiles []ingitdb.ChangedFile) ([]AffectedRecord, error) {
+func (r changeSetResolver) Resolve(dbPath string, def *ingitdb.Definition, changedFiles []ingitdb.ChangedFile) ([]AffectedRecord, error) {
+	return r.resolveWith(newPathResolver(def), dbPath, changedFiles), nil
+}
+
+// resolveWith is Resolve with the caller's pathResolver, so a validation
+// call that resolves further paths reads each parent collection once.
+func (changeSetResolver) resolveWith(paths *pathResolver, dbPath string, changedFiles []ingitdb.ChangedFile) []AffectedRecord {
 	var affected []AffectedRecord
-	paths := newPathResolver(def)
 	for _, cf := range changedFiles {
 		if cf.Kind == ingitdb.ChangeKindDeleted {
 			continue
@@ -46,7 +52,7 @@ func (changeSetResolver) Resolve(dbPath string, def *ingitdb.Definition, changed
 		}
 		affected = append(affected, AffectedRecord{CollectionID: owner.id, FilePath: absPath, RecordKey: key, ChangeKind: cf.Kind, levels: levels})
 	}
-	return affected, nil
+	return affected
 }
 
 // instanceLevel is one collection instance on the way from a root
@@ -62,16 +68,30 @@ type instanceLevel struct {
 }
 
 // pathResolver maps paths to collection instances for one validation call.
-// It remembers, per parent collection instance, the directory names of its
-// parent records, which it reads only for a name the parent-directory rule
-// rejects (see parentWalked).
+// It remembers, per parent collection instance, which directory names of
+// its records directory belong to parent records, which it reads only for a
+// name the parent-directory rule rejects (see parentWalked). readDir and
+// load are os.ReadDir and loadSingleRecordFile; tests count calls through
+// them.
 type pathResolver struct {
-	def         *ingitdb.Definition
-	parentNames map[string]map[string]bool // parent instance data directory → directory names of its records
+	def     *ingitdb.Definition
+	parents map[string]*parentRecords // collection id + "\x00" + instance data directory → its parent records
+	readDir func(string) ([]os.DirEntry, error)
+	load    func(*ingitdb.CollectionDef, string) (loadedRecord, bool)
+}
+
+// parentRecords are the parent records of one collection instance, by the
+// directory name that holds their subcollection instances. For a
+// single-record layout with {key} the names come from a listing (files) and
+// only the files of a name asked for are parsed; other layouts keep their
+// records in one file, which is parsed whole.
+type parentRecords struct {
+	files  map[string][]string // directory name → record files named so, not yet parsed
+	walked map[string]bool     // directory name → whether a parent record has it
 }
 
 func newPathResolver(def *ingitdb.Definition) *pathResolver {
-	return &pathResolver{def: def, parentNames: map[string]map[string]bool{}}
+	return &pathResolver{def: def, parents: map[string]*parentRecords{}, readDir: os.ReadDir, load: loadSingleRecordFile}
 }
 
 // recordFile returns the collection instances from a root collection down
@@ -119,7 +139,7 @@ func (r *pathResolver) below(levels []instanceLevel, absPath string) ([]instance
 	if err != nil || rel == "." || segments[0] == ".." {
 		return nil, false
 	}
-	if sub := current.colDef.SubCollections[segmentAt(segments, 1)]; sub != nil && len(segments) >= 3 && r.parentWalked(current.colDef, segments[0]) {
+	if sub := current.colDef.SubCollections[segmentAt(segments, 1)]; sub != nil && len(segments) >= 3 && r.parentWalked(current, segments[0]) {
 		inst := *sub // shallow copy: repoint DirPath without mutating the shared definition
 		inst.DirPath = subCollectionDataDir(current.colDef, segments[0], segments[1])
 		parentKey, nameErr := decodeParentName(current.colDef, segments[0])
@@ -141,27 +161,58 @@ func segmentAt(segments []string, i int) string {
 }
 
 // parentWalked reports whether the full pass walks the subcollection
-// instances below the directory name in a collection's records directory:
-// a name the parent-directory rule accepts (ingitdb.IsParentDirName), or the
-// directory name of one of its parent records, read exactly as the full
-// pass's walk reads them (loadCollectionRecords, parentDirName), once per
-// parent instance.
-func (r *pathResolver) parentWalked(colDef *ingitdb.CollectionDef, name string) bool {
+// instances below the directory name in the records directory of the
+// collection instance at level: a name the parent-directory rule accepts
+// (ingitdb.IsParentDirName), or the directory name of one of its parent
+// records, read as the full pass's walk reads them (a record file that
+// loads, parentDirName). The parents are looked up once per collection and
+// instance directory: collections sharing a data directory each have their
+// own.
+func (r *pathResolver) parentWalked(level instanceLevel, name string) bool {
+	colDef := level.colDef
 	if ingitdb.IsParentDirName(name, colDef.RecordFile) {
 		return true
 	}
-	names, ok := r.parentNames[colDef.DirPath]
-	if !ok {
-		names = map[string]bool{}
-		records, _ := loadCollectionRecords(colDef)
-		for _, pr := range records {
-			if dirName, ok := parentDirName(colDef, pr); ok {
-				names[dirName] = true
+	cacheKey := level.id + "\x00" + colDef.DirPath
+	parents := r.parents[cacheKey]
+	if parents == nil {
+		parents = r.readParents(colDef)
+		r.parents[cacheKey] = parents
+	}
+	walked, known := parents.walked[name]
+	if !known {
+		for _, filePath := range parents.files[name] {
+			if _, ok := r.load(colDef, filePath); ok {
+				walked = true
+				break
 			}
 		}
-		r.parentNames[colDef.DirPath] = names
+		parents.walked[name] = walked
 	}
-	return names[name]
+	return walked
+}
+
+// readParents lists the parent records of a collection instance: their
+// record files by directory name for a single-record layout with {key},
+// otherwise every record parsed from the shared file.
+func (r *pathResolver) readParents(colDef *ingitdb.CollectionDef) *parentRecords {
+	parents := &parentRecords{files: map[string][]string{}, walked: map[string]bool{}}
+	rf := colDef.RecordFile
+	if !shouldSkipRecordParsing(colDef) && rf.RecordType == ingitdb.SingleRecord && strings.Contains(rf.Name, "{key}") {
+		files, _, _ := recordFilesIn(colDef, r.readDir)
+		for _, filePath := range files {
+			name := recordNameFromCollectionFilePath(colDef, filePath)
+			parents.files[name] = append(parents.files[name], filePath)
+		}
+		return parents
+	}
+	records, _ := loadCollectionRecords(colDef)
+	for _, pr := range records {
+		if dirName, ok := parentDirName(colDef, pr); ok {
+			parents.walked[dirName] = true
+		}
+	}
+	return parents
 }
 
 // CollectionForRecordFile returns the root collection (and its ID) that owns

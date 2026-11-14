@@ -279,7 +279,7 @@ func loadCollectionRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error
 }
 
 func loadSingleRecords(colDef *ingitdb.CollectionDef) ([]loadedRecord, error) {
-	matches, err := recordFiles(colDef)
+	matches, _, err := recordFiles(colDef) // an unreadable directory is reported by the schema pass
 	if err != nil {
 		return nil, err
 	}

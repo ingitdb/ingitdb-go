@@ -716,7 +716,7 @@ func TestRecordFiles_NamePatternKeepsGlobSemantics(t *testing.T) {
 // on the separator it is given, so Windows paths are checked here on Linux.
 func TestMatchRecordPath(t *testing.T) {
 	t.Parallel()
-	segments := recordNameSegments(&ingitdb.RecordFileDef{Name: "{key}/[i]ndex.yaml"})
+	_, segments := recordPattern(&ingitdb.CollectionDef{RecordFile: &ingitdb.RecordFileDef{Name: "{key}/[i]ndex.yaml"}})
 	for rel, want := range map[string]bool{
 		`a\index.yaml`:        true,
 		`[x]\index.yaml`:      true,
